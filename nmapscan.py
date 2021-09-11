@@ -47,13 +47,6 @@ class NmapScope(luigi.ExternalTask):
         print("[+] Retrieved %d ports from database" % len(ports))
         if ports:
 
-            # input directory
-            cwd = os.getcwd()
-            dir_path = cwd + os.path.sep + "inputs-" + self.scan_id
-            if not os.path.isdir(dir_path):
-                os.mkdir(dir_path)
-                os.chmod(dir_path, 0o777)
-
             port_ip_map = {}
             for port in ports:
 
@@ -273,7 +266,7 @@ class NmapScan(luigi.Task):
     def output(self):
 
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
         
         return luigi.LocalTarget(dir_path)
 
@@ -354,17 +347,6 @@ class ParseNmapOutput(luigi.Task):
         # Requires MassScan Task to be run prior
         return NmapScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
 
-    # def output(self):
-    #     """ Returns the target output for this task.
-
-    #     Naming convention for the output file is masscan.TARGET_FILE.parsed.pickle.
-
-    #     Returns:
-    #         luigi.local_target.LocalTarget
-    #     """
-    #     return SQLAlchemyTarget(
-    #         connection_string=self.db_mgr.connection_string, target_table="port", update_id=self.task_id
-    #     )
 
     def run(self):
         

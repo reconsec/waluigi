@@ -51,15 +51,7 @@ class MassScanScope(luigi.ExternalTask):
             port_arr = self.recon_manager.get_port_map(self.scan_id)
             print("[+] Retrieved %d ports from database" % len(port_arr))
             if len(port_arr) > 0:
-
                 
-                # input and output directories
-                cwd = os.getcwd()
-                dir_path = cwd + os.path.sep + "inputs-" + self.scan_id
-                if not os.path.isdir(dir_path):
-                    os.mkdir(dir_path)
-                    os.chmod(dir_path, 0o777)
-
                 date_str = today.strftime("%Y%m%d")
                 masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + date_str + "_" + self.scan_id
 
@@ -101,7 +93,7 @@ class MasscanScan(luigi.Task):
     def output(self):
         # Returns masscan output file
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "masscan-outputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)

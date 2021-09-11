@@ -4,7 +4,6 @@ import subprocess
 import shutil
 import netaddr
 from datetime import date
-from libnmap.parser import NmapParser
 
 import luigi
 import glob
@@ -17,8 +16,6 @@ import recon_manager
 from multiprocessing.pool import ThreadPool
 import multiprocessing
 import traceback
-
-custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
 
 def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
@@ -134,7 +131,6 @@ class ParsePyshotOutput(luigi.Task):
             url = filename_arr[1].strip('.jpg')
 
             if len(filename_arr) == 3:
-                print("Stuff")
                 domain = filename_arr[2]
 
             image_data = b""

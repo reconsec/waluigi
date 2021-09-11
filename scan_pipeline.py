@@ -3,6 +3,7 @@ import pyshotscan
 import argparse
 import masscan
 import nmapscan
+import nucleiscan
 import sys
 
 if __name__ == '__main__':
@@ -35,7 +36,8 @@ if __name__ == '__main__':
         luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'pyshot':
         luigi_run_result = luigi.build([pyshotscan.ParsePyshotOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-
+    elif pipeline_name == 'nuclei':
+        luigi_run_result = luigi.build([nucleiscan.ParseNucleiOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
 
     if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
         sys.exit(1)

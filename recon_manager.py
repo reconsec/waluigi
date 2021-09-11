@@ -149,3 +149,25 @@ class ReconManager:
             raise RuntimeError("[-] Error importing ports to manager server.")
 
         return True
+
+    def import_screenshot(self, port_id, url, image_data):
+
+        #Import the data to the manager
+        b64_image = base64.b64encode(image_data).decode()
+        obj_data = [{ 'port_id' : int(port_id),
+                     'url' : url,
+                     'data' : b64_image }]
+
+        json_data = json.dumps(obj_data).encode()
+        cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+        ciphertext,tag = cipher_aes.encrypt_and_digest(json_data)
+        packet = cipher_aes.nonce + tag + ciphertext
+        #print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        #print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+
+        b64_val = base64.b64encode(packet).decode()
+        r = requests.post('%s/api/screenshots' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
+        if r.status_code != 200:
+            raise RuntimeError("[-] Error importing ports to manager server.")
+
+        return True

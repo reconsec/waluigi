@@ -9,8 +9,6 @@ import luigi
 import glob
 from luigi.util import inherits
 
-from pyshot import pyshot 
-
 import recon_manager
 
 from multiprocessing.pool import ThreadPool
@@ -18,20 +16,27 @@ import multiprocessing
 import traceback
 
 
-def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
+def crobat_wrapper(ip_addr, dir_path, port_id):
     multiprocessing.log_to_stderr()
     try:
-        pyshot.take_screenshot(ip_addr, port, "", dir_path, ssl_val, port_id, domain)
+
+        output_file = "%s%s%s_%s" %(dir_path, os.path.sep, ip_addr, port_id)
+        # Convert the screenshots
+        convert_cmd = "./go/bin/crobat -r %s > %s" % (ip_addr, output_file)
+        #print("[*] Executing command: %s" % convert_cmd)
+        # Execute process
+        subprocess.run(convert_cmd, shell=True)
+
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
-        print("[-] Pyshot scan thread exception.")
+        print("[-] Crobat DNS thread exception.")
         print(traceback.format_exc())
         # Re-raise the original exception so the Pool worker can
         # clean up
         raise
 
-class PyshotScan(luigi.ExternalTask):
+class CrobatDNS(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()
     token = luigi.Parameter()
@@ -46,7 +51,7 @@ class PyshotScan(luigi.ExternalTask):
 
         # Get screenshot directory
         cwd = os.getcwd()
-        dir_path = cwd + "/screenshots-" + self.scan_id
+        dir_path = cwd + "/crobat-dns-" + self.scan_id
         return luigi.LocalTarget(dir_path) 
 
     def run(self):
@@ -69,29 +74,22 @@ class PyshotScan(luigi.ExternalTask):
                     print("[*] NMAP Results are empty so skipping.")
                     continue
 
-                #Setup args array
-                ssl_val = False
-                if port_obj.secure == 1:
-                    ssl_val = True
-
                 port_id = str(port_obj.id)
                 ip_addr = str(netaddr.IPAddress(port_obj.ipv4_addr))
-                port = str(port_obj.port)
+                # Do not do DNS lookups for private IP addresses
+                if netaddr.IPAddress(port_obj.ipv4_addr).is_private():
+                    continue
+
 
                 # Add argument without domain first
-                pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id))
-
-                # Loop through domains
-                for domain in port_obj.domains:
-                    pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id, domain.name))
+                pool.apply_async(crobat_wrapper, (ip_addr, dir_path, port_id))
 
             # Close the pool
             pool.close()
             pool.join()
 
-
-@inherits(PyshotScan)
-class ParsePyshotOutput(luigi.Task):
+@inherits(CrobatDNS)
+class ImportCrobatOutput(luigi.Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -99,53 +97,53 @@ class ParsePyshotOutput(luigi.Task):
 
 
     def requires(self):
-        # Requires PyshotScan Task to be run prior
-        return PyshotScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        # Requires CrobatDNS Task to be run prior
+        return CrobatDNS(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
 
 
     def run(self):
         
-        pyshot_output_dir = self.input().path
+        crobat_output_dir = self.input().path
 
-        # Convert the screenshots
-        convert_cmd = "cd %s; mogrify -format jpg -quality 10 *.png" % pyshot_output_dir
-        # Execute process
-        subprocess.run(convert_cmd, shell=True)
-
-        print("[*] Converted screenshot image files.")
-
-        count = 0
-        glob_check = '%s%s*.jpg' % (pyshot_output_dir, os.path.sep)
-        print("Glob: %s" % glob_check)
+        glob_check = '%s%s*' % (crobat_output_dir, os.path.sep)
+        #print("Glob: %s" % glob_check)
+        port_arr = []
         for f in glob.glob(glob_check):
 
             filename = os.path.basename(f)
-            filename_arr = filename.split('@')
+            filename_arr = filename.split('_')
             #print(filename_arr)
 
-            #Check array length before indexing
+            #Check array length
             if len(filename_arr) < 2:
                 continue
 
-            port_id = filename_arr[0]
-            url = filename_arr[1].strip('.jpg')
+            ip_addr_int = int(netaddr.IPAddress(filename_arr[0]))
+            port_id = filename_arr[1]
+            domains = []           
+            with open(f, "r") as rf:
+                lines = rf.readlines()
+                for line in lines:
+                    domains.append(line.strip())
 
-            if len(filename_arr) == 3:
-                domain = filename_arr[2]
+            #print(domains)
+            port_obj = { 'port_id' : port_id,
+                         'ipv4_addr' : ip_addr_int }
+            port_obj['domains'] = domains
 
-            image_data = b""
-            with open(pyshot_output_dir + "/" + filename, "rb") as rf:
-                image_data = rf.read()
+            # Add to list
+            port_arr.append(port_obj)
 
-            ret_val = self.recon_manager.import_screenshot(port_id, url, image_data)
-            count += 1
+        if len(port_arr) > 0:
 
+            # Import the ports to the manager
+            ret_val = self.recon_manager.import_ports(port_arr)
 
-        print("[+] Imported %d screenshots to manager." % (count))
+        print("[+] Imported domains to manager.")
            
         #Remove temp dir
         try:
-           shutil.rmtree(pyshot_output_dir)
+           shutil.rmtree(crobat_output_dir)
         except Exception as e:
            print("[-] Error deleting output directory: %s" % str(e))
            pass

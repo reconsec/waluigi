@@ -18,37 +18,6 @@ import traceback
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
-# def nuclei_wrapper(target, nuclei_input_file, dir_path):
-
-#     multiprocessing.log_to_stderr()
-#     try:
-#         today = date.today()
-#         date_str = today.strftime("%Y%m%d%H%M%f")
-
-#         #print("[*] Scanning %s" % endpoint) 
-
-#         # Create mass scan subnet list file
-#         out_file = dir_path + os.path.sep + "nuclei_out_" + date_str + "_" + port_id
-
-#         # Split huge file into smaller pieces
-#         scan_cmd = 'nuclei -silent -json -l %s -o %s -t ./nuclei-templates -no-interactsh' % (nuclei_input_file, out_file)
-
-#         print("[+] Starting nuclei scan on port_id %s" %  port_id)
-#         start = time.time()
-#         execute_and_wait(scan_cmd)
-#         end = time.time()
-
-#         print("[+] Executed nuclei scan on port id %s in %d seconds" % (port_id ))
-
-#     except Exception as e:
-#         # Here we add some debugging help. If multiprocessing's
-#         # debugging is on, it will arrange to log the traceback
-#         print("[-] Pyshot scan thread exception.")
-#         print(traceback.format_exc())
-#         # Re-raise the original exception so the Pool worker can
-#         # clean up
-#         raise
-
 class NucleiScope(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()

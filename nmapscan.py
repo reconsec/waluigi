@@ -422,6 +422,7 @@ class ParseNmapOutput(luigi.Task):
                                                 domains.append(dns_stripped)
 
                                 port_obj['domains'] = domains
+                                break
 
 
                     # Add to list
@@ -430,7 +431,7 @@ class ParseNmapOutput(luigi.Task):
 
             # Add the IP list
             if len(port_arr) > 0:
-                print(port_arr)
+                #print(port_arr)
 
                 # Import the ports to the manager
                 ret_val = self.recon_manager.import_ports(port_arr)           

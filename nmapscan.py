@@ -416,10 +416,10 @@ class ParseNmapOutput(luigi.Task):
                                         line = line.replace("Subject Alternative Name:","")
                                         line_arr = line.split(",")
                                         for dns_entry in line_arr:
-
-                                            dns_stripped = dns_entry.replace("DNS:","").strip()
-                                            domain_id = None
-                                            domains.append(dns_stripped)
+                                            if "DNS" in dns_entry:
+                                                dns_stripped = dns_entry.replace("DNS:","").strip()
+                                                domain_id = None
+                                                domains.append(dns_stripped)
 
                                 port_obj['domains'] = domains
 
@@ -430,12 +430,10 @@ class ParseNmapOutput(luigi.Task):
 
             # Add the IP list
             if len(port_arr) > 0:
+                print(port_arr)
 
                 # Import the ports to the manager
-                ret_val = self.recon_manager.import_ports(port_arr)
-
-
-           
+                ret_val = self.recon_manager.import_ports(port_arr)           
 
 
         print("[+] Updated ports database with Nmap results.")

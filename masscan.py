@@ -17,12 +17,14 @@ UDP = 'udp'
 class MassScanScope(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()
-    token = luigi.Parameter()
-    manager_url = luigi.Parameter()
+    token = luigi.Parameter(default=None)
+    manager_url = luigi.Parameter(default=None)
+    recon_manager = luigi.Parameter(default=None)
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def output(self):
 
@@ -145,7 +147,8 @@ class ParseMasscanOutput(luigi.Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
 
     def requires(self):

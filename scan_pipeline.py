@@ -7,6 +7,28 @@ import nucleiscan
 import crobatdns
 import sys
 
+
+def masscan_scope(scan_id, recon_manager):
+    luigi_run_result = luigi.build([masscan.MassScanScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
+        return False
+    return True
+
+
+def masscan_scan(scan_id, recon_manager):
+    luigi_run_result = luigi.build([masscan.MasscanScan(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
+        return False
+    return True
+
+
+def parse_masscan(scan_id, recon_manager):
+    luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
+        return False
+    return True
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
@@ -24,13 +46,6 @@ if __name__ == '__main__':
     pipeline_name = args.pipeline
     luigi_run_result = None
 
-    #luigi.build([masscan.MasscanScan(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True)
-    #luigi_run_result = luigi.build([nmapscan.NmapScope(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    #luigi.build([nmapscan.NmapScan(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True)
-    #luigi_run_result = luigi.build([nmapscan.NmapPruningScan(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    #luigi_run_result = luigi.build([nmapscan.ParseNmapPruningOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-  
-    
     if pipeline_name == 'masscan':
         luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'nmap':

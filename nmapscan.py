@@ -11,20 +11,22 @@ import glob
 from luigi.util import inherits
 
 import recon_manager
-
 import concurrent.futures
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
+
 class NmapScope(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()
-    token = luigi.Parameter()
-    manager_url = luigi.Parameter()
+    token = luigi.Parameter(default=None)
+    manager_url = luigi.Parameter(default=None)
+    recon_manager = luigi.Parameter(default=None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def output(self):
 
@@ -81,7 +83,6 @@ class NmapScope(luigi.ExternalTask):
 
 @inherits(NmapScope)
 class NmapPruningScan(luigi.Task):
-
 
     def requires(self):
         # Requires the target scope
@@ -159,9 +160,9 @@ class NmapPruningScan(luigi.Task):
             print("[-] Error deleting input directory: %s" % str(e))
             pass
 
+
 @inherits(NmapPruningScan)
 class ParseNmapPruningOutput(luigi.Task):
-
 
     def requires(self):
         # Requires MassScan Task to be run prior
@@ -247,8 +248,7 @@ class ParseNmapPruningOutput(luigi.Task):
             nmap_inputs_f.write(nmap_input_path + '\n')
         nmap_inputs_f.close()
 
-
-        #Remove temp dir
+        # Remove temp dir
         try:
             shutil.rmtree(nmap_output_file.path)
         except Exception as e:
@@ -257,7 +257,6 @@ class ParseNmapPruningOutput(luigi.Task):
 
 @inherits(ParseNmapPruningOutput)
 class NmapScan(luigi.Task):
-
 
     def requires(self):
         # Requires the target scope
@@ -340,13 +339,12 @@ class ParseNmapOutput(luigi.Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def requires(self):
         # Requires MassScan Task to be run prior
         return NmapScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
-
 
     def run(self):
         
@@ -364,7 +362,7 @@ class ParseNmapOutput(luigi.Task):
                 host_ip = host.id
                 ip_addr_int = int(netaddr.IPAddress(host_ip))
 
-                #Loop through ports
+                # Loop through ports
                 for port in host.get_open_ports():
 
                     port_num = str(port[0])
@@ -424,22 +422,19 @@ class ParseNmapOutput(luigi.Task):
                                 port_obj['domains'] = domains
                                 break
 
-
                     # Add to list
                     port_arr.append(port_obj)
-
 
             # Add the IP list
             if len(port_arr) > 0:
                 #print(port_arr)
 
                 # Import the ports to the manager
-                ret_val = self.recon_manager.import_ports(port_arr)           
-
+                ret_val = self.recon_manager.import_ports(port_arr)
 
         print("[+] Updated ports database with Nmap results.")
 
-        #Remove temp dir
+        # Remove temp dir
         try:
             shutil.rmtree(nmap_output_file.path)
         except Exception as e:

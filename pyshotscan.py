@@ -9,7 +9,7 @@ import luigi
 import glob
 from luigi.util import inherits
 
-from pyshot import pyshot 
+from pyshot import pyshot
 
 import recon_manager
 
@@ -31,23 +31,24 @@ def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
         # clean up
         raise
 
-class PyshotScan(luigi.ExternalTask):
 
+class PyshotScan(luigi.ExternalTask):
     scan_id = luigi.Parameter()
-    token = luigi.Parameter()
-    manager_url = luigi.Parameter()
+    token = luigi.Parameter(default=None)
+    manager_url = luigi.Parameter(default=None)
+    recon_manager = luigi.Parameter(default=None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def output(self):
 
         # Get screenshot directory
         cwd = os.getcwd()
         dir_path = cwd + "/screenshots-" + self.scan_id
-        return luigi.LocalTarget(dir_path) 
+        return luigi.LocalTarget(dir_path)
 
     def run(self):
 
@@ -60,16 +61,16 @@ class PyshotScan(luigi.ExternalTask):
         port_obj_arr = self.recon_manager.get_ports(self.scan_id)
         print("[+] Retrieved %d ports from database" % len(port_obj_arr))
         if port_obj_arr:
-            #print(port_obj_arr)
+            # print(port_obj_arr)
             pool = ThreadPool(processes=10)
             for port_obj in port_obj_arr:
 
-                #Check if nmap scan results have http results
+                # Check if nmap scan results have http results
                 if 'http-' not in str(port_obj.nmap_script_results):
-                    print("[*] NMAP Results are empty so skipping.")
+                    #print("[*] NMAP Results are empty so skipping.")
                     continue
 
-                #Setup args array
+                # Setup args array
                 ssl_val = False
                 if port_obj.secure == 1:
                     ssl_val = True
@@ -95,16 +96,15 @@ class ParsePyshotOutput(luigi.Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def requires(self):
         # Requires PyshotScan Task to be run prior
         return PyshotScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
 
-
     def run(self):
-        
+
         pyshot_output_dir = self.input().path
 
         # Convert the screenshots
@@ -121,9 +121,9 @@ class ParsePyshotOutput(luigi.Task):
 
             filename = os.path.basename(f)
             filename_arr = filename.split('@')
-            #print(filename_arr)
+            # print(filename_arr)
 
-            #Check array length before indexing
+            # Check array length before indexing
             if len(filename_arr) < 2:
                 continue
 
@@ -140,12 +140,11 @@ class ParsePyshotOutput(luigi.Task):
             ret_val = self.recon_manager.import_screenshot(port_id, url, image_data)
             count += 1
 
-
         print("[+] Imported %d screenshots to manager." % (count))
-           
-        #Remove temp dir
+
+        # Remove temp dir
         try:
-           shutil.rmtree(pyshot_output_dir)
+            shutil.rmtree(pyshot_output_dir)
         except Exception as e:
-           print("[-] Error deleting output directory: %s" % str(e))
-           pass
+            print("[-] Error deleting output directory: %s" % str(e))
+            pass

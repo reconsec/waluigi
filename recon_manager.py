@@ -116,6 +116,38 @@ class ReconManager:
         port_arr = json.loads(data)
 
         return port_arr
+        
+    def get_scheduled_scans(self):
+
+        sched_scan_arr = []
+        r = requests.get('%s/api/scheduler/' % (self.manager_url), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return sched_scan_arr
+        elif r.status_code != 200:
+            print("[-] Unknown Error")
+            return sched_scan_arr
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        sched_scan_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+
+        return sched_scan_arr
+
+    def get_scheduled_scan(self, sched_scan_id):
+
+        sched_scan = None
+        r = requests.get('%s/api/scheduler/%d/scan/' % (self.manager_url, sched_scan_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return sched_scan
+        elif r.status_code != 200:
+            print("[-] Unknown Error")
+            return sched_scan
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        sched_scan = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+
+        return sched_scan
 
     def get_ports(self, scan_id):
 

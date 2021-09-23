@@ -9,7 +9,7 @@ import luigi
 import glob
 from luigi.util import inherits
 
-from pyshot import pyshot 
+from pyshot import pyshot
 
 import recon_manager
 
@@ -18,15 +18,17 @@ import traceback
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
-class NucleiScope(luigi.ExternalTask):
 
+class NucleiScope(luigi.ExternalTask):
     scan_id = luigi.Parameter()
-    token = luigi.Parameter()
-    manager_url = luigi.Parameter()
+    token = luigi.Parameter(default=None)
+    manager_url = luigi.Parameter(default=None)
+    recon_manager = luigi.Parameter(default=None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def output(self):
 
@@ -45,7 +47,7 @@ class NucleiScope(luigi.ExternalTask):
         date_str = today.strftime("%Y%m%d")
         nuclei_inputs_file = dir_path + os.path.sep + "nuclei_inputs_" + date_str + "_" + self.scan_id
         if os.path.isfile(nuclei_inputs_file):
-            return luigi.LocalTarget(nuclei_inputs_file) 
+            return luigi.LocalTarget(nuclei_inputs_file)
 
         port_obj_arr = self.recon_manager.get_ports(self.scan_id)
         print("[+] Retrieved %d ports from database" % len(port_obj_arr))
@@ -56,13 +58,13 @@ class NucleiScope(luigi.ExternalTask):
             for port_obj in port_obj_arr:
 
                 if 'http-' not in str(port_obj.nmap_script_results):
-#                     #print("[*] NMAP Results are empty so skipping.")
-                    continue                
+                    #print("[*] NMAP Results are empty so skipping.")
+                    continue
 
-                #Setup inputs
-                prefix = ''        
+                    # Setup inputs
+                prefix = ''
                 if 'http' in port_obj.service:
-                    prefix = 'http://'   
+                    prefix = 'http://'
 
                 if port_obj.secure == 1:
                     prefix = 'https://'
@@ -72,17 +74,17 @@ class NucleiScope(luigi.ExternalTask):
                 ip_addr = str(netaddr.IPAddress(port_obj.ipv4_addr))
                 port = str(port_obj.port)
 
-                endpoint = prefix + ip_addr + ":" + port 
-                #print("[*] Endpoint: %s" % endpoint)
+                endpoint = prefix + ip_addr + ":" + port
+                # print("[*] Endpoint: %s" % endpoint)
                 endpoint_set.add(endpoint)
 
-                #Add endpoint per domain
+                # Add endpoint per domain
                 for domain in port_obj.domains:
-                    endpoint = prefix + domain.name + ":" + port   
-                    #print("[*] Endpoint: %s" % endpoint)
+                    endpoint = prefix + domain.name + ":" + port
+                    # print("[*] Endpoint: %s" % endpoint)
                     endpoint_set.add(endpoint)
 
-                #Write to nuclei input file
+                # Write to nuclei input file
                 nuclei_list_file = dir_path + os.path.sep + "nuc_in_" + date_str + "_" + port_id
                 f = open(nuclei_list_file, 'w')
                 for endpoint in endpoint_set:
@@ -95,12 +97,9 @@ class NucleiScope(luigi.ExternalTask):
 
             return luigi.LocalTarget(nuclei_inputs_file)
 
+
 @inherits(NucleiScope)
 class NucleiScan(luigi.Task):
-
-    scan_id = luigi.Parameter()
-    token = luigi.Parameter()
-    manager_url = luigi.Parameter()
 
     def requires(self):
         # Requires the target scope
@@ -111,7 +110,7 @@ class NucleiScan(luigi.Task):
         # Get screenshot directory
         cwd = os.getcwd()
         dir_path = cwd + "/nuclei-outputs-" + self.scan_id
-        return luigi.LocalTarget(dir_path) 
+        return luigi.LocalTarget(dir_path)
 
     def run(self):
 
@@ -119,7 +118,7 @@ class NucleiScan(luigi.Task):
         nuclei_input_file = self.input()
         f = nuclei_input_file.open()
         input_file_paths = f.readlines()
-        #print(input_file_paths)
+        # print(input_file_paths)
         f.close()
 
         today = date.today()
@@ -133,7 +132,6 @@ class NucleiScan(luigi.Task):
 
         commands = []
         for ip_path in input_file_paths:
-
             in_file = ip_path.strip()
             filename = os.path.basename(in_file)
             port_id = filename.split("_")[3]
@@ -152,7 +150,7 @@ class NucleiScan(luigi.Task):
                 "./nuclei-templates",
                 "-no-interactsh"
             ]
-            #print(command)
+            # print(command)
             commands.append(command)
 
         # Run threaded
@@ -167,24 +165,24 @@ class NucleiScan(luigi.Task):
             print("[-] Error deleting input directory: %s" % str(e))
             pass
 
+
 @inherits(NucleiScan)
 class ParseNucleiOutput(luigi.Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def requires(self):
         # Requires MassScan Task to be run prior
         return NucleiScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
 
-
     def run(self):
-        
+
         nuclei_output_file = self.input()
         glob_check = '%s%snuclei_out_*' % (nuclei_output_file.path, os.path.sep)
-        #print("Glob: %s" % glob_check)
+        # print("Glob: %s" % glob_check)
         port_arr = []
         for nuclei_file in glob.glob(glob_check):
 
@@ -203,25 +201,22 @@ class ParseNucleiOutput(luigi.Task):
                     scan_arr.append(nuclei_scan)
 
                     scan_output = json.dumps(scan_arr)
-                    #print(scan_output)
+                    # print(scan_output)
 
-                    port_obj = { 'port_id' : int(port_id),
-                                 'nuclei_script_results' : scan_output}
+                    port_obj = {'port_id': int(port_id),
+                                'nuclei_script_results': scan_output}
                     port_arr.append(port_obj)
-            
 
         # Import the nuclei scans
         if len(port_arr) > 0:
-
             # Import the ports to the manager
             ret_val = self.recon_manager.import_ports(port_arr)
 
-
         print("[+] Imported nuclei scans to manager.")
-           
-        #Remove temp dir
+
+        # Remove temp dir
         try:
-           shutil.rmtree(nuclei_output_file.path)
+            shutil.rmtree(nuclei_output_file.path)
         except Exception as e:
-           print("[-] Error deleting output directory: %s" % str(e))
-           pass
+            print("[-] Error deleting output directory: %s" % str(e))
+            pass

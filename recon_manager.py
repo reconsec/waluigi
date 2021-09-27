@@ -149,6 +149,18 @@ class ReconManager:
 
         return sched_scan
 
+    def remove_scheduled_scan(self, sched_scan_id):
+
+        ret_val = True
+        r = requests.delete('%s/api/scheduler/%d/' % (self.manager_url, sched_scan_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return False
+        elif r.status_code != 200:
+            print("[-] Unknown Error")
+            return False
+
+        return ret_val
+
     def get_ports(self, scan_id):
 
         port_arr = []
@@ -165,9 +177,27 @@ class ReconManager:
 
         return port_obj_arr
 
+    def update_scan_status(self, scan_id, status):
+
+        # Import the data to the manager
+        status_dict = {'status': status}
+        json_data = json.dumps(status_dict).encode()
+        cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+        ciphertext,tag = cipher_aes.encrypt_and_digest(json_data)
+        packet = cipher_aes.nonce + tag + ciphertext
+        #print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        #print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+
+        b64_val = base64.b64encode(packet).decode()
+        r = requests.post('%s/api/scan/%s' % (self.manager_url, scan_id), headers=self.headers, json={"data": b64_val}, verify=False)
+        if r.status_code != 200:
+            raise RuntimeError("[-] Error updating scan status.")
+
+        return True
+
     def import_ports(self, port_arr):
 
-        #Import the data to the manager
+        # Import the data to the manager
         json_data = json.dumps(port_arr).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext,tag = cipher_aes.encrypt_and_digest(json_data)
@@ -184,7 +214,7 @@ class ReconManager:
 
     def import_screenshot(self, port_id, url, image_data):
 
-        #Import the data to the manager
+        # Import the data to the manager
         b64_image = base64.b64encode(image_data).decode()
         obj_data = [{ 'port_id' : int(port_id),
                      'url' : url,

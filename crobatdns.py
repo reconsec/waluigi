@@ -16,13 +16,69 @@ import multiprocessing
 import traceback
 
 
+class CrobatScope(luigi.ExternalTask):
+    scan_id = luigi.Parameter()
+    token = luigi.Parameter(default=None)
+    manager_url = luigi.Parameter(default=None)
+    recon_manager = luigi.Parameter(default=None)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+
+    def output(self):
+
+        today = date.today()
+
+        # Create input directory if it doesn't exist
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep + "inputs-dns-" + self.scan_id
+        if not os.path.isdir(dir_path):
+            os.mkdir(dir_path)
+            os.chmod(dir_path, 0o777)
+
+        # Convert date to str
+        date_str = today.strftime("%Y%m%d")
+        dns_inputs_file = dir_path + os.path.sep + "dns_inputs_" + date_str + "_" + self.scan_id
+        if os.path.isfile(dns_inputs_file):
+            return luigi.LocalTarget(dns_inputs_file)
+
+        ports = self.recon_manager.get_ports(self.scan_id)
+        print("[+] Retrieved %d ports from database" % len(ports))
+        if ports:
+
+            # open input file
+            dns_inputs_f = open(dns_inputs_file, 'w')
+            for port_obj in ports:
+
+                # Check if nmap scan results have http results
+                if 'http-' not in str(port_obj.nmap_script_results):
+                    # print("[*] NMAP Results are empty so skipping.")
+                    continue
+
+                # Write each port id and IP pair to a file
+                ip_str = str(netaddr.IPAddress(port_obj.ipv4_addr))
+                port_id = str(port_obj.id)
+
+                # Do not do DNS lookups for private IP addresses
+                if netaddr.IPAddress(ip_str).is_private():
+                    continue
+
+                dns_inputs_f.write("%s:%s\n" % (port_id, ip_str))
+
+            dns_inputs_f.close()
+
+        return luigi.LocalTarget(dns_inputs_file)
+
+
 def crobat_wrapper(ip_addr, dir_path, port_id):
     multiprocessing.log_to_stderr()
     try:
 
         output_file = "%s%s%s_%s" % (dir_path, os.path.sep, ip_addr, port_id)
         # Convert the screenshots
-        convert_cmd = "./go/bin/crobat -r %s > %s" % (ip_addr, output_file)
+        convert_cmd = "crobat -r %s > %s" % (ip_addr, output_file)
         # print("[*] Executing command: %s" % convert_cmd)
         # Execute process
         subprocess.run(convert_cmd, shell=True)
@@ -37,16 +93,12 @@ def crobat_wrapper(ip_addr, dir_path, port_id):
         raise
 
 
-class CrobatDNS(luigi.ExternalTask):
-    scan_id = luigi.Parameter()
-    token = luigi.Parameter(default=None)
-    manager_url = luigi.Parameter(default=None)
-    recon_manager = luigi.Parameter(default=None)
+@inherits(CrobatScope)
+class CrobatDNS(luigi.Task):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (token and manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+    def requires(self):
+        # Requires CrobatScope Task to be run prior
+        return CrobatScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
 
@@ -63,30 +115,32 @@ class CrobatDNS(luigi.ExternalTask):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        port_obj_arr = self.recon_manager.get_ports(self.scan_id)
-        print("[+] Retrieved %d ports from database" % len(port_obj_arr))
-        if port_obj_arr:
-            # print(port_obj_arr)
-            pool = ThreadPool(processes=10)
-            for port_obj in port_obj_arr:
+        crobat_input_file = self.input()
+        f = crobat_input_file.open()
+        port_ip_lines = f.readlines()
+        f.close()
 
-                # Check if nmap scan results have http results
-                if 'http-' not in str(port_obj.nmap_script_results):
-                    #print("[*] NMAP Results are empty so skipping.")
-                    continue
+        # print(port_obj_arr)
+        pool = ThreadPool(processes=10)
+        for port_ip_line in port_ip_lines:
 
-                port_id = str(port_obj.id)
-                ip_addr = str(netaddr.IPAddress(port_obj.ipv4_addr))
-                # Do not do DNS lookups for private IP addresses
-                if netaddr.IPAddress(port_obj.ipv4_addr).is_private():
-                    continue
+            port_ip_arr = port_ip_line.split(":")
+            port_id = port_ip_arr[0]
+            ip_addr = port_ip_arr[1].strip()
 
-                # Add argument without domain first
-                pool.apply_async(crobat_wrapper, (ip_addr, dir_path, port_id))
+            # Add argument without domain first
+            pool.apply_async(crobat_wrapper, (ip_addr, dir_path, port_id))
 
-            # Close the pool
-            pool.close()
-            pool.join()
+        # Close the pool
+        pool.close()
+        pool.join()
+
+        # Remove temp dir
+        try:
+            shutil.rmtree(os.path.dirname(crobat_input_file.path))
+        except Exception as e:
+            print("[-] Error deleting output directory: %s" % str(e))
+            pass
 
 
 @inherits(CrobatDNS)
@@ -94,12 +148,12 @@ class ImportCrobatOutput(luigi.Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (token and manager_url):
+        if self.recon_manager is None and (self.token and self.manager_url):
             self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def requires(self):
         # Requires CrobatDNS Task to be run prior
-        return CrobatDNS(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return CrobatDNS(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def run(self):
 
@@ -127,10 +181,11 @@ class ImportCrobatOutput(luigi.Task):
                     domains.append(line.strip())
 
             # print(domains)
-            port_obj = {'port_id': port_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
+            if len(domains) > 0:
+                port_obj = {'port_id': port_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
 
-            # Add to list
-            port_arr.append(port_obj)
+                # Add to list
+                port_arr.append(port_obj)
 
         if len(port_arr) > 0:
             # Import the ports to the manager

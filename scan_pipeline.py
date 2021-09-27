@@ -10,21 +10,105 @@ import sys
 
 def masscan_scope(scan_id, recon_manager):
     luigi_run_result = luigi.build([masscan.MassScanScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
 def masscan_scan(scan_id, recon_manager):
     luigi_run_result = luigi.build([masscan.MasscanScan(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
 def parse_masscan(scan_id, recon_manager):
     luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def nmap_scope(scan_id, recon_manager):
+    luigi_run_result = luigi.build([nmapscan.NmapScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def nmap_scan(scan_id, recon_manager):
+    luigi_run_result = luigi.build([nmapscan.NmapScan(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def parse_nmap(scan_id, recon_manager):
+    luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def dns_scope(scan_id, recon_manager):
+    luigi_run_result = luigi.build([crobatdns.CrobatScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def dns_lookup(scan_id, recon_manager):
+    luigi_run_result = luigi.build([crobatdns.CrobatDNS(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def import_dns(scan_id, recon_manager):
+    luigi_run_result = luigi.build([crobatdns.ImportCrobatOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def pyshot_scope(scan_id, recon_manager):
+    luigi_run_result = luigi.build([pyshotscan.PyshotScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def pyshot_scan(scan_id, recon_manager):
+    luigi_run_result = luigi.build([pyshotscan.PyshotScan(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def import_screenshots(scan_id, recon_manager):
+    luigi_run_result = luigi.build([pyshotscan.ParsePyshotOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def nuclei_scope(scan_id, recon_manager):
+    luigi_run_result = luigi.build([nucleiscan.NucleiScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def nuclei_scan(scan_id, recon_manager):
+    luigi_run_result = luigi.build([nucleiscan.NucleiScan(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def parse_nuclei(scan_id, recon_manager):
+    luigi_run_result = luigi.build([nucleiscan.ParseNucleiOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
@@ -39,7 +123,7 @@ if __name__ == '__main__':
     parser.add_argument('--cleanup', dest='cleanup', action='store_true')
     args = parser.parse_args()
 
-    #Set some globals
+    # Set some globals
     scan_id = args.scan_id  
     token = args.token
     manager_url = args.manager_url

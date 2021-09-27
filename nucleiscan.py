@@ -103,7 +103,7 @@ class NucleiScan(luigi.Task):
 
     def requires(self):
         # Requires the target scope
-        return NucleiScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return NucleiScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
 
@@ -176,7 +176,7 @@ class ParseNucleiOutput(luigi.Task):
 
     def requires(self):
         # Requires MassScan Task to be run prior
-        return NucleiScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return NucleiScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def run(self):
 

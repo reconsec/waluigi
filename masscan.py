@@ -14,6 +14,7 @@ import recon_manager
 TCP = 'tcp'
 UDP = 'udp'
 
+
 class MassScanScope(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()
@@ -87,10 +88,9 @@ class MassScanScope(luigi.ExternalTask):
 @inherits(MassScanScope)
 class MasscanScan(luigi.Task):
 
-
     def requires(self):
         # Requires the target scope
-        return MassScanScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return MassScanScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
         # Returns masscan output file
@@ -150,10 +150,9 @@ class ParseMasscanOutput(luigi.Task):
         if self.recon_manager is None and (self.token and self.manager_url):
             self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
-
     def requires(self):
         # Requires MassScan Task to be run prior
-        return MasscanScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return MasscanScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     # def output(self):
     #     """ Returns the target output for this task.
@@ -209,7 +208,7 @@ class ParseMasscanOutput(luigi.Task):
             # Import the ports to the manager
             ret_val = self.recon_manager.import_ports(port_arr)
 
-        #Remove temp dir
+        # Remove temp dir
         try:
             dir_path = os.path.dirname(masscan_output_file.path)
             shutil.rmtree(dir_path)

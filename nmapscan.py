@@ -81,12 +81,13 @@ class NmapScope(luigi.ExternalTask):
 
             return luigi.LocalTarget(nmap_inputs_file)
 
+
 @inherits(NmapScope)
 class NmapPruningScan(luigi.Task):
 
     def requires(self):
         # Requires the target scope
-        return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
 
@@ -166,7 +167,7 @@ class ParseNmapPruningOutput(luigi.Task):
 
     def requires(self):
         # Requires MassScan Task to be run prior
-        return NmapPruningScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return NmapPruningScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
         # Create input directory if it doesn't exist
@@ -214,7 +215,7 @@ class ParseNmapPruningOutput(luigi.Task):
                 host_ip = host.id
                 ip_addr_int = int(netaddr.IPAddress(host_ip))
 
-                #Loop through ports
+                # Loop through ports
                 for port in host.get_open_ports():
 
                     port_num = str(port[0])
@@ -255,12 +256,13 @@ class ParseNmapPruningOutput(luigi.Task):
             print("[-] Error deleting output directory: %s" % str(e))
             pass
 
+
 @inherits(ParseNmapPruningOutput)
 class NmapScan(luigi.Task):
 
     def requires(self):
         # Requires the target scope
-        return ParseNmapPruningOutput(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return ParseNmapPruningOutput(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
 
@@ -344,7 +346,7 @@ class ParseNmapOutput(luigi.Task):
 
     def requires(self):
         # Requires MassScan Task to be run prior
-        return NmapScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url)
+        return NmapScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def run(self):
         

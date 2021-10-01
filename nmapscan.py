@@ -34,7 +34,7 @@ class NmapScope(luigi.ExternalTask):
 
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "inputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nmap-inputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -203,17 +203,15 @@ class ParseNmapPruningOutput(luigi.Task):
 
             in_file = nmap_out.strip()
             filename = os.path.basename(in_file)
-            port = filename.split("_")[3]
+            port_str = filename.split("_")[3]
 
             nmap_report = NmapParser.parse_fromfile(in_file)
 
             # Loop through hosts
             valid_ip_set = set()
-        
             for host in nmap_report.hosts:
 
                 host_ip = host.id
-                ip_addr_int = int(netaddr.IPAddress(host_ip))
 
                 # Loop through ports
                 for port in host.get_open_ports():
@@ -226,7 +224,7 @@ class ParseNmapPruningOutput(luigi.Task):
                     if len(script_res) > 0:
                         valid_ip_set.add(host_ip)
 
-            ip_port_map[port_num] = valid_ip_set
+            ip_port_map[port_str] = valid_ip_set
 
         #print(ip_port_map)
         today = date.today()
@@ -335,6 +333,16 @@ class NmapScan(luigi.Task):
             print("[-] Error deleting input directory: %s" % str(e))
             pass
 
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep
+        all_inputs_file = dir_path + "all_inputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        f.write(self.output().path + '\n')
+        f.close()
+
 
 @inherits(NmapScan)
 class ParseNmapOutput(luigi.Task):
@@ -421,7 +429,10 @@ class ParseNmapOutput(luigi.Task):
                                                 domain_id = None
                                                 domains.append(dns_stripped)
 
-                                port_obj['domains'] = domains
+                                if len(domains) > 0:
+                                    port_obj['domains'] = domains
+                                    print(domains)
+
                                 break
 
                     # Add to list
@@ -436,9 +447,9 @@ class ParseNmapOutput(luigi.Task):
 
         print("[+] Updated ports database with Nmap results.")
 
-        # Remove temp dir
-        try:
-            shutil.rmtree(nmap_output_file.path)
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+        # Remove temp dir - not until the end of everything - Consider added input directories of all into another file
+        #try:
+        #    shutil.rmtree(nmap_output_file.path)
+        #except Exception as e:
+        #    print("[-] Error deleting output directory: %s" % str(e))
+        #    pass

@@ -63,10 +63,6 @@ class PyshotScope(luigi.ExternalTask):
                 port = str(port_obj.port)
                 secure = str(port_obj.secure)
 
-                # Do not do DNS lookups for private IP addresses
-                if netaddr.IPAddress(ip_str).is_private():
-                    continue
-
                 # Loop through domains
                 domain_str = ''
                 if port_obj.domains and len(port_obj.domains) > 0:
@@ -109,7 +105,7 @@ class PyshotScan(luigi.Task):
 
         # Get screenshot directory
         cwd = os.getcwd()
-        dir_path = cwd + "/screenshots-" + self.scan_id
+        dir_path = cwd + os.path.sep + "screenshots-" + self.scan_id
         return luigi.LocalTarget(dir_path)
 
     def run(self):
@@ -149,7 +145,7 @@ class PyshotScan(luigi.Task):
             pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id))
 
             # Loop through domains
-            for domain in domains_arr_str:
+            for domain in domain_arr:
                 pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id, domain))
 
         # Close the pool
@@ -162,6 +158,16 @@ class PyshotScan(luigi.Task):
         except Exception as e:
             print("[-] Error deleting output directory: %s" % str(e))
             pass
+
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep
+        all_inputs_file = dir_path + "all_inputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        f.write(self.output().path + '\n')
+        f.close()
 
 
 @inherits(PyshotScan)
@@ -215,9 +221,9 @@ class ParsePyshotOutput(luigi.Task):
 
         print("[+] Imported %d screenshots to manager." % (count))
 
-        # Remove temp dir
-        try:
-            shutil.rmtree(pyshot_output_dir)
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+        # Remove temp dir - not until the end of everything - Consider added input directories of all into another file
+        #try:
+        #    shutil.rmtree(pyshot_output_dir)
+        #except Exception as e:
+        #    print("[-] Error deleting output directory: %s" % str(e))
+        #    pass

@@ -130,11 +130,19 @@ class NucleiScan(luigi.Task):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        commands = []
+        command_list = []
         for ip_path in input_file_paths:
             in_file = ip_path.strip()
             filename = os.path.basename(in_file)
             port_id = filename.split("_")[3]
+
+            if os.name == 'nt':
+                nuclei_template_root = '%userprofile%'
+            else:
+                nuclei_template_root = '.'
+
+            # Set nuclei path
+            nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
 
             # Nmap command args
             nuclei_output_file = dir_path + os.path.sep + "nuclei_out_" + date_str + "_" + port_id
@@ -147,15 +155,16 @@ class NucleiScan(luigi.Task):
                 "-o",
                 nuclei_output_file,
                 "-t",
-                "./nuclei-templates",
+                nuclei_template_path,
                 "-no-interactsh"
             ]
             # print(command)
-            commands.append(command)
+            command_list.append(command)
 
         # Run threaded
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            executor.map(subprocess.run, commands)
+            for command_args in command_list:
+                executor.submit(subprocess.run, command_args, shell=True)
 
         # Remove temp dir
         try:
@@ -164,6 +173,16 @@ class NucleiScan(luigi.Task):
         except Exception as e:
             print("[-] Error deleting input directory: %s" % str(e))
             pass
+
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep
+        all_inputs_file = dir_path + "all_inputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        f.write(self.output().path + '\n')
+        f.close()
 
 
 @inherits(NucleiScan)
@@ -190,7 +209,7 @@ class ParseNucleiOutput(luigi.Task):
             data = f.read()
             f.close()
 
-            port_id = nuclei_file.split("_")[3]
+            port_id = nuclei_file.split("_")[4]
 
             scan_arr = []
             json_blobs = data.split("\n")
@@ -215,8 +234,8 @@ class ParseNucleiOutput(luigi.Task):
         print("[+] Imported nuclei scans to manager.")
 
         # Remove temp dir
-        try:
-            shutil.rmtree(nuclei_output_file.path)
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+        #try:
+        #    shutil.rmtree(nuclei_output_file.path)
+        #except Exception as e:
+        #    print("[-] Error deleting output directory: %s" % str(e))
+        #    pass

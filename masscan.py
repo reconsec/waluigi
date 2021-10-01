@@ -33,7 +33,7 @@ class MassScanScope(luigi.ExternalTask):
 
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "inputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "masscan-inputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -53,6 +53,9 @@ class MassScanScope(luigi.ExternalTask):
 
             port_arr = self.recon_manager.get_port_map(self.scan_id)
             print("[+] Retrieved %d ports from database" % len(port_arr))
+
+            # Create output file
+            f_inputs = open(masscan_inputs_file, 'w')
             if len(port_arr) > 0:
                 
                 date_str = today.strftime("%Y%m%d")
@@ -74,16 +77,16 @@ class MassScanScope(luigi.ExternalTask):
                 masscan_config_file = dir_path + os.path.sep + "mass_conf_" + date_str + "_" + self.scan_id
                 f = open(masscan_config_file, 'w')
                 f.write(port_line + '\n')
-                #f.write('banners = true\n')
                 f.close()
 
                 # Write to output file
-                f = open(masscan_inputs_file, 'w')
-                f.write(masscan_config_file + '\n')
-                f.write(masscan_ip_file + '\n')
-                f.close()
+                f_inputs.write(masscan_config_file + '\n')
+                f_inputs.write(masscan_ip_file + '\n')
 
-                return luigi.LocalTarget(masscan_inputs_file)
+            # Close output file
+            f_inputs.close()
+
+            return luigi.LocalTarget(masscan_inputs_file)
 
 @inherits(MassScanScope)
 class MasscanScan(luigi.Task):
@@ -114,32 +117,47 @@ class MasscanScan(luigi.Task):
         data = f.readlines()
         f.close()
 
-        conf_file_path = data[0].strip()
-        ips_file_path = data[1].strip()
-
-        command = [
-            "masscan",
-            "--open",
-            "--rate",
-            "1000",
-            "-oX",
-            self.output().path,
-            "-c",
-            conf_file_path,
-            "-iL",
-            ips_file_path
-        ]
-
-        # Execute process
-        subprocess.run(command)
-
-        # Remove temp dir
         try:
-            dir_path = os.path.dirname(masscan_input_file.path)
-            shutil.rmtree(dir_path)
-        except Exception as e:
-            print("[-] Error deleting input directory: %s" % str(e))
-            pass
+
+            if data:
+                conf_file_path = data[0].strip()
+                ips_file_path = data[1].strip()
+
+                command = [
+                    "masscan",
+                    "--open",
+                    "--rate",
+                    "1000",
+                    "-oX",
+                    self.output().path,
+                    "-c",
+                    conf_file_path,
+                    "-iL",
+                    ips_file_path
+                ]
+
+                # Execute process
+                subprocess.run(command)
+
+        finally:
+            try:
+                # Remove temp dir
+                dir_path = os.path.dirname(masscan_input_file.path)
+                shutil.rmtree(dir_path)
+            except Exception as e:
+                print("[-] Error deleting input directory: %s" % str(e))
+                pass
+
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep
+        all_inputs_file = dir_path + "all_inputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        output_dir = os.path.dirname(self.output().path)
+        f.write(output_dir + '\n')
+        f.close()
 
 
 @inherits(MasscanScan)
@@ -170,6 +188,7 @@ class ParseMasscanOutput(luigi.Task):
         
         port_arr = []
         masscan_output_file = self.input()
+
         try:
             # load masscan results from Masscan Task
             tree = ET.parse(masscan_output_file.path)
@@ -208,10 +227,10 @@ class ParseMasscanOutput(luigi.Task):
             # Import the ports to the manager
             ret_val = self.recon_manager.import_ports(port_arr)
 
-        # Remove temp dir
-        try:
-            dir_path = os.path.dirname(masscan_output_file.path)
-            shutil.rmtree(dir_path)
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+        # Remove temp dir - not until the end of everything - Consider added input directories of all into another file
+        #try:
+        #    dir_path = os.path.dirname(masscan_output_file.path)
+        #    shutil.rmtree(dir_path)
+        #except Exception as e:
+        #    print("[-] Error deleting output directory: %s" % str(e))
+        #    pass

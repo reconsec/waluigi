@@ -14,18 +14,20 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
 
+
 def get_recon_manager(token, manager_url):
-    global recon_mgr_inst 
+    global recon_mgr_inst
     if recon_mgr_inst == None:
         recon_mgr_inst = ReconManager(token, manager_url)
     return recon_mgr_inst
+
 
 class ReconManager:
 
     def __init__(self, token, manager_url):
         self.token = token
         self.manager_url = manager_url
-        self.headers =  {'User-Agent': custom_user_agent, 'Authorization': 'Bearer '+ self.token}
+        self.headers = {'User-Agent': custom_user_agent, 'Authorization': 'Bearer ' + self.token}
         self.session_key = self._get_session_key()
 
     def _decrypt_json(self, content):
@@ -36,9 +38,9 @@ class ReconManager:
             enc_data = base64.b64decode(b64_data)
 
             nonce = enc_data[:16]
-        #print("[*] Nonce: %s" % binascii.hexlify(nonce).decode())
+            # print("[*] Nonce: %s" % binascii.hexlify(nonce).decode())
             tag = enc_data[16:32]
-        #print("[*] Sign: %s" % binascii.hexlify(tag).decode())
+            # print("[*] Sign: %s" % binascii.hexlify(tag).decode())
             ciphertext = enc_data[32:]
 
             cipher_aes = AES.new(self.session_key, AES.MODE_EAX, nonce)
@@ -46,20 +48,21 @@ class ReconManager:
                 data = cipher_aes.decrypt_and_verify(ciphertext, tag).decode()
             except Exception as e:
                 print("[-] Error decrypting response: %s" % str(e))
-                
+
         return data
 
     def _get_session_key(self):
 
-        #Generate temp RSA keys to encrypt session key
+        # Generate temp RSA keys to encrypt session key
         key = RSA.generate(2048)
         private_key = key.export_key(format='DER')
-        #print("Length: %d" % len(private_key))
+        # print("Length: %d" % len(private_key))
         public_key = key.publickey().export_key(format='DER')
 
         session_key = None
         b64_val = base64.b64encode(public_key).decode()
-        r = requests.post('%s/api/session' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/session' % self.manager_url, headers=self.headers, json={"data": b64_val},
+                          verify=False)
         if r.status_code != 200:
             print("[-] Error retrieving session key.")
             return session_key
@@ -68,7 +71,7 @@ class ReconManager:
         if "data" in ret_json:
             b64_session_key = ret_json['data']
             enc_session_key = base64.b64decode(b64_session_key)
-            #print("[*] Encrypted Key: (Length: %d)\n%s" % (len(enc_session_key),binascii.hexlify(enc_session_key).decode()))
+            # print("[*] Encrypted Key: (Length: %d)\n%s" % (len(enc_session_key),binascii.hexlify(enc_session_key).decode()))
 
             # Decrypt the session key with the private RSA key
             private_key_obj = RSA.import_key(private_key)
@@ -104,7 +107,8 @@ class ReconManager:
     def get_port_map(self, scan_id):
 
         port_arr = []
-        r = requests.get('%s/api/scheduler/scan/%s/ports' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/scheduler/scan/%s/ports' % (self.manager_url, scan_id), headers=self.headers,
+                         verify=False)
         if r.status_code == 404:
             return port_arr
         elif r.status_code != 200:
@@ -116,7 +120,7 @@ class ReconManager:
         port_arr = json.loads(data)
 
         return port_arr
-        
+
     def get_scheduled_scans(self):
 
         sched_scan_arr = []
@@ -136,7 +140,8 @@ class ReconManager:
     def get_scheduled_scan(self, sched_scan_id):
 
         sched_scan = None
-        r = requests.get('%s/api/scheduler/%d/scan/' % (self.manager_url, sched_scan_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/scheduler/%d/scan/' % (self.manager_url, sched_scan_id), headers=self.headers,
+                         verify=False)
         if r.status_code == 404:
             return sched_scan
         elif r.status_code != 200:
@@ -149,10 +154,29 @@ class ReconManager:
 
         return sched_scan
 
+    def get_scan(self, scan_id):
+
+        scan = None
+        r = requests.get('%s/api/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return scan
+        elif r.status_code != 200:
+            print("[-] Unknown Error")
+            return scan
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        scan_list = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        if scan_list and len(scan_list) > 0:
+            scan = scan_list[0]
+
+        return scan
+
     def remove_scheduled_scan(self, sched_scan_id):
 
         ret_val = True
-        r = requests.delete('%s/api/scheduler/%d/' % (self.manager_url, sched_scan_id), headers=self.headers, verify=False)
+        r = requests.delete('%s/api/scheduler/%d/' % (self.manager_url, sched_scan_id), headers=self.headers,
+                            verify=False)
         if r.status_code == 404:
             return False
         elif r.status_code != 200:
@@ -183,13 +207,14 @@ class ReconManager:
         status_dict = {'status': status}
         json_data = json.dumps(status_dict).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
-        ciphertext,tag = cipher_aes.encrypt_and_digest(json_data)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        #print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        #print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/scan/%s' % (self.manager_url, scan_id), headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/scan/%s' % (self.manager_url, scan_id), headers=self.headers, json={"data": b64_val},
+                          verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating scan status.")
 
@@ -200,10 +225,10 @@ class ReconManager:
         # Import the data to the manager
         json_data = json.dumps(port_arr).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
-        ciphertext,tag = cipher_aes.encrypt_and_digest(json_data)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        #print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        #print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/ports' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
@@ -216,19 +241,20 @@ class ReconManager:
 
         # Import the data to the manager
         b64_image = base64.b64encode(image_data).decode()
-        obj_data = [{ 'port_id' : int(port_id),
-                     'url' : url,
-                     'data' : b64_image }]
+        obj_data = [{'port_id': int(port_id),
+                     'url': url,
+                     'data': b64_image}]
 
         json_data = json.dumps(obj_data).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
-        ciphertext,tag = cipher_aes.encrypt_and_digest(json_data)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        #print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        #print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/screenshots' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/screenshots' % self.manager_url, headers=self.headers, json={"data": b64_val},
+                          verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error importing ports to manager server.")
 

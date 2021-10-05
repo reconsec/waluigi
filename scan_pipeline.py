@@ -5,6 +5,7 @@ import masscan
 import nmapscan
 import nucleiscan
 import crobatdns
+import scancleanup
 import sys
 
 
@@ -108,6 +109,13 @@ def nuclei_scan(scan_id, recon_manager):
 
 def parse_nuclei(scan_id, recon_manager):
     luigi_run_result = luigi.build([nucleiscan.ParseNucleiOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def scan_cleanup(scan_id):
+    luigi_run_result = luigi.build([scancleanup.ScanCleanup(scan_id=scan_id)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

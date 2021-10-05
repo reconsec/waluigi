@@ -77,6 +77,16 @@ class PyshotScope(luigi.ExternalTask):
 
             pyshot_inputs_f.close()
 
+            # Path to scan outputs log
+            cwd = os.getcwd()
+            dir_path = cwd + os.path.sep
+            all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+
+            # Write output file to final input file for cleanup
+            f = open(all_inputs_file, 'a')
+            f.write(pyshot_inputs_file + '\n')
+            f.close()
+
         return luigi.LocalTarget(pyshot_inputs_file)
 
 
@@ -162,7 +172,7 @@ class PyshotScan(luigi.Task):
         # Path to scan outputs log
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_inputs_" + self.scan_id + ".txt"
+        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
 
         # Write output file to final input file for cleanup
         f = open(all_inputs_file, 'a')

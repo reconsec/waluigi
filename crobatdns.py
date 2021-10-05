@@ -69,6 +69,16 @@ class CrobatScope(luigi.ExternalTask):
 
             dns_inputs_f.close()
 
+            # Path to scan outputs log
+            cwd = os.getcwd()
+            dir_path = cwd + os.path.sep
+            all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+
+            # Write output file to final input file for cleanup
+            f = open(all_inputs_file, 'a')
+            f.write(dns_inputs_file + '\n')
+            f.close()
+
         return luigi.LocalTarget(dns_inputs_file)
 
 
@@ -104,7 +114,7 @@ class CrobatDNS(luigi.Task):
 
         # Get screenshot directory
         cwd = os.getcwd()
-        dir_path = cwd + "/crobat-dns-" + self.scan_id
+        dir_path = cwd + os.path.sep + "crobat-dns-" + self.scan_id
         return luigi.LocalTarget(dir_path)
 
     def run(self):
@@ -141,6 +151,17 @@ class CrobatDNS(luigi.Task):
         except Exception as e:
             print("[-] Error deleting output directory: %s" % str(e))
             pass
+
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep
+        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        output_dir = self.output().path
+        f.write(output_dir + '\n')
+        f.close()
 
 
 @inherits(CrobatDNS)
@@ -194,8 +215,8 @@ class ImportCrobatOutput(luigi.Task):
         print("[+] Imported domains to manager.")
 
         # Remove temp dir
-        try:
-            shutil.rmtree(crobat_output_dir)
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+        #try:
+        #    shutil.rmtree(crobat_output_dir)
+        #except Exception as e:
+        #    print("[-] Error deleting output directory: %s" % str(e))
+        #    pass

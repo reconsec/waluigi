@@ -95,6 +95,16 @@ class NucleiScope(luigi.ExternalTask):
 
             nuclei_inputs_f.close()
 
+            # Path to scan outputs log
+            cwd = os.getcwd()
+            dir_path = cwd + os.path.sep
+            all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+
+            # Write output file to final input file for cleanup
+            f = open(all_inputs_file, 'a')
+            f.write(nuclei_inputs_file + '\n')
+            f.close()
+
             return luigi.LocalTarget(nuclei_inputs_file)
 
 
@@ -109,7 +119,7 @@ class NucleiScan(luigi.Task):
 
         # Get screenshot directory
         cwd = os.getcwd()
-        dir_path = cwd + "/nuclei-outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nuclei-outputs-" + self.scan_id
         return luigi.LocalTarget(dir_path)
 
     def run(self):
@@ -143,6 +153,13 @@ class NucleiScan(luigi.Task):
 
             # Set nuclei path
             nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
+            cve_template_path = nuclei_template_path + os.path.sep + "cves"
+            vuln_template_path = nuclei_template_path + os.path.sep + "vulnerabilities"
+            cnvd_template_path = nuclei_template_path + os.path.sep + "cnvd"
+            def_logins_template_path = nuclei_template_path + os.path.sep + "default-logins"
+            explosures_template_path = nuclei_template_path + os.path.sep + "explosures"
+            exposed_panels_template_path = nuclei_template_path + os.path.sep + "exposed_panels"
+            iot_path = nuclei_template_path + os.path.sep + "iot"
 
             # Nmap command args
             nuclei_output_file = dir_path + os.path.sep + "nuclei_out_" + date_str + "_" + port_id
@@ -155,8 +172,21 @@ class NucleiScan(luigi.Task):
                 "-o",
                 nuclei_output_file,
                 "-t",
-                nuclei_template_path,
-                "-no-interactsh"
+                cve_template_path,
+                "-t",
+                vuln_template_path,
+                "-t",
+                cnvd_template_path,
+                "-t",
+                def_logins_template_path,
+                "-t",
+                explosures_template_path,
+                "-t",
+                exposed_panels_template_path,
+                "-t",
+                iot_path,
+                "-no-interactsh",
+                "-nut"
             ]
             # print(command)
             command_list.append(command)
@@ -177,7 +207,7 @@ class NucleiScan(luigi.Task):
         # Path to scan outputs log
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_inputs_" + self.scan_id + ".txt"
+        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
 
         # Write output file to final input file for cleanup
         f = open(all_inputs_file, 'a')

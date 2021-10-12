@@ -104,6 +104,27 @@ class ReconManager:
 
         return subnets
 
+    def get_urls(self, scan_id):
+
+        urls = []
+        r = requests.get('%s/api/urls/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return urls
+        if r.status_code != 200:
+            print("[-] Unknown Error")
+            return urls
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        url_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+
+        if url_obj_arr:
+            for url_obj in url_obj_arr:
+                url = url_obj.url
+                urls.append(url)
+
+        return urls
+
     def get_port_map(self, scan_id):
 
         port_arr = []
@@ -213,8 +234,7 @@ class ReconManager:
         # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/scan/%s' % (self.manager_url, scan_id), headers=self.headers, json={"data": b64_val},
-                          verify=False)
+        r = requests.post('%s/api/scan/%s/' % (self.manager_url, scan_id), headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating scan status.")
 

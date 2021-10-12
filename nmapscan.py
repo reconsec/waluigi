@@ -5,6 +5,7 @@ import shutil
 import netaddr
 from datetime import date
 from libnmap.parser import NmapParser
+from urllib.parse import urlparse
 
 import luigi
 import glob
@@ -47,32 +48,63 @@ class NmapScope(luigi.ExternalTask):
 
         ports = self.recon_manager.get_ports(self.scan_id)
         print("[+] Retrieved %d ports from database" % len(ports))
+        port_target_map = {}
         if ports:
 
-            port_ip_map = {}
             for port in ports:
 
-                ip = str(netaddr.IPAddress(port.ipv4_addr))
+                target = str(netaddr.IPAddress(port.ipv4_addr))
                 port = str(port.port)
 
                 cur_list = []
-                if port in port_ip_map.keys():
-                    cur_list = port_ip_map[port]
+                if port in port_target_map.keys():
+                    cur_list = port_target_map[port]
 
-                cur_list.append(ip)
-                port_ip_map[port] = cur_list
+                cur_list.append(target)
+                port_target_map[port] = cur_list
 
-            # path to each input file
+        urls = self.recon_manager.get_urls(self.scan_id)
+        print("[+] Retrieved %d urls from database" % len(urls))
+        if urls:
+
+            for url in urls:
+                # Add the url to the list for the port
+                u = urlparse(url)
+
+                secure = 0
+                if u.scheme == 'https':
+                    secure = 1
+
+                port_str = '80'
+                if u.port is None:
+                    domain = u.netloc
+                    if secure:
+                        port_str = '443'
+                else:
+                    port_str = str(u.port)
+                    domain = u.netloc.split(":")[0]
+
+                # Get list if it exists
+                if port_str in port_target_map:
+                    cur_list = port_target_map[port_str]
+                else:
+                    cur_list = []
+                    port_target_map[port_str] = cur_list
+
+                cur_list.append(domain)
+
+        # path to each input file
+        if len(port_target_map) > 0:
             nmap_inputs_f = open(nmap_inputs_file, 'w')
-            for port in port_ip_map.keys():
+            for port in port_target_map.keys():
 
-                ips = port_ip_map[port]
+                targets = port_target_map[port]
                 in_path = dir_path + os.path.sep + "nmap_in_%s_%s_%s" % (port, date_str, self.scan_id)
-        
+
                 # Write subnets to file
                 f = open(in_path, 'w')
-                for ip in ips:
-                    f.write(ip + "\n")
+                for target in targets:
+                    f.write(target + "\n")
                 f.close()
 
                 nmap_inputs_f.write(in_path + '\n')
@@ -81,15 +113,15 @@ class NmapScope(luigi.ExternalTask):
 
             # Path to scan outputs log
             cwd = os.getcwd()
-            dir_path = cwd + os.path.sep
-            all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+            cur_path = cwd + os.path.sep
+            all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
 
             # Write output file to final input file for cleanup
             f = open(all_inputs_file, 'a')
-            f.write(nmap_inputs_file + '\n')
+            f.write(dir_path + '\n')
             f.close()
 
-            return luigi.LocalTarget(nmap_inputs_file)
+        return luigi.LocalTarget(nmap_inputs_file)
 
 
 @inherits(NmapScope)
@@ -103,7 +135,7 @@ class NmapPruningScan(luigi.Task):
 
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "pruned-outputs-" + self.scan_id
-        
+
         return luigi.LocalTarget(dir_path)
 
     def run(self):
@@ -132,18 +164,17 @@ class NmapPruningScan(luigi.Task):
             port = filename.split("_")[2]
 
             if port == '80' or port == '443' or port == '8443' or port == '8080':
-                
+
                 # Nmap command args
                 nmap_output_xml_file = dir_path + os.path.sep + "nmap_pruned_out_%s_%s_%s" % (port, date_str, self.scan_id)
                 command = [
                     "nmap",
                     "-v",
-                    "-T5",
                     "-Pn",
                     "--open",
-                    "-n",
+                    "-sT",
                     "--script",
-                    "http-headers",
+                    "http-methods,http-title",
                     "--script-args",
                     'http.useragent="%s"' % custom_user_agent,
                     "-p",
@@ -188,10 +219,10 @@ class ParseNmapPruningOutput(luigi.Task):
         today = date.today()
         date_str = today.strftime("%Y%m%d")
         nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + date_str + "_" + self.scan_id
-        return luigi.LocalTarget(nmap_inputs_file) 
+        return luigi.LocalTarget(nmap_inputs_file)
 
     def run(self):
-        
+
         nmap_output_file = self.input()
 
         # Ensure output folder exists
@@ -218,7 +249,7 @@ class ParseNmapPruningOutput(luigi.Task):
             nmap_report = NmapParser.parse_fromfile(in_file)
 
             # Loop through hosts
-            valid_ip_set = set()
+            target_set = set()
             for host in nmap_report.hosts:
 
                 host_ip = host.id
@@ -232,22 +263,24 @@ class ParseNmapPruningOutput(luigi.Task):
 
                     script_res = svc.scripts_results
                     if len(script_res) > 0:
-                        valid_ip_set.add(host_ip)
+                        target_set.add(host_ip)
+                        for hostname in host.hostnames:
+                            target_set.add(hostname)
 
-            ip_port_map[port_str] = valid_ip_set
+            ip_port_map[port_str] = target_set
 
         #print(ip_port_map)
         today = date.today()
         date_str = today.strftime("%Y%m%d")
         for port in ip_port_map.keys():
 
-            ips = ip_port_map[port]
+            target_arr = ip_port_map[port]
             in_path = dir_path + os.path.sep + "nmap_in_%s_%s_%s" % (port, date_str, self.scan_id)
-    
+
             # Write subnets to file
             f = open(in_path, 'w')
-            for ip in ips:
-                f.write(ip + "\n")
+            for target in target_arr:
+                f.write(target + "\n")
             f.close()
 
         # path to each input file
@@ -309,10 +342,8 @@ class NmapScan(luigi.Task):
             command = [
                 "nmap",
                 "-v",
-                "-T5",
                 "-Pn",
                 "--open",
-                "-n",
                 "--host-timeout",
                 "30m",
                 "--script-timeout",
@@ -321,6 +352,7 @@ class NmapScan(luigi.Task):
                 'http.useragent="%s"' % custom_user_agent,
                 "-sV",
                 "-sC",
+                "-sT",
                 "-p",
                 port,
                 "-oX",

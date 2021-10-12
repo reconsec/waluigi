@@ -71,12 +71,12 @@ class CrobatScope(luigi.ExternalTask):
 
             # Path to scan outputs log
             cwd = os.getcwd()
-            dir_path = cwd + os.path.sep
-            all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+            cur_path = cwd + os.path.sep
+            all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
 
             # Write output file to final input file for cleanup
             f = open(all_inputs_file, 'a')
-            f.write(dns_inputs_file + '\n')
+            f.write(dir_path + '\n')
             f.close()
 
         return luigi.LocalTarget(dns_inputs_file)

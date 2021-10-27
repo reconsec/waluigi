@@ -185,8 +185,7 @@ class NucleiScan(luigi.Task):
                 exposed_panels_template_path,
                 "-t",
                 iot_path,
-                "-no-interactsh",
-                "-nut"
+                "-ni"
             ]
             # print(command)
             command_list.append(command)

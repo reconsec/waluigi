@@ -238,6 +238,9 @@ class ParseNucleiOutput(luigi.Task):
             data = f.read()
             f.close()
 
+            file_arr = nuclei_file.split("_")
+            if len(file_arr) < 5:
+                continue
             port_id = nuclei_file.split("_")[4]
 
             scan_arr = []

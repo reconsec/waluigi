@@ -149,7 +149,7 @@ class NucleiScan(luigi.Task):
             if os.name == 'nt':
                 nuclei_template_root = '%userprofile%'
             else:
-                nuclei_template_root = '.'
+                nuclei_template_root = '~'
 
             # Set nuclei path
             nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"

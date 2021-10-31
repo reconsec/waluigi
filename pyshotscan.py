@@ -199,7 +199,7 @@ class ParsePyshotOutput(luigi.Task):
         # Convert the screenshots
         convert_cmd = "mogrify -format jpg -quality 10 *.png"
         # Execute process
-        subprocess.run(convert_cmd, cwd=pyshot_output_dir)
+        subprocess.run(convert_cmd, cwd=pyshot_output_dir, shell=True)
 
         print("[*] Converted screenshot image files.")
 

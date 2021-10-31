@@ -149,7 +149,7 @@ class NucleiScan(luigi.Task):
             if os.name == 'nt':
                 nuclei_template_root = '%userprofile%'
             else:
-                nuclei_template_root = '.'
+                nuclei_template_root = '~'
 
             # Set nuclei path
             nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
@@ -185,8 +185,7 @@ class NucleiScan(luigi.Task):
                 exposed_panels_template_path,
                 "-t",
                 iot_path,
-                "-no-interactsh",
-                "-nut"
+                "-ni"
             ]
             # print(command)
             command_list.append(command)
@@ -239,6 +238,9 @@ class ParseNucleiOutput(luigi.Task):
             data = f.read()
             f.close()
 
+            file_arr = nuclei_file.split("_")
+            if len(file_arr) < 5:
+                continue
             port_id = nuclei_file.split("_")[4]
 
             scan_arr = []

@@ -128,11 +128,10 @@ if __name__ == '__main__':
     parser.add_argument("-t", "--token", help = "Collector Token", required = True)
     parser.add_argument("-u", "--manager_url", help = "Manager URL", required = True)
     parser.add_argument("-p", "--pipeline", help = "Pipeline Name", required = True)
-    parser.add_argument('--cleanup', dest='cleanup', action='store_true')
     args = parser.parse_args()
 
     # Set some globals
-    scan_id = args.scan_id  
+    scan_id = args.scan_id
     token = args.token
     manager_url = args.manager_url
     pipeline_name = args.pipeline
@@ -148,6 +147,8 @@ if __name__ == '__main__':
         luigi_run_result = luigi.build([pyshotscan.ParsePyshotOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'nuclei':
         luigi_run_result = luigi.build([nucleiscan.ParseNucleiOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+    elif pipeline_name == 'cleanup':
+        luigi_run_result = luigi.build([scancleanup.ScanCleanup(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
 
     if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
         sys.exit(1)

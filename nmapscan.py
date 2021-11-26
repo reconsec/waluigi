@@ -160,7 +160,7 @@ class NmapPruningScan(luigi.Task):
             if port == '80' or port == '443' or port == '8443' or port == '8080':
 
                 # Nmap command args
-                nmap_output_xml_file = dir_path + os.path.sep + "nmap_pruned_out_%s_%s" % (port, self.scan_id)
+                nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (port, self.scan_id)
                 command = [
                     "nmap",
                     "-v",
@@ -189,12 +189,22 @@ class NmapPruningScan(luigi.Task):
             executor.map(subprocess.run, commands)
 
         # Remove temp dir
-        try:
-            dir_path = os.path.dirname(nmap_input_file.path)
-            shutil.rmtree(dir_path)
-        except Exception as e:
-            print("[-] Error deleting input directory: %s" % str(e))
-            pass
+        #try:
+        #    dir_path = os.path.dirname(nmap_input_file.path)
+        #    shutil.rmtree(dir_path)
+        #except Exception as e:
+        #    print("[-] Error deleting input directory: %s" % str(e))
+        #    pass
+
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep
+        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        f.write(self.output().path + '\n')
+        f.close()
 
 
 @inherits(NmapPruningScan)
@@ -229,7 +239,7 @@ class ParseNmapPruningOutput(luigi.Task):
             filename = os.path.basename(in_file)
             shutil.copy(in_file, dir_path + os.path.sep +filename )
 
-        glob_check = '%s%snmap_pruned_out_*_%s' % (nmap_output_file.path, os.path.sep, self.scan_id)
+        glob_check = '%s%snmap_out_*_%s' % (nmap_output_file.path, os.path.sep, self.scan_id)
         ip_port_map = {}
         for nmap_out in glob.glob(glob_check):
 
@@ -280,12 +290,21 @@ class ParseNmapPruningOutput(luigi.Task):
         nmap_inputs_f.close()
 
         # Remove temp dir
-        try:
-            shutil.rmtree(nmap_output_file.path)
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+        #try:
+        #    shutil.rmtree(nmap_output_file.path)
+        #except Exception as e:
+        #    print("[-] Error deleting output directory: %s" % str(e))
+        #    pass
 
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep
+        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        f.write(self.output().path + '\n')
+        f.close()
 
 @inherits(ParseNmapPruningOutput)
 class NmapScan(luigi.Task):
@@ -320,6 +339,7 @@ class NmapScan(luigi.Task):
 
             in_file = ip_path.strip()
             filename = os.path.basename(in_file)
+            print(filename)
             port = filename.split("_")[2]
 
             # Nmap command args
@@ -345,7 +365,7 @@ class NmapScan(luigi.Task):
                 "-iL",
                 in_file.strip()
             ]
-            #print(command)
+            print(command)
             commands.append(command)
 
         # Run threaded
@@ -353,12 +373,12 @@ class NmapScan(luigi.Task):
             executor.map(subprocess.run, commands)
 
         # Remove temp dir
-        try:
-            dir_path = os.path.dirname(nmap_input_file.path)
-            shutil.rmtree(dir_path)
-        except Exception as e:
-            print("[-] Error deleting input directory: %s" % str(e))
-            pass
+        #try:
+        #    dir_path = os.path.dirname(nmap_input_file.path)
+        #    shutil.rmtree(dir_path)
+        #except Exception as e:
+        #    print("[-] Error deleting input directory: %s" % str(e))
+        #    pass
 
         # Path to scan outputs log
         cwd = os.getcwd()

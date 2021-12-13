@@ -1,11 +1,6 @@
 import luigi
-import pyshotscan
+from waluigi import *
 import argparse
-import masscan
-import nmapscan
-import nucleiscan
-import crobatdns
-import scancleanup
 import sys
 
 

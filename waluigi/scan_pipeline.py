@@ -2,6 +2,13 @@ import luigi
 from waluigi import *
 import argparse
 import sys
+import pyshotscan
+import argparse
+import masscan
+import nmapscan
+import nucleiscan
+import crobatdns
+import scancleanup
 
 
 def masscan_scope(scan_id, recon_manager):

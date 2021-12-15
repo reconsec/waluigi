@@ -3,7 +3,7 @@ import shutil
 from datetime import date
 import luigi
 from luigi.util import inherits
-import recon_manager
+from . import recon_manager
 import traceback
 
 

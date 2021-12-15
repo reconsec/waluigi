@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import luigi
 from luigi.util import inherits
 
-import recon_manager
+from . import recon_manager
 
 TCP = 'tcp'
 UDP = 'udp'

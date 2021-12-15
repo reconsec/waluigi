@@ -9,7 +9,7 @@ import luigi
 import glob
 from luigi.util import inherits
 
-from . import recon_manager
+from waluigi import recon_manager
 
 from multiprocessing.pool import ThreadPool
 import multiprocessing

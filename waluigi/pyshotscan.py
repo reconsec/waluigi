@@ -9,7 +9,7 @@ from datetime import date
 import luigi
 from luigi.util import inherits
 from pyshot import pyshot
-import recon_manager
+from waluigi import recon_manager
 
 from multiprocessing.pool import ThreadPool
 import multiprocessing

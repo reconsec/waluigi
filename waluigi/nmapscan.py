@@ -11,7 +11,7 @@ import luigi
 import glob
 from luigi.util import inherits
 
-import recon_manager
+from waluigi import recon_manager
 import concurrent.futures
 import requests
 from multiprocessing.pool import ThreadPool

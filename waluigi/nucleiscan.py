@@ -9,9 +9,7 @@ import luigi
 import glob
 from luigi.util import inherits
 
-from pyshot import pyshot
-
-import recon_manager
+from waluigi import recon_manager
 
 import concurrent.futures
 import traceback

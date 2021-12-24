@@ -9,6 +9,7 @@ import nmapscan
 import nucleiscan
 import crobatdns
 import scancleanup
+#import webscan
 
 
 def masscan_scope(scan_id, recon_manager):
@@ -141,6 +142,8 @@ if __name__ == '__main__':
 
     if pipeline_name == 'masscan':
         luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+    #elif pipeline_name == 'webscan':
+    #    luigi_run_result = luigi.build([webscan.WebScan(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'nmap':
         luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'dns':

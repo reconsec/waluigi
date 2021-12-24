@@ -146,10 +146,12 @@ class NucleiScan(luigi.Task):
             filename = os.path.basename(in_file)
             port_id = filename.split("_")[3]
 
+            use_shell = False
             if os.name == 'nt':
                 nuclei_template_root = '%userprofile%'
+                use_shell = True
             else:
-                nuclei_template_root = '~'
+                nuclei_template_root = os.getcwd()
 
             # Set nuclei path
             nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
@@ -184,16 +186,15 @@ class NucleiScan(luigi.Task):
                 "-t",
                 exposed_panels_template_path,
                 "-t",
-                iot_path,
-                "-ni"
+                iot_path
             ]
-            # print(command)
+            #print(command)
             command_list.append(command)
 
         # Run threaded
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             for command_args in command_list:
-                executor.submit(subprocess.run, command_args, shell=True)
+                executor.submit(subprocess.run, command_args, shell=use_shell)
 
         # Remove temp dir
         try:

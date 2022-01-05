@@ -77,7 +77,7 @@ class NucleiScope(luigi.ExternalTask):
                 endpoint_set.add(endpoint)
 
                 # Add endpoint per domain
-                for domain in port_obj.domains:
+                for domain in port_obj.domains[:10]:
                     endpoint = prefix + domain.name + ":" + port
                     # print("[*] Endpoint: %s" % endpoint)
                     endpoint_set.add(endpoint)

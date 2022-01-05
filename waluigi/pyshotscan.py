@@ -154,8 +154,8 @@ class PyshotScan(luigi.Task):
             # Add argument without domain first
             pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id))
 
-            # Loop through domains
-            for domain in domain_arr:
+            # Loop through domains - truncate to the first 20
+            for domain in domain_arr[:20]:
                 pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id, domain))
 
         # Close the pool

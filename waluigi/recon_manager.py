@@ -206,6 +206,22 @@ class ReconManager:
 
         return ret_val
 
+    def get_hosts(self, scan_id):
+
+        port_arr = []
+        r = requests.get('%s/api/hosts/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return port_arr
+        elif r.status_code != 200:
+            print("[-] Unknown Error")
+            return port_arr
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        port_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+
+        return port_obj_arr
+
     def get_ports(self, scan_id):
 
         port_arr = []

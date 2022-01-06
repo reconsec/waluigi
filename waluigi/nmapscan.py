@@ -46,22 +46,23 @@ class NmapScope(luigi.ExternalTask):
         if os.path.isfile(nmap_inputs_file):
             return luigi.LocalTarget(nmap_inputs_file)
 
-        ports = self.recon_manager.get_ports(self.scan_id)
-        print("[+] Retrieved %d ports from database" % len(ports))
+        hosts = self.recon_manager.get_hosts(self.scan_id)
+        print("[+] Retrieved %d hosts from database" % len(hosts))
         port_target_map = {}
-        if ports:
+        if hosts:
 
-            for port in ports:
+            for host in hosts:
 
-                target = str(netaddr.IPAddress(port.ipv4_addr))
-                port = str(port.port)
+                target_ip = str(netaddr.IPAddress(host.ipv4_addr))
+                for port in host.ports:
+                    port = str(port.port)
 
-                cur_list = []
-                if port in port_target_map.keys():
-                    cur_list = port_target_map[port]
+                    cur_list = []
+                    if port in port_target_map.keys():
+                        cur_list = port_target_map[port]
 
-                cur_list.append(target)
-                port_target_map[port] = cur_list
+                    cur_list.append(target_ip)
+                    port_target_map[port] = cur_list
 
         urls = self.recon_manager.get_urls(self.scan_id)
         print("[+] Retrieved %d urls from database" % len(urls))

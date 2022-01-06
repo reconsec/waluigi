@@ -53,7 +53,7 @@ class PyshotScope(luigi.ExternalTask):
             for host in hosts:
 
                 ip_str = str(netaddr.IPAddress(host.ipv4_addr))
-                for port in host.ports:
+                for port_obj in host.ports:
 
                     # Check if nmap scan results have http results
                     if 'http-' not in str(port_obj.nmap_script_results):

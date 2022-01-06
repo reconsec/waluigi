@@ -16,6 +16,7 @@ import concurrent.futures
 import requests
 from multiprocessing.pool import ThreadPool
 import traceback
+from tqdm import tqdm
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
@@ -137,7 +138,7 @@ def request_wrapper(ip_addr, port_num):
         try:
             x = requests.head('%s://%s:%d' % (protocol, ip_addr, port_num), headers=headers, verify=False, timeout=1)
             if len(x.headers) > 0:
-                return (ip_addr,port_num)
+                return ip_addr, port_num
             break
         except requests.exceptions.ReadTimeout as e:
             break
@@ -171,7 +172,6 @@ class NmapPruningScan(luigi.Task):
         nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + self.scan_id
         return luigi.LocalTarget(nmap_inputs_file)
 
-
     def run(self):
 
         # Read masscan input files
@@ -197,7 +197,7 @@ class NmapPruningScan(luigi.Task):
             port = int(filename.split("_")[2])
 
             if port == 80 or port == 443 or port == 8443 or port == 8080:
-
+                print("[*] Running web pruning job for port %d" % port)
                 f_path = in_file.strip()
                 f = open(f_path, 'r')
                 ip_list = f.readlines()
@@ -214,10 +214,9 @@ class NmapPruningScan(luigi.Task):
 
                 # Close the pool
                 pool.close()
-                pool.join()
 
                 # Loop through outputs
-                for thread_obj in thread_list:
+                for thread_obj in tqdm(thread_list):
                     output = thread_obj.get()
                     if output:
                         port = output[1]
@@ -254,6 +253,7 @@ class NmapPruningScan(luigi.Task):
         f = open(all_inputs_file, 'a')
         f.write(os.path.dirname(output_file.path) + '\n')
         f.close()
+
 
 @inherits(NmapPruningScan)
 class NmapScan(luigi.Task):

@@ -47,49 +47,51 @@ class NucleiScope(luigi.ExternalTask):
         if os.path.isfile(nuclei_inputs_file):
             return luigi.LocalTarget(nuclei_inputs_file)
 
-        port_obj_arr = self.recon_manager.get_ports(self.scan_id)
-        print("[+] Retrieved %d ports from database" % len(port_obj_arr))
-        if port_obj_arr:
+        hosts = self.recon_manager.get_hosts(self.scan_id)
+        print("[+] Retrieved %d hosts from database" % len(hosts))
+        if hosts:
 
             # path to each input file
             nuclei_inputs_f = open(nuclei_inputs_file, 'w')
-            for port_obj in port_obj_arr:
+            for host in hosts:
 
-                if 'http-' not in str(port_obj.nmap_script_results):
-                    #print("[*] NMAP Results are empty so skipping.")
-                    continue
+                ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
+                for port_obj in host.ports:
 
-                    # Setup inputs
-                prefix = ''
-                if 'http' in port_obj.service:
-                    prefix = 'http://'
+                    if 'http-' not in str(port_obj.nmap_script_results):
+                        #print("[*] NMAP Results are empty so skipping.")
+                        continue
 
-                if port_obj.secure == 1:
-                    prefix = 'https://'
+                        # Setup inputs
+                    prefix = ''
+                    if 'http' in port_obj.service:
+                        prefix = 'http://'
 
-                endpoint_set = set()
-                port_id = str(port_obj.id)
-                ip_addr = str(netaddr.IPAddress(port_obj.ipv4_addr))
-                port = str(port_obj.port)
+                    if port_obj.secure == 1:
+                        prefix = 'https://'
 
-                endpoint = prefix + ip_addr + ":" + port
-                # print("[*] Endpoint: %s" % endpoint)
-                endpoint_set.add(endpoint)
+                    endpoint_set = set()
+                    port_id = str(port_obj.id)
+                    port = str(port_obj.port)
 
-                # Add endpoint per domain
-                for domain in port_obj.domains[:10]:
-                    endpoint = prefix + domain.name + ":" + port
+                    endpoint = prefix + ip_addr + ":" + port
                     # print("[*] Endpoint: %s" % endpoint)
                     endpoint_set.add(endpoint)
 
-                # Write to nuclei input file
-                nuclei_list_file = dir_path + os.path.sep + "nuc_in_" + date_str + "_" + port_id
-                f = open(nuclei_list_file, 'w')
-                for endpoint in endpoint_set:
-                    f.write(endpoint + '\n')
-                f.close()
+                    # Add endpoint per domain
+                    for domain in port_obj.domains[:10]:
+                        endpoint = prefix + domain.name + ":" + port
+                        # print("[*] Endpoint: %s" % endpoint)
+                        endpoint_set.add(endpoint)
 
-                nuclei_inputs_f.write(nuclei_list_file + '\n')
+                    # Write to nuclei input file
+                    nuclei_list_file = dir_path + os.path.sep + "nuc_in_" + date_str + "_" + port_id
+                    f = open(nuclei_list_file, 'w')
+                    for endpoint in endpoint_set:
+                        f.write(endpoint + '\n')
+                    f.close()
+
+                    nuclei_inputs_f.write(nuclei_list_file + '\n')
 
             nuclei_inputs_f.close()
 

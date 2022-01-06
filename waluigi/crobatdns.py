@@ -44,28 +44,30 @@ class CrobatScope(luigi.ExternalTask):
         if os.path.isfile(dns_inputs_file):
             return luigi.LocalTarget(dns_inputs_file)
 
-        ports = self.recon_manager.get_ports(self.scan_id)
-        print("[+] Retrieved %d ports from database" % len(ports))
-        if ports:
+        hosts = self.recon_manager.get_hosts(self.scan_id)
+        print("[+] Retrieved %d hosts from database" % len(hosts))
+        if hosts:
 
             # open input file
             dns_inputs_f = open(dns_inputs_file, 'w')
-            for port_obj in ports:
+            for host in hosts:
 
-                # Check if nmap scan results have http results
-                if 'http-' not in str(port_obj.nmap_script_results):
-                    # print("[*] NMAP Results are empty so skipping.")
-                    continue
+                ip_str = str(netaddr.IPAddress(host.ipv4_addr))
+                for port_obj in ports:
 
-                # Write each port id and IP pair to a file
-                ip_str = str(netaddr.IPAddress(port_obj.ipv4_addr))
-                port_id = str(port_obj.id)
+                    # Check if nmap scan results have http results
+                    if 'http-' not in str(port_obj.nmap_script_results):
+                        # print("[*] NMAP Results are empty so skipping.")
+                        continue
 
-                # Do not do DNS lookups for private IP addresses
-                if netaddr.IPAddress(ip_str).is_private():
-                    continue
+                    # Write each port id and IP pair to a file
+                    port_id = str(port_obj.id)
 
-                dns_inputs_f.write("%s:%s\n" % (port_id, ip_str))
+                    # Do not do DNS lookups for private IP addresses
+                    if netaddr.IPAddress(ip_str).is_private():
+                        continue
+
+                    dns_inputs_f.write("%s:%s\n" % (port_id, ip_str))
 
             dns_inputs_f.close()
 

@@ -44,36 +44,38 @@ class PyshotScope(luigi.ExternalTask):
         if os.path.isfile(pyshot_inputs_file):
             return luigi.LocalTarget(pyshot_inputs_file)
 
-        ports = self.recon_manager.get_ports(self.scan_id)
-        print("[+] Retrieved %d ports from database" % len(ports))
-        if ports:
+        hosts = self.recon_manager.get_hosts(self.scan_id)
+        print("[+] Retrieved %d hosts from database" % len(hosts))
+        if hosts:
 
             # open input file
             pyshot_inputs_f = open(pyshot_inputs_file, 'w')
-            for port_obj in ports:
+            for host in hosts:
 
-                # Check if nmap scan results have http results
-                if 'http-' not in str(port_obj.nmap_script_results):
-                    # print("[*] NMAP Results are empty so skipping.")
-                    continue
+                ip_str = str(netaddr.IPAddress(host.ipv4_addr))
+                for port in host.ports:
 
-                # Write each port id and IP pair to a file
-                ip_str = str(netaddr.IPAddress(port_obj.ipv4_addr))
-                port_id = str(port_obj.id)
-                port = str(port_obj.port)
-                secure = str(port_obj.secure)
+                    # Check if nmap scan results have http results
+                    if 'http-' not in str(port_obj.nmap_script_results):
+                        # print("[*] NMAP Results are empty so skipping.")
+                        continue
 
-                # Loop through domains
-                domain_str = ''
-                if port_obj.domains and len(port_obj.domains) > 0:
-                    domains = []
-                    for domain in port_obj.domains:
-                        domains.append(domain.name)
+                    # Write each port id and IP pair to a file
+                    port_id = str(port_obj.id)
+                    port = str(port_obj.port)
+                    secure = str(port_obj.secure)
 
-                    if len(domains) > 0:
-                        domain_str = ",".join(domains)
+                    # Loop through domains
+                    domain_str = ''
+                    if port_obj.domains and len(port_obj.domains) > 0:
+                        domains = []
+                        for domain in port_obj.domains:
+                            domains.append(domain.name)
 
-                pyshot_inputs_f.write("%s:%s:%s:%s:%s\n" % (port_id, ip_str, port, secure, domain_str))
+                        if len(domains) > 0:
+                            domain_str = ",".join(domains)
+
+                    pyshot_inputs_f.write("%s:%s:%s:%s:%s\n" % (port_id, ip_str, port, secure, domain_str))
 
             pyshot_inputs_f.close()
 

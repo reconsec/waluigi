@@ -222,21 +222,21 @@ class ReconManager:
 
         return port_obj_arr
 
-    def get_ports(self, scan_id):
+    # def get_ports(self, scan_id):
 
-        port_arr = []
-        r = requests.get('%s/api/ports/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
-        if r.status_code == 404:
-            return port_arr
-        elif r.status_code != 200:
-            print("[-] Unknown Error")
-            return port_arr
+    #     port_arr = []
+    #     r = requests.get('%s/api/ports/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+    #     if r.status_code == 404:
+    #         return port_arr
+    #     elif r.status_code != 200:
+    #         print("[-] Unknown Error")
+    #         return port_arr
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        port_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+    #     content = r.json()
+    #     data = self._decrypt_json(content)
+    #     port_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
 
-        return port_obj_arr
+    #     return port_obj_arr
 
     def update_scan_status(self, scan_id, status):
 

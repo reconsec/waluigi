@@ -67,9 +67,9 @@ class PyshotScope(luigi.ExternalTask):
 
                     # Loop through domains
                     domain_str = ''
-                    if port_obj.domains and len(port_obj.domains) > 0:
+                    if host.domains and len(host.domains) > 0:
                         domains = []
-                        for domain in port_obj.domains:
+                        for domain in host.domains[:20]:
                             domains.append(domain.name)
 
                         if len(domains) > 0:

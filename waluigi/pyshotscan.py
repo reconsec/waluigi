@@ -15,6 +15,8 @@ from multiprocessing.pool import ThreadPool
 import multiprocessing
 import traceback
 
+import hashlib
+from collections import defaultdict
 
 class PyshotScope(luigi.ExternalTask):
     scan_id = luigi.Parameter()
@@ -181,6 +183,82 @@ class PyshotScan(luigi.Task):
         f.write(self.output().path + '\n')
         f.close()
 
+def chunk_reader(fobj, chunk_size=1024):
+    while True:
+        chunk = fobj.read(chunk_size)
+        if not chunk:
+            return
+        yield chunk
+
+def get_hash(filename, first_chunk_only=False, hash=hashlib.sha1):
+    hashobj = hash()
+    file_object = open(filename, 'rb')
+
+    if first_chunk_only:
+        hashobj.update(file_object.read(1024))
+    else:
+        for chunk in chunk_reader(file_object):
+            hashobj.update(chunk)
+    hashed = hashobj.digest()
+
+    file_object.close()
+    return hashed
+
+def check_for_duplicates(files_paths, hash=hashlib.sha1):
+    hashes_by_size = defaultdict(list)
+    hashes_on_1k = defaultdict(list)
+    hashes_full = {}
+    duplicate_set = set()
+
+    for full_path in files_paths:
+
+        try:
+            full_path = os.path.realpath(full_path)
+            file_size = os.path.getsize(full_path)
+            hashes_by_size[file_size].append(full_path)
+        except (OSError,):
+            continue
+
+
+    # For all files with the same file size, get their hash on the 1st 1024 bytes only
+    for size_in_bytes, files in hashes_by_size.items():
+        if len(files) < 2:
+            continue    # this file size is unique, no need to spend CPU cycles on it
+
+        for filename in files:
+            try:
+                small_hash = get_hash(filename, first_chunk_only=True)
+                hashes_on_1k[(small_hash, size_in_bytes)].append(filename)
+            except (OSError,):
+                continue
+
+    # For all files with the hash on the 1st 1024 bytes, get their hash on the full file - collisions will be duplicates
+    for __, files_list in hashes_on_1k.items():
+        if len(files_list) < 2:
+            continue    # this hash of fist 1k file bytes is unique, no need to spend cpy cycles on it
+        for filename in files_list:
+            try:
+                full_hash = get_hash(filename, first_chunk_only=False)
+                duplicate = hashes_full.get(full_hash)
+                if duplicate:
+                    duplicate_set.add(filename)
+                else:
+                    hashes_full[full_hash] = filename
+            except (OSError,):
+                continue
+
+    return list(duplicate_set)
+
+
+def remove_duplicates(file_dir):
+    # Check for duplicates in vhosts screenshots
+    files = glob.glob('%s/*.png' % file_dir)
+#    print("File list: %d" % len(files))
+    dup_list = check_for_duplicates(files)
+#    print("Dup list: %d" % len(dup_list))
+    for dupe in dup_list:
+        os.remove(dupe)
+
 
 @inherits(PyshotScan)
 class ParsePyshotOutput(luigi.Task):
@@ -197,6 +275,10 @@ class ParsePyshotOutput(luigi.Task):
     def run(self):
 
         pyshot_output_dir = self.input().path
+
+        # Remove duplicates
+        print("[+] Removing duplicates in '%s'" % pyshot_output_dir)
+        remove_duplicates(pyshot_output_dir)
 
         # Convert the screenshots
         convert_cmd = "mogrify -format jpg -quality 10 *.png"

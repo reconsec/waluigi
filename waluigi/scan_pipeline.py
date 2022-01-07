@@ -8,6 +8,7 @@ from waluigi import nmapscan
 from waluigi import nucleiscan
 from waluigi import crobatdns
 from waluigi import scancleanup
+from waluigi import shodanlookup
 
 
 def masscan_scope(scan_id, recon_manager):
@@ -140,6 +141,8 @@ if __name__ == '__main__':
 
     if pipeline_name == 'masscan':
         luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+    elif pipeline_name == 'shodan':
+        luigi_run_result = luigi.build([shodanlookup.ParseShodanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'nmap':
         luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'dns':

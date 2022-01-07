@@ -104,6 +104,24 @@ class ReconManager:
 
         return subnets
 
+    def get_shodan_key(self):
+
+        shodan_key = None
+        r = requests.get('%s/api/integrations/shodan/key' % (self.manager_url), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return subnets
+        if r.status_code != 200:
+            print("[-] Unknown Error")
+            return subnets
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        if data:
+            shodan_key_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+            shodan_key = shodan_key_obj.key
+
+        return shodan_key
+
     def get_urls(self, scan_id):
 
         urls = []

@@ -29,8 +29,6 @@ class MassScanScope(luigi.ExternalTask):
 
     def output(self):
 
-        today = date.today()
-
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "masscan-inputs-" + self.scan_id
@@ -38,11 +36,9 @@ class MassScanScope(luigi.ExternalTask):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        # Convert date to str
-        date_str = today.strftime("%Y%m%d")
 
         # path to each input file
-        masscan_inputs_file = dir_path + os.path.sep + "mass_inputs_" + date_str + "_" + self.scan_id
+        masscan_inputs_file = dir_path + os.path.sep + "mass_inputs_" + self.scan_id
         if os.path.isfile(masscan_inputs_file):
             return luigi.LocalTarget(masscan_inputs_file) 
 
@@ -58,8 +54,7 @@ class MassScanScope(luigi.ExternalTask):
             f_inputs = open(masscan_inputs_file, 'w')
             if len(port_arr) > 0:
                 
-                date_str = today.strftime("%Y%m%d")
-                masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + date_str + "_" + self.scan_id
+                masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + self.scan_id
 
                 # Write subnets to file
                 f = open(masscan_ip_file, 'w')
@@ -74,7 +69,7 @@ class MassScanScope(luigi.ExternalTask):
                 port_line.strip(',')
 
                 # Write ports to config file
-                masscan_config_file = dir_path + os.path.sep + "mass_conf_" + date_str + "_" + self.scan_id
+                masscan_config_file = dir_path + os.path.sep + "mass_conf_" + self.scan_id
                 f = open(masscan_config_file, 'w')
                 f.write(port_line + '\n')
                 f.close()
@@ -113,9 +108,7 @@ class MasscanScan(luigi.Task):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        today = date.today()
-        date_str = today.strftime("%Y%m%d")
-        out_file = dir_path + os.path.sep + "mass_out_" + date_str + "_" + self.scan_id
+        out_file = dir_path + os.path.sep + "mass_out_" + self.scan_id
 
         return luigi.LocalTarget(out_file)
 
@@ -181,18 +174,6 @@ class ParseMasscanOutput(luigi.Task):
     def requires(self):
         # Requires MassScan Task to be run prior
         return MasscanScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
-
-    # def output(self):
-    #     """ Returns the target output for this task.
-
-    #     Naming convention for the output file is masscan.TARGET_FILE.parsed.pickle.
-
-    #     Returns:
-    #         luigi.local_target.LocalTarget
-    #     """
-    #     return SQLAlchemyTarget(
-    #         connection_string=self.db_mgr.connection_string, target_table="port", update_id=self.task_id
-    #     )
 
     def run(self):
         

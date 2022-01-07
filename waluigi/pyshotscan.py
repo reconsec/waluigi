@@ -10,6 +10,7 @@ import luigi
 from luigi.util import inherits
 from pyshot import pyshot
 from waluigi import recon_manager
+from tqdm import tqdm
 
 from multiprocessing.pool import ThreadPool
 import multiprocessing
@@ -95,17 +96,19 @@ class PyshotScope(luigi.ExternalTask):
 
 
 def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
-    multiprocessing.log_to_stderr()
+    
+    ret_msg = None
     try:
-        pyshot.take_screenshot(ip_addr, port, "", dir_path, ssl_val, port_id, domain)
+        ret_msg = pyshot.take_screenshot(ip_addr, port, "", dir_path, ssl_val, port_id, domain)
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
-        print("[-] Pyshot scan thread exception.")
-        print(traceback.format_exc())
+        ret_msg += "[-] Pyshot scan thread exception."
+        ret_msg += str(traceback.format_exc())
         # Re-raise the original exception so the Pool worker can
         # clean up
-        raise
+
+    return ret_msg
 
 
 @inherits(PyshotScope)
@@ -137,6 +140,7 @@ class PyshotScan(luigi.Task):
 
         # print(port_obj_arr)
         pool = ThreadPool(processes=10)
+        thread_list = []
         for port_ip_line in port_ip_lines:
 
             port_arr = port_ip_line.split(":")
@@ -156,15 +160,19 @@ class PyshotScan(luigi.Task):
                 ssl_val = True
 
             # Add argument without domain first
-            pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id))
+            thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id)))
 
             # Loop through domains - truncate to the first 20
             for domain in domain_arr[:20]:
-                pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id, domain))
+                thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id, domain)))
 
         # Close the pool
         pool.close()
-        pool.join()
+        #pool.join()
+
+        # Loop through thread function calls and update progress
+        for thread_obj in tqdm(thread_list):
+            output = thread_obj.get()
 
         # Remove temp dir
         try:

@@ -96,8 +96,8 @@ class PyshotScope(luigi.ExternalTask):
 
 
 def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
-    
-    ret_msg = None
+
+    ret_msg = ""
     try:
         ret_msg = pyshot.take_screenshot(ip_addr, port, "", dir_path, ssl_val, port_id, domain)
     except Exception as e:

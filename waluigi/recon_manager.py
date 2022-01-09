@@ -291,6 +291,23 @@ class ReconManager:
 
         return True
 
+    def import_shodan_data(self, scan_id, shodan_arr):
+
+        # Import the data to the manager
+        json_data = json.dumps(shodan_arr).encode()
+        cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
+        packet = cipher_aes.nonce + tag + ciphertext
+        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+
+        b64_val = base64.b64encode(packet).decode()
+        r = requests.post('%s/api/integration/shodan/import/%s' % (self.manager_url, str(scan_id)), headers=self.headers, json={"data": b64_val}, verify=False)
+        if r.status_code != 200:
+            raise RuntimeError("[-] Error importing ports to manager server.")
+
+        return True
+
     def import_screenshot(self, port_id, url, image_data):
 
         # Import the data to the manager

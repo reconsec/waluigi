@@ -150,7 +150,7 @@ class ShodanScan(luigi.Task):
             thread_list = []
             for subnet in ip_subnets:
 
-                print(subnet)
+                #print(subnet)
                 # Get the subnet
                 subnet = subnet.strip()
                 subnet_arr = subnet.split("/")

@@ -3,17 +3,17 @@ import os
 import subprocess
 import shutil
 import netaddr
-from datetime import date
-
+import socket
 import luigi
 import glob
-from luigi.util import inherits
-
-from waluigi import recon_manager
-
-from multiprocessing.pool import ThreadPool
 import multiprocessing
 import traceback
+
+from datetime import date
+from luigi.util import inherits
+from tqdm import tqdm
+from waluigi import recon_manager
+from multiprocessing.pool import ThreadPool
 
 
 class CrobatScope(luigi.ExternalTask):
@@ -29,84 +29,126 @@ class CrobatScope(luigi.ExternalTask):
 
     def output(self):
 
-        today = date.today()
-
-        # Create input directory if it doesn't exist
+         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "inputs-dns-" + self.scan_id
+        dir_path = cwd + os.path.sep + "dns-inputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        # Convert date to str
-        date_str = today.strftime("%Y%m%d")
-        dns_inputs_file = dir_path + os.path.sep + "dns_inputs_" + date_str + "_" + self.scan_id
+
+        # path to each input file
+        dns_inputs_file = dir_path + os.path.sep + "dns_inputs_" + self.scan_id
         if os.path.isfile(dns_inputs_file):
-            return luigi.LocalTarget(dns_inputs_file)
+            return luigi.LocalTarget(dns_inputs_file) 
 
-        hosts = self.recon_manager.get_hosts(self.scan_id)
-        print("[+] Retrieved %d hosts from database" % len(hosts))
-        if hosts:
+        subnets = self.recon_manager.get_subnets(self.scan_id)
+        print("[+] Retrieved %d subnets from database" % len(subnets))
 
-            # open input file
-            dns_inputs_f = open(dns_inputs_file, 'w')
-            for host in hosts:
+        urls = self.recon_manager.get_urls(self.scan_id)
+        print("[+] Retrieved %d urls from database" % len(urls))
 
-                ip_str = str(netaddr.IPAddress(host.ipv4_addr))
-                for port_obj in host.ports:
+        # Create output file
+        f_inputs = open(dns_inputs_file, 'w')
+        dns_ip_file = dir_path + os.path.sep + "dns_ips_" + self.scan_id
+        if len(subnets) > 0:
 
-                    # Check if nmap scan results have http results
-                    if 'http-' not in str(port_obj.nmap_script_results):
-                        # print("[*] NMAP Results are empty so skipping.")
-                        continue
-
-                    # Write each port id and IP pair to a file
-                    port_id = str(port_obj.id)
-
-                    # Do not do DNS lookups for private IP addresses
-                    if netaddr.IPAddress(ip_str).is_private():
-                        continue
-
-                    dns_inputs_f.write("%s:%s\n" % (port_id, ip_str))
-
-            dns_inputs_f.close()
-
-            # Path to scan outputs log
-            cwd = os.getcwd()
-            cur_path = cwd + os.path.sep
-            all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
-
-            # Write output file to final input file for cleanup
-            f = open(all_inputs_file, 'a')
-            f.write(dir_path + '\n')
+            # Write subnets to file
+            f = open(dns_ip_file, 'w')
+            for subnet in subnets:
+                f.write(subnet + '\n')
             f.close()
+
+        # Write to input file
+        f_inputs.write(dns_ip_file + '\n')
+
+        # Write urls to file
+        dns_url_file = dir_path + os.path.sep + "dns_urls_" + self.scan_id
+        if len(urls) > 0:
+
+            # Write urls to file
+            f = open(dns_url_file, 'w')
+            for url in urls:
+                f.write(url + '\n')
+            f.close()
+
+        # Write to input file
+        f_inputs.write(dns_url_file + '\n')
+
+        # Close output file
+        f_inputs.close()
+
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        cur_path = cwd + os.path.sep
+        all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
+
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        f.write(dir_path + '\n')
+        f.close()
 
         return luigi.LocalTarget(dns_inputs_file)
 
 
-def crobat_wrapper(ip_addr, dir_path, port_id):
+def crobat_wrapper(lookup_value, lookup_type):
+
+    ret_map = {}
+    domain_list = []
     multiprocessing.log_to_stderr()
     try:
 
-        output_file = "%s%s%s_%s" % (dir_path, os.path.sep, ip_addr, port_id)
-        # Convert the screenshots
-        convert_cmd = "crobat -r %s > %s" % (ip_addr, output_file)
-        # print("[*] Executing command: %s" % convert_cmd)
-        # Execute process
-        subprocess.run(convert_cmd, shell=True)
+        crobat_cmd = None
+        if lookup_type == 'reverse':
+            crobat_cmd = ["crobat", "-r","%s" % (lookup_value)]
+            ret_str = subprocess.check_output(crobat_cmd, shell=False)
+            domains = ret_str.splitlines()
+
+            # Add to the domain list
+            domain_list.extend(domains)
+
+        elif lookup_type == 'subdomains':
+            crobat_cmd = ["crobat", "-s","%s" % (lookup_value)]
+            ret_str = subprocess.check_output(crobat_cmd, shell=False)
+            domains = ret_str.splitlines()
+
+            # Add to the domain list
+            domain_list.extend(domains)
+
+        elif lookup_type == 'forward':
+
+            # Add to the domain list
+            domain_list.append(lookup_value.encode())
+
+
+        for domain in domain_list:
+            domain_str = domain.decode()
+            try:
+                ip_str = socket.gethostbyname(domain_str)
+                ret_map[domain_str] = ip_str
+                #print("[*] Adding IP %s for hostname %s" % (ip_str,domain_str))
+            except:
+                print("[-] No IP for hostname %s" % domain_str)
+                pass
+
 
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
         print("[-] Crobat DNS thread exception.")
         print(traceback.format_exc())
-        # Re-raise the original exception so the Pool worker can
-        # clean up
-        raise
+
+    return ret_map
 
 
 @inherits(CrobatScope)
 class CrobatDNS(luigi.Task):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.recon_manager is None and (self.token and self.manager_url):
+            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+
 
     def requires(self):
         # Requires CrobatScope Task to be run prior
@@ -117,42 +159,85 @@ class CrobatDNS(luigi.Task):
         # Get screenshot directory
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "crobat-dns-" + self.scan_id
-        return luigi.LocalTarget(dir_path)
-
-    def run(self):
-
-        # Ensure output folder exists
-        dir_path = self.output().path
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        crobat_input_file = self.input()
-        f = crobat_input_file.open()
-        port_ip_lines = f.readlines()
+        # path to input file
+        dns_outputs_file = dir_path + os.path.sep + "crobat_outputs_" + self.scan_id
+        if os.path.isfile(dns_outputs_file):
+            return luigi.LocalTarget(dns_outputs_file) 
+
+        return luigi.LocalTarget(dns_outputs_file)
+
+    def run(self):
+
+        # Read dns input files
+        dns_input_file = self.input()
+        f = dns_input_file.open()
+        data = f.readlines()
         f.close()
 
-        # print(port_obj_arr)
-        pool = ThreadPool(processes=10)
-        for port_ip_line in port_ip_lines:
+        domain_map = {}
+        if data:
+            ips_file_path = data[0].strip()
+            urls_file_path = data[1].strip()
 
-            port_ip_arr = port_ip_line.split(":")
-            port_id = port_ip_arr[0]
-            ip_addr = port_ip_arr[1].strip()
+            if os.path.exists(ips_file_path):
 
-            # Add argument without domain first
-            pool.apply_async(crobat_wrapper, (ip_addr, dir_path, port_id))
+                f = open(ips_file_path, 'r')
+                ip_lines = f.readlines()
+                f.close()
 
-        # Close the pool
-        pool.close()
-        pool.join()
+                # print(port_obj_arr)
+                thread_list = []
+                pool = ThreadPool(processes=10)
+                for ip_line in ip_lines:
 
-        # Remove temp dir
-        try:
-            shutil.rmtree(os.path.dirname(crobat_input_file.path))
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+                    ip_str = ip_line.strip()
+                    # Add argument without domain first
+                    thread_list.append(pool.apply_async(crobat_wrapper, (ip_str, "reverse")))
+
+                # Close the pool
+                pool.close()
+
+                # Loop through thread function calls and update progress
+                for thread_obj in tqdm(thread_list):
+                    domain_map.update( thread_obj.get() )
+
+            if os.path.exists(urls_file_path):
+
+                f = open(urls_file_path, 'r')
+                url_lines = f.readlines()
+                f.close()
+
+                # print(port_obj_arr)
+                thread_list = []
+                pool = ThreadPool(processes=10)
+                for url_line in url_lines:
+
+                    lookup_type = "forward"
+                    domain = url_line.replace("https://", "").replace("http://","").strip("/").strip()
+
+                    if domain.startswith("*"):
+                        lookup_type = subdomains
+
+                    # Add argument without domain first
+                    thread_list.append(pool.apply_async(crobat_wrapper, (domain, lookup_type)))
+
+                # Close the pool
+                pool.close()
+
+                # Loop through thread function calls and update progress
+                for thread_obj in tqdm(thread_list):
+                    domain_map.update( thread_obj.get() )
+
+            # Write to file
+            if len(domain_map) > 0:
+                f = open(self.output().path, 'w')
+                f.write(json.dumps(domain_map))
+                f.close()
+
 
         # Path to scan outputs log
         cwd = os.getcwd()
@@ -180,35 +265,40 @@ class ImportCrobatOutput(luigi.Task):
 
     def run(self):
 
-        crobat_output_dir = self.input().path
+        crobat_output_file = self.input().path
+        f = open(crobat_output_file, 'r')
+        data = f.read()
+        f.close()
 
-        glob_check = '%s%s*' % (crobat_output_dir, os.path.sep)
-        # print("Glob: %s" % glob_check)
+        domain_map = json.loads(data)
+
+        ip_map = {}
+        #Convert from domain to ip map to ip to domain map
+        for domain in domain_map:
+
+            # Get IP for domain
+            ip_addr_int = domain_map[domain]
+            if ip_addr_int in ip_map:
+                domain_list = ip_map[ip_addr_int]
+            else:
+                domain_list = set()
+                ip_map[ip_addr_int] = domain_list
+
+            domain_list.add(domain)
+
+
         port_arr = []
-        for f in glob.glob(glob_check):
+        for ip_addr in ip_map:
 
-            filename = os.path.basename(f)
-            filename_arr = filename.split('_')
-            # print(filename_arr)
+            domain_set = ip_map[ip_addr]
+            domains = list(domain_set)
 
-            # Check array length
-            if len(filename_arr) < 2:
-                continue
-
-            ip_addr_int = int(netaddr.IPAddress(filename_arr[0]))
-            port_id = filename_arr[1]
-            domains = []
-            with open(f, "r") as rf:
-                lines = rf.readlines()
-                for line in lines:
-                    domains.append(line.strip())
-
+            ip_addr_int = int(netaddr.IPAddress(ip_addr))
             # print(domains)
-            if len(domains) > 0:
-                port_obj = {'port_id': port_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
+            port_obj = {'scan_id': self.scan_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
 
-                # Add to list
-                port_arr.append(port_obj)
+            # Add to list
+            port_arr.append(port_obj)
 
         if len(port_arr) > 0:
             # Import the ports to the manager

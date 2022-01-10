@@ -213,6 +213,6 @@ class ParseShodanOutput(luigi.Task):
         if len(data) > 0:
             # Import the shodan data
             json_data = json.loads(data)
-            print(json_data)
+            #print(json_data)
             ret_val = self.recon_manager.import_shodan_data(self.scan_id, json_data)
 

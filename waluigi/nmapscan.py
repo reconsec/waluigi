@@ -54,6 +54,8 @@ class NmapScope(luigi.ExternalTask):
 
             for host in hosts:
 
+                domains = host.domains
+
                 target_ip = str(netaddr.IPAddress(host.ipv4_addr))
                 for port in host.ports:
                     port = str(port.port)
@@ -63,6 +65,11 @@ class NmapScope(luigi.ExternalTask):
                         cur_list = port_target_map[port]
 
                     cur_list.append(target_ip)
+
+                    # Add the domains
+                    for domain in domains:
+                        cur_list.append(domain.name)
+
                     port_target_map[port] = cur_list
 
         urls = self.recon_manager.get_urls(self.scan_id)

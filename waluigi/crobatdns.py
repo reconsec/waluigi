@@ -125,6 +125,15 @@ def crobat_wrapper(lookup_value, lookup_type):
             domain_str = domain.decode()
             try:
                 ip_str = socket.gethostbyname(domain_str)
+
+                # Add sanity check for IP 
+                if lookup_type == 'reverse':
+                    ip_network = netaddr.IPNetwork(lookup_value)
+                    ip_addr = netaddr.IPAddress(ip_str)
+                    if ip_addr not in ip_network:
+                        print("[-] IP %s not in lookup IP Network %s" % (ip_str, lookup_value))
+                        continue
+
                 ret_map[domain_str] = ip_str
                 #print("[*] Adding IP %s for hostname %s" % (ip_str,domain_str))
             except:

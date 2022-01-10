@@ -125,15 +125,6 @@ def crobat_wrapper(lookup_value, lookup_type):
             domain_str = domain.decode()
             try:
                 ip_str = socket.gethostbyname(domain_str)
-
-                # Add sanity check for IP 
-                if lookup_type == 'reverse':
-                    ip_network = netaddr.IPNetwork(lookup_value)
-                    ip_addr = netaddr.IPAddress(ip_str)
-                    if ip_addr not in ip_network:
-                        print("[-] IP %s not in lookup IP Network %s" % (ip_str, lookup_value))
-                        continue
-
                 ret_map[domain_str] = ip_str
                 #print("[*] Adding IP %s for hostname %s" % (ip_str,domain_str))
             except:
@@ -194,6 +185,7 @@ class CrobatDNS(luigi.Task):
 
             if os.path.exists(ips_file_path):
 
+                ip_domain_map = {}
                 f = open(ips_file_path, 'r')
                 ip_lines = f.readlines()
                 f.close()
@@ -204,7 +196,7 @@ class CrobatDNS(luigi.Task):
                 for ip_line in ip_lines:
 
                     ip_str = ip_line.strip()
-                    if netaddr.IPAddress(ip_str).is_private():
+                    if netaddr.IPNetwork(ip_str).is_private():
                         continue
                     
                     # Add argument without domain first
@@ -215,7 +207,30 @@ class CrobatDNS(luigi.Task):
 
                 # Loop through thread function calls and update progress
                 for thread_obj in tqdm(thread_list):
-                    domain_map.update( thread_obj.get() )
+                    ip_domain_map.update( thread_obj.get() )
+
+
+                # Ensure each IP returned falls within the scope of the target
+                for domain in ip_domain_map:
+                    ip_str = ip_domain_map[domain]
+
+                    try:
+                        ip_addr = netaddr.IPAddress(ip_str)
+                    except:
+                        continue
+
+                    for ip_line in ip_lines: 
+
+                        try:
+                            ip_network = netaddr.IPNetwork(ip_line.strip())
+                        except:
+                            continue
+
+                        if ip_addr in ip_network:
+                            print("[*] Adding IP %s for domain %s" % (ip_str,domain))
+                            domain_map[domain] = ip_str
+                            break
+
 
             if os.path.exists(urls_file_path):
 
@@ -289,12 +304,12 @@ class ImportCrobatOutput(luigi.Task):
         for domain in domain_map:
 
             # Get IP for domain
-            ip_addr_int = domain_map[domain]
-            if ip_addr_int in ip_map:
-                domain_list = ip_map[ip_addr_int]
+            ip_addr = domain_map[domain]
+            if ip_addr in ip_map:
+                domain_list = ip_map[ip_addr]
             else:
                 domain_list = set()
-                ip_map[ip_addr_int] = domain_list
+                ip_map[ip_addr] = domain_list
 
             domain_list.add(domain)
 

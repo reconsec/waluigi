@@ -135,6 +135,9 @@ class NmapScope(luigi.ExternalTask):
 
 def request_wrapper(ip_addr, port_num):
 
+    if ip_addr ==None or len(ip_addr) == 0:
+        return None
+
     headers = {'User-Agent': custom_user_agent}
     protocol = 'http'
     if port_num == 443:
@@ -215,9 +218,10 @@ class NmapPruningScan(luigi.Task):
                 thread_list = []
                 for ip_addr in ip_list:
                     ip_addr = ip_addr.strip()
+                    if len(ip_addr) > 0:
                     #print("%s:%d" % (ip_addr,port))
                     # Add argument without domain first
-                    thread_list.append( pool.apply_async(request_wrapper, (ip_addr, port)) )
+                        thread_list.append( pool.apply_async(request_wrapper, (ip_addr, port)) )
 
                 # Close the pool
                 pool.close()

@@ -204,6 +204,9 @@ class CrobatDNS(luigi.Task):
                 for ip_line in ip_lines:
 
                     ip_str = ip_line.strip()
+                    if netaddr.IPAddress(ip_str).is_private():
+                        continue
+                    
                     # Add argument without domain first
                     thread_list.append(pool.apply_async(crobat_wrapper, (ip_str, "reverse")))
 

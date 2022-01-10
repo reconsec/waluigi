@@ -3,19 +3,18 @@ import os
 import subprocess
 import shutil
 import netaddr
+import concurrent.futures
+import requests
+import luigi
+import glob
+import traceback
+
+from luigi.util import inherits
 from datetime import date
 from libnmap.parser import NmapParser
 from urllib.parse import urlparse
-
-import luigi
-import glob
-from luigi.util import inherits
-
 from waluigi import recon_manager
-import concurrent.futures
-import requests
 from multiprocessing.pool import ThreadPool
-import traceback
 from tqdm import tqdm
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"

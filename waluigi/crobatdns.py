@@ -240,6 +240,7 @@ class CrobatDNS(luigi.Task):
                 pool.close()
 
                 ip_domain_list = []
+                print("[*] Resolving DNS for scope")
                 # Loop through thread function calls and update progress
                 for thread_obj in tqdm(thread_list):
                     result = thread_obj.get()

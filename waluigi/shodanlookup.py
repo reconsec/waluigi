@@ -66,7 +66,7 @@ class ShodanScope(luigi.ExternalTask):
 def shodan_host_query(api, ip):
 
     service_list = []
-    whilte True:
+    while True:
         try:
             results = api.host(str(ip))
             if 'data' in results:

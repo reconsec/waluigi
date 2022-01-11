@@ -122,14 +122,33 @@ def crobat_wrapper(lookup_value, lookup_type):
             domain_list.append(lookup_value.encode())
 
 
+        # print(port_obj_arr)
+        thread_map = {}
+        pool = ThreadPool(processes=100)
         for domain in domain_list:
-            ip_domain_map = {}
-            domain_str = domain.decode()
-            ip_domain_map['domain'] = domain_str
-            try:
-                ip_str = socket.gethostbyname(domain_str)
-                ip_domain_map['ip'] = ip_str
 
+            domain_str = domain.decode()
+            # Add argument without domain first
+            thread_map[domain_str] = pool.apply_async(socket.gethostbyname, (domain_str, ))
+
+        # Close the pool
+        pool.close()
+
+        # Loop through thread function calls and update progress
+        for domain_str in tqdm(thread_map):
+
+            ip_domain_map = {}
+
+            # Add domain
+            ip_domain_map['domain'] = domain_str
+            thread_obj = thread_map[domain_str]
+
+            ip_str = thread_obj.get()
+            print("[*] ")
+            if ip_str and len(ip_str) > 0:
+
+                # Add IP
+                ip_domain_map['ip'] = ip_str
                 # Add sanity check for IP
                 if lookup_type == 'reverse':
                     ip_network = netaddr.IPNetwork(lookup_value)
@@ -140,11 +159,32 @@ def crobat_wrapper(lookup_value, lookup_type):
 
                 # Add to the list
                 ret_list.append(ip_domain_map)
+                print("[*] Adding IP %s for hostname %s" % (ip_str, domain_str))
 
-                #print("[*] Adding IP %s for hostname %s" % (ip_str,domain_str))
-            except:
-                #print("[-] No IP for hostname %s" % domain_str)
-                pass
+
+        # for domain in domain_list:
+        #     ip_domain_map = {}
+        #     domain_str = domain.decode()
+        #     ip_domain_map['domain'] = domain_str
+        #     try:
+        #         ip_str = socket.gethostbyname(domain_str)
+        #         ip_domain_map['ip'] = ip_str
+
+        #         # Add sanity check for IP
+        #         if lookup_type == 'reverse':
+        #             ip_network = netaddr.IPNetwork(lookup_value)
+        #             ip_addr = netaddr.IPAddress(ip_str)
+        #             if ip_addr not in ip_network:
+        #                 #print("[-] IP %s not in lookup IP Network %s" % (ip_str, lookup_value))
+        #                 ip_domain_map['verify'] = True
+
+        #         # Add to the list
+        #         ret_list.append(ip_domain_map)
+
+        #         #print("[*] Adding IP %s for hostname %s" % (ip_str,domain_str))
+        #     except:
+        #         #print("[-] No IP for hostname %s" % domain_str)
+        #         pass
 
     except subprocess.CalledProcessError as e:
         #print("[*] No results")

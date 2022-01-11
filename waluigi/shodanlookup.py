@@ -51,17 +51,30 @@ class ShodanScope(luigi.ExternalTask):
                 f.write(subnet + '\n')
             f.close()
 
-            # Path to scan outputs log
-            cwd = os.getcwd()
-            cur_path = cwd + os.path.sep
-            all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
+        else:
+            # Get hosts
+            hosts = self.recon_manager.get_hosts(self.scan_id)
+            print("[+] Retrieved %d hosts from database" % len(hosts))
+            port_target_map = {}
+            if hosts:
+                f = open(shodan_ip_file, 'a+')
+                for host in hosts:
+                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
+                    # Write IP to file
+                    f.write(target_ip + '\n')
+                f.close()
 
-            # Write output file to final input file for cleanup
-            f = open(all_inputs_file, 'a')
-            f.write(shodan_inputs_dir + '\n')
-            f.close()
+        # Path to scan outputs log
+        cwd = os.getcwd()
+        cur_path = cwd + os.path.sep
+        all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
 
-            return luigi.LocalTarget(shodan_ip_file)
+        # Write output file to final input file for cleanup
+        f = open(all_inputs_file, 'a')
+        f.write(shodan_inputs_dir + '\n')
+        f.close()
+
+        return luigi.LocalTarget(shodan_ip_file)
 
 def shodan_host_query(api, ip):
 

@@ -160,32 +160,10 @@ def crobat_wrapper(lookup_value, lookup_type):
                 ret_list.append(ip_domain_map)
                 #print("[*] Adding IP %s for hostname %s" % (ip_str, domain_str))
 
-
-        # for domain in domain_list:
-        #     ip_domain_map = {}
-        #     domain_str = domain.decode()
-        #     ip_domain_map['domain'] = domain_str
-        #     try:
-        #         ip_str = socket.gethostbyname(domain_str)
-        #         ip_domain_map['ip'] = ip_str
-
-        #         # Add sanity check for IP
-        #         if lookup_type == 'reverse':
-        #             ip_network = netaddr.IPNetwork(lookup_value)
-        #             ip_addr = netaddr.IPAddress(ip_str)
-        #             if ip_addr not in ip_network:
-        #                 #print("[-] IP %s not in lookup IP Network %s" % (ip_str, lookup_value))
-        #                 ip_domain_map['verify'] = True
-
-        #         # Add to the list
-        #         ret_list.append(ip_domain_map)
-
-        #         #print("[*] Adding IP %s for hostname %s" % (ip_str,domain_str))
-        #     except:
-        #         #print("[-] No IP for hostname %s" % domain_str)
-        #         pass
-
     except subprocess.CalledProcessError as e:
+        #print("[*] No results")
+        pass
+    except socket.gaierror as e:
         #print("[*] No results")
         pass
     except Exception as e:

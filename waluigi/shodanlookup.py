@@ -89,7 +89,7 @@ def shodan_host_query(api, ip):
             if "limit reached" in str(e):
                 time.sleep(1)
                 continue
-            if "No information" no in str(e):
+            if "No information" not in str(e):
                 print("[-] Shodan API Error: %s" % str(e))
             break
 
@@ -106,13 +106,14 @@ def shodan_subnet_query(api, subnet, cidr):
     while True:
         try:
             for service in api.search_cursor(query):
+                #print(service)
                 service_list.append(service)
             break
         except shodan.exception.APIError as e:
             if "limit reached" in str(e):
                 time.sleep(1)
                 continue
-            if "No information" no in str(e):
+            if "No information" not in str(e):
                 print("[-] Shodan API Error: %s" % str(e))
             break
 
@@ -144,6 +145,31 @@ def shodan_wrapper(shodan_key, ip, cidr):
         # clean up
 
     return results
+
+def reduce_subnets(ip_subnets):
+
+    ret_list = []
+    i = 24
+    #Attempt to consolidate subnets to reduce the number of shodan calls
+    # for i in range(24, 22, -1):
+    subnet_list =[]
+    for subnet in ip_subnets: 
+        #Add class C networks for all IPs
+        net_inst = netaddr.IPNetwork(subnet.strip())
+        net_ip= str(net_inst.network)
+        c_network = netaddr.IPNetwork(net_ip + "/%d" % i)
+        subnet_list.append(c_network)
+
+    #print("Reduce to /%d" % i)
+    #print("CIDRS Before: %d" % len(subnet_list))
+    ret_list = netaddr.cidr_merge(subnet_list)
+    #print("CIDRS After: %d" % len(new_list))
+
+        # if len(ret_list) < 100:
+        #     break
+
+    return ret_list
+
 
 @inherits(ShodanScope)
 class ShodanScan(luigi.Task):
@@ -177,17 +203,24 @@ class ShodanScan(luigi.Task):
         ip_subnets = f.readlines()
         f.close()
 
+        #Attempt to consolidate subnets to reduce the number of shodan calls
+        print("[*] Attempting to reduce subnets queried by Shodan")
+        shodan_subnets = reduce_subnets(ip_subnets)
+        print("CIDRS After: %d" % len(shodan_subnets))
+
+
         # Get the shodan key
+        print("[*] Retrieving Shodan data")
         shodan_key = self.recon_manager.get_shodan_key()
         if shodan_key:
 
             pool = ThreadPool(processes=10)
             thread_list = []
-            for subnet in ip_subnets:
+            for subnet in shodan_subnets:
 
                 #print(subnet)
                 # Get the subnet
-                subnet = subnet.strip()
+                subnet = str(subnet)
                 subnet_arr = subnet.split("/")
                 ip = subnet_arr[0]
 
@@ -249,5 +282,6 @@ class ParseShodanOutput(luigi.Task):
             # Import the shodan data
             json_data = json.loads(data)
             #print(json_data)
+            print("Entries: %d" % len(json_data))
             ret_val = self.recon_manager.import_shodan_data(self.scan_id, json_data)
 

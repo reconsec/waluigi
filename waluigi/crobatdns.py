@@ -144,7 +144,6 @@ def crobat_wrapper(lookup_value, lookup_type):
             thread_obj = thread_map[domain_str]
 
             ip_str = thread_obj.get()
-            print("[*] ")
             if ip_str and len(ip_str) > 0:
 
                 # Add IP
@@ -159,7 +158,7 @@ def crobat_wrapper(lookup_value, lookup_type):
 
                 # Add to the list
                 ret_list.append(ip_domain_map)
-                print("[*] Adding IP %s for hostname %s" % (ip_str, domain_str))
+                #print("[*] Adding IP %s for hostname %s" % (ip_str, domain_str))
 
 
         # for domain in domain_list:
@@ -291,7 +290,7 @@ class CrobatDNS(luigi.Task):
                                 continue
 
                             if ip_addr in ip_network:
-                                print("[*] Adding IP %s for domain %s" % (ip_str,domain))
+                                #print("[*] Adding IP %s for domain %s" % (ip_str,domain))
                                 domain_map[domain] = ip_str
                                 break
 

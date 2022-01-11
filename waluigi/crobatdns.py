@@ -135,7 +135,7 @@ def crobat_wrapper(lookup_value, lookup_type):
         pool.close()
 
         # Loop through thread function calls and update progress
-        for domain_str in tqdm(thread_map):
+        for domain_str in thread_map:
 
             ip_domain_map = {}
 

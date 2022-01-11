@@ -161,7 +161,9 @@ def request_wrapper(ip_addr, port_num):
     retry = 0
     while True and retry < 3:
         try:
-            x = requests.head('%s://%s:%d' % (protocol, ip_addr, port_num), headers=headers, verify=False, timeout=1)
+            req_url = '%s://%s:%d' % (protocol, ip_addr, port_num)
+            print("[*] Request URL: %s" % req_url)
+            x = requests.head(req_url, headers=headers, verify=False, timeout=1)
             if len(x.headers) > 0:
                 return ip_addr, port_num
             break
@@ -176,7 +178,7 @@ def request_wrapper(ip_addr, port_num):
                     break
             retry += 1
             continue
-        except Exception as e:            
+        except Exception as e:
             print("[*] IP: %s   Port: %s" % (ip_addr, port_num))
             print(traceback.format_exc())
             retry += 1

@@ -66,9 +66,19 @@ class ShodanScope(luigi.ExternalTask):
 def shodan_host_query(api, ip):
 
     service_list = []
-    results = api.host(str(ip))
-    if 'data' in results:
-        service_list = results['data']
+    whilte True:
+        try:
+            results = api.host(str(ip))
+            if 'data' in results:
+                service_list = results['data']
+            break
+        except shodan.exception.APIError as e:
+            if "limit reached" in str(e):
+                time.sleep(1)
+                pass
+            print("[-] Shodan API Error: %s" % str(e))
+            break
+
     return service_list
 
 
@@ -79,8 +89,18 @@ def shodan_subnet_query(api, subnet, cidr):
 
     # Loop through the matches and print each IP
     service_list = []
-    for service in api.search_cursor(query):
-        service_list.append(service)
+    while True:
+        try:
+            for service in api.search_cursor(query):
+                service_list.append(service)
+            break
+        except shodan.exception.APIError as e:
+            if "limit reached" in str(e):
+                time.sleep(1)
+                pass
+            print("[-] Shodan API Error: %s" % str(e))
+            break
+
 
     return service_list
 

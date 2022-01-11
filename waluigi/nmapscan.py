@@ -162,7 +162,7 @@ def request_wrapper(ip_addr, port_num):
     while True and retry < 3:
         try:
             req_url = '%s://%s:%d' % (protocol, ip_addr, port_num)
-            print("[*] Request URL: %s" % req_url)
+            #print("[*] Request URL: %s" % req_url)
             x = requests.head(req_url, headers=headers, verify=False, timeout=1)
             if len(x.headers) > 0:
                 return ip_addr, port_num

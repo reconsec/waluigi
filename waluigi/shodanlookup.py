@@ -3,15 +3,15 @@ import os
 import shodan
 import netaddr
 import luigi
+import time
+import multiprocessing
+import traceback
 
 from luigi.util import inherits
 from waluigi import recon_manager
-
 from tqdm import tqdm
-
 from multiprocessing.pool import ThreadPool
-import multiprocessing
-import traceback
+
 
 
 class ShodanScope(luigi.ExternalTask):

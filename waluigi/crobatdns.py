@@ -93,15 +93,16 @@ class CrobatScope(luigi.ExternalTask):
 
 def crobat_wrapper(lookup_value, lookup_type):
 
-    ret_map = {}
+    ret_list = []
     domain_list = []
     multiprocessing.log_to_stderr()
+    #print("[*] Lookup value: %s, Lookup type: %s" % (lookup_value, lookup_type))
     try:
 
         crobat_cmd = None
         if lookup_type == 'reverse':
             crobat_cmd = ["crobat", "-r","%s" % (lookup_value)]
-            ret_str = subprocess.check_output(crobat_cmd, shell=False)
+            ret_str = subprocess.check_output(crobat_cmd, shell=False, stderr=subprocess.DEVNULL)
             domains = ret_str.splitlines()
 
             # Add to the domain list
@@ -109,7 +110,7 @@ def crobat_wrapper(lookup_value, lookup_type):
 
         elif lookup_type == 'subdomains':
             crobat_cmd = ["crobat", "-s","%s" % (lookup_value)]
-            ret_str = subprocess.check_output(crobat_cmd, shell=False)
+            ret_str = subprocess.check_output(crobat_cmd, shell=False, stderr=subprocess.DEVNULL)
             domains = ret_str.splitlines()
 
             # Add to the domain list
@@ -122,33 +123,40 @@ def crobat_wrapper(lookup_value, lookup_type):
 
 
         for domain in domain_list:
+            ip_domain_map = {}
             domain_str = domain.decode()
+            ip_domain_map['domain'] = domain_str
             try:
                 ip_str = socket.gethostbyname(domain_str)
+                ip_domain_map['ip'] = ip_str
 
-                # Add sanity check for IP 
+                # Add sanity check for IP
                 if lookup_type == 'reverse':
                     ip_network = netaddr.IPNetwork(lookup_value)
                     ip_addr = netaddr.IPAddress(ip_str)
                     if ip_addr not in ip_network:
-                        print("[-] IP %s not in lookup IP Network %s" % (ip_str, lookup_value))
-                        ret_map[domain_str+":VERIFY"] = ip_str
-                        continue
+                        #print("[-] IP %s not in lookup IP Network %s" % (ip_str, lookup_value))
+                        ip_domain_map['verify'] = True
 
-                ret_map[domain_str] = ip_str
+                # Add to the list
+                ret_list.append(ip_domain_map)
+
                 #print("[*] Adding IP %s for hostname %s" % (ip_str,domain_str))
             except:
-                print("[-] No IP for hostname %s" % domain_str)
+                #print("[-] No IP for hostname %s" % domain_str)
                 pass
 
-
+    except subprocess.CalledProcessError as e:
+        #print("[*] No results")
+        pass
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
         print("[-] Crobat DNS thread exception.")
         print(traceback.format_exc())
 
-    return ret_map
+    #print("[*] Lookup value: %s, Lookup type: %s Exiting." % (lookup_value, lookup_type))
+    return ret_list
 
 
 @inherits(CrobatScope)
@@ -195,7 +203,6 @@ class CrobatDNS(luigi.Task):
 
             if os.path.exists(ips_file_path):
 
-                ip_domain_map = {}
                 f = open(ips_file_path, 'r')
                 ip_lines = f.readlines()
                 f.close()
@@ -206,26 +213,30 @@ class CrobatDNS(luigi.Task):
                 for ip_line in ip_lines:
 
                     ip_str = ip_line.strip()
-                    if netaddr.IPAddress(ip_str).is_private():
+                    if netaddr.IPNetwork(ip_str).is_private():
                         continue
-                    
+
                     # Add argument without domain first
                     thread_list.append(pool.apply_async(crobat_wrapper, (ip_str, "reverse")))
 
                 # Close the pool
                 pool.close()
 
+                ip_domain_list = []
                 # Loop through thread function calls and update progress
                 for thread_obj in tqdm(thread_list):
-                    ip_domain_map.update( thread_obj.get() )
+                    result = thread_obj.get()
+                    if result and len(result) > 0:
+                        ip_domain_list.extend( result )
 
-
+                print("[*] Lookup complete. Verifying anomalies")
                 # Ensure each IP returned falls within the scope of the target
-                for domain in ip_domain_map:
-                    
-                    if domain.endswith(':VERIFY'):
+                for ip_domain_map in ip_domain_list:
 
-                        ip_str = ip_domain_map[domain]
+                    domain = ip_domain_map['domain']
+                    ip_str = ip_domain_map['ip']
+                    if 'verify' in ip_domain_map and ip_domain_map['verify'] == True:
+
                         try:
                             ip_addr = netaddr.IPAddress(ip_str)
                         except:
@@ -241,17 +252,12 @@ class CrobatDNS(luigi.Task):
 
                             if ip_addr in ip_network:
                                 print("[*] Adding IP %s for domain %s" % (ip_str,domain))
-                                domain_found = True
+                                domain_map[domain] = ip_str
                                 break
 
-                        # Remove the temp entry and re-add
-                        del ip_domain_map[domain]
-                        if domain_found:
-                            domain_str = domain.strip(':VERIFY')
-                            ip_domain_map[domain_str] = ip_str
+                    else:
+                        domain_map[domain] = ip_str
 
-
-                domain_map.update( ip_domain_map )
 
             if os.path.exists(urls_file_path):
 
@@ -268,7 +274,7 @@ class CrobatDNS(luigi.Task):
                     domain = url_line.replace("https://", "").replace("http://","").strip("/").strip()
 
                     if domain.startswith("*"):
-                        lookup_type = subdomains
+                        lookup_type = "subdomains"
 
                     # Add argument without domain first
                     thread_list.append(pool.apply_async(crobat_wrapper, (domain, lookup_type)))
@@ -276,10 +282,20 @@ class CrobatDNS(luigi.Task):
                 # Close the pool
                 pool.close()
 
+                ip_domain_list = []
                 # Loop through thread function calls and update progress
                 for thread_obj in tqdm(thread_list):
-                    domain_map.update( thread_obj.get() )
+                    result = thread_obj.get()
+                    if result and len(result) > 0:
+                        ip_domain_list.extend( result )
 
+                print("[*] Lookup complete. Verifying anomalies")
+                # Ensure each IP returned falls within the scope of the target
+                for ip_domain_map in ip_domain_list:
+
+                    domain = ip_domain_map['domain']
+                    ip_str = ip_domain_map['ip']
+                    domain_map[domain] = ip_str
 
             # Write to file
             if len(domain_map) > 0:

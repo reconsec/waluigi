@@ -65,7 +65,7 @@ class NmapScope(luigi.ExternalTask):
                 if len(host.ports) > 0:
                     for port in host.ports:
                         port = str(port.port)
-                        port_list.append()
+                        port_list.append(port)
                 elif len(port_arr) > 0:
                     port_list.extend(port_arr)
                 else:

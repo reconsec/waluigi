@@ -88,7 +88,7 @@ def shodan_host_query(api, ip):
         except shodan.exception.APIError as e:
             if "limit reached" in str(e):
                 time.sleep(1)
-                pass
+                continue
             print("[-] Shodan API Error: %s" % str(e))
             break
 
@@ -110,7 +110,7 @@ def shodan_subnet_query(api, subnet, cidr):
         except shodan.exception.APIError as e:
             if "limit reached" in str(e):
                 time.sleep(1)
-                pass
+                continue
             print("[-] Shodan API Error: %s" % str(e))
             break
 

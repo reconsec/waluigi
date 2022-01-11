@@ -89,7 +89,8 @@ def shodan_host_query(api, ip):
             if "limit reached" in str(e):
                 time.sleep(1)
                 continue
-            print("[-] Shodan API Error: %s" % str(e))
+            if "No information" no in str(e):
+                print("[-] Shodan API Error: %s" % str(e))
             break
 
     return service_list
@@ -111,7 +112,8 @@ def shodan_subnet_query(api, subnet, cidr):
             if "limit reached" in str(e):
                 time.sleep(1)
                 continue
-            print("[-] Shodan API Error: %s" % str(e))
+            if "No information" no in str(e):
+                print("[-] Shodan API Error: %s" % str(e))
             break
 
 

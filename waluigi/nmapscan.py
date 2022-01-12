@@ -231,7 +231,7 @@ class NmapPruningScan(luigi.Task):
                 #print(ip_list)
                 f.close()
 
-                pool = ThreadPool(processes=10)
+                pool = ThreadPool(processes=30)
                 thread_list = []
                 for ip_addr in ip_list:
                     ip_addr = ip_addr.strip()

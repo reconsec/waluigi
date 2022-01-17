@@ -461,7 +461,7 @@ class ScheduledScanThread(threading.Thread):
             return
 
         # Cleanup files
-        #ret = scan_pipeline.scan_cleanup(scan_id)
+        ret = scan_pipeline.scan_cleanup(scan_id)
 
         if self.connection_manager:
             # Connect to extender to remove scheduled scan and update scan status

@@ -126,7 +126,12 @@ class MasscanScan(luigi.Task):
                 conf_file_path = data[0].strip()
                 ips_file_path = data[1].strip()
 
-                command = [
+                command = []
+                if os.name != 'nt':
+                    command.append("sudo")
+
+                command_arr = [
+                    "sudo",
                     "masscan",
                     "--open",
                     "--rate",
@@ -138,6 +143,8 @@ class MasscanScan(luigi.Task):
                     "-iL",
                     ips_file_path
                 ]
+
+                command.extend(command_arr)
 
                 # Execute process
                 subprocess.run(command)

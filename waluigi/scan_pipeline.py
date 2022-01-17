@@ -116,6 +116,13 @@ def parse_nuclei(scan_id, recon_manager):
     return True
 
 
+def import_shodan(scan_id, recon_manager):
+    luigi_run_result = luigi.build([shodanlookup.ParseShodanOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
 def scan_cleanup(scan_id):
     luigi_run_result = luigi.build([scancleanup.ScanCleanup(scan_id=scan_id)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:

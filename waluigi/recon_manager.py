@@ -2,10 +2,15 @@ from Cryptodome.PublicKey import RSA
 from Cryptodome.Random import get_random_bytes
 from Cryptodome.Cipher import AES, PKCS1_OAEP
 from types import SimpleNamespace
+from waluigi import scan_pipeline
+from threading import Event
 import requests
 import base64
 import binascii
 import json
+import threading
+import time
+import traceback
 
 # User Agent
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -22,6 +27,515 @@ def get_recon_manager(token, manager_url):
     return recon_mgr_inst
 
 
+class ScheduledScanThread(threading.Thread):
+
+    def __init__(self, recon_manager, connection_manager=None):
+        threading.Thread.__init__(self)
+        self._is_running = False
+        self._daemon = True
+        self._enabled = False
+        self.recon_manager = recon_manager
+        self.connection_manager = connection_manager
+        self.exit_event = Event()
+
+    def toggle_poller(self):
+
+        if self._enabled:
+            self._enabled = False
+            print("[*] Scan poller disabled.")
+        else:
+            self._enabled = True
+            print("[*] Scan poller enabled.")
+
+    def is_scan_cancelled(self, scan_id):
+
+        ret_val = False
+
+        # Connect to extender for import
+        if self.connection_manager:
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return ret_val
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Check if scan is cancelled
+            scan = self.recon_manager.get_scan(scan_id)
+            if scan and scan.status == "CANCELLED":
+                print("[-] Scan cancelled. Returning.")
+                ret_val = True
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+    def mass_scan(self, scan_id):
+
+        ret_val = True
+
+        # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_id):
+            return
+
+        # Get scope for masscan
+        ret = scan_pipeline.masscan_scope(scan_id, self.recon_manager)
+        if not ret:
+            print("[-] Failed")
+            return False
+
+        # Connect to synack target
+        if self.connection_manager:
+            con = self.connection_manager.connect_to_target()
+            if not con:
+                print("[-] Failed connecting to target")
+                return False
+
+            # Obtain the lock before we start a scan
+            lock_val = self.connection_manager.get_connection_lock()
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        # Execute masscan
+        ret = scan_pipeline.masscan_scan(scan_id, self.recon_manager)
+        if not ret:
+            print("[-] Masscan Failed")
+            ret_val = False
+
+        if self.connection_manager:
+            # Release the lock after scan
+            self.connection_manager.free_connection_lock(lock_val)
+            if not ret_val:
+                return ret_val
+
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Import masscan results
+            ret = scan_pipeline.parse_masscan(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+    def nmap_scan(self, scan_id):
+
+        ret_val = True
+
+        # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_id):
+            return
+
+        # Get scope for nmap
+        ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager)
+        if not ret:
+            print("[-] Failed")
+            return False
+
+        if self.connection_manager:
+            # Connect to synack target
+            con = self.connection_manager.connect_to_target()
+            if not con:
+                print("[-] Failed connecting to target")
+                return False
+
+            # Obtain the lock before we start a scan
+            lock_val = self.connection_manager.get_connection_lock()
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Execute nmap
+            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Masscan Failed")
+                ret_val = False
+
+        finally:
+            if self.connection_manager:
+                # Release the lock after scan
+                self.connection_manager.free_connection_lock(lock_val)
+            if not ret_val:
+                return ret_val
+
+        if self.connection_manager:
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Import masscan results
+            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+
+    def shodan_lookup(self, scan_id):
+
+        ret_val = True
+
+        # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_id):
+            return
+
+        if self.connection_manager:
+
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Do Shodan lookup and import results
+            ret = scan_pipeline.import_shodan(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+    def dns_lookup(self, scan_id):
+
+        ret_val = True
+
+        # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_id):
+            return
+
+        if self.connection_manager:
+
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Do DNS lookup and import results
+            ret = scan_pipeline.import_dns(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+
+    def pyshot_scan(self, scan_id):
+
+        ret_val = True
+
+        # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_id):
+            return
+
+        # Get scope for pyshot
+        ret = scan_pipeline.pyshot_scope(scan_id, self.recon_manager)
+        if not ret:
+            print("[-] Failed")
+            return False
+
+        if self.connection_manager:
+            # Connect to synack target
+            con = self.connection_manager.connect_to_target()
+            if not con:
+                print("[-] Failed connecting to target")
+                return False
+
+            # Obtain the lock before we start a scan
+            lock_val = self.connection_manager.get_connection_lock()
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Execute pyshot
+            ret = scan_pipeline.pyshot_scan(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Masscan Failed")
+                ret_val = False
+
+        finally:
+            if self.connection_manager:
+                # Release the lock after scan
+                self.connection_manager.free_connection_lock(lock_val)
+            if not ret_val:
+                return ret_val
+
+        if self.connection_manager:
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Import pyshot results
+            ret = scan_pipeline.import_screenshots(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+    def nuclei_scan(self, scan_id):
+
+        ret_val = True
+
+        # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_id):
+            return
+
+        # Get scope for nuclei scan
+        ret = scan_pipeline.nuclei_scope(scan_id, self.recon_manager)
+        if not ret:
+            print("[-] Failed")
+            return False
+
+        if self.connection_manager:
+            # Connect to synack target
+            con = self.connection_manager.connect_to_target()
+            if not con:
+                print("[-] Failed connecting to target")
+                return False
+
+            # Obtain the lock before we start a scan
+            lock_val = self.connection_manager.get_connection_lock()
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Execute nuclei
+            ret = scan_pipeline.nuclei_scan(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Masscan Failed")
+                ret_val = False
+
+        finally:
+            if self.connection_manager:
+                # Release the lock after scan
+                self.connection_manager.free_connection_lock(lock_val)
+            if not ret_val:
+                return ret_val
+
+        if self.connection_manager:
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Import nuclei results
+            ret = scan_pipeline.parse_nuclei(scan_id, self.recon_manager)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+    def process_scan_obj(self, sched_scan_obj):
+
+        # Create scan object
+        scan_obj = self.recon_manager.get_scheduled_scan(sched_scan_obj.id)
+        if not scan_obj:
+            print("[-] No scan object returned for scheduled scan.")
+            return
+
+        scan_id = str(scan_obj.scan_id)
+        print("[*] Scan ID: %s" % scan_id)
+
+        target_id = sched_scan_obj.target_id
+
+        # Set connection target in connection manager to this target 
+        self.recon_manager.set_current_target(self.connection_manager, target_id)
+
+
+        # Execute crobat
+        ret = self.dns_lookup(scan_id)
+        if not ret:
+            print("[-] DNS Resolution Failed")
+            return
+
+        #print(sched_scan_obj)
+        if sched_scan_obj.rescan == 0:
+
+            # Get target scope and urls to see what to kick off first
+            subnets = self.recon_manager.get_subnets(scan_id)
+            # Possible check for ports too before scanning in rescan cases
+            if subnets and len(subnets) > 0:
+                # print(subnets)
+
+                # Execute masscan
+                ret = self.mass_scan(scan_id)
+                if not ret:
+                    print("[-] Masscan Failed")
+                    return
+            else:
+                # TODO - Get URLs
+                print("[*] No subnets retrieved. Skipping masscan.")
+
+        # Execute shodan
+        ret = self.shodan_lookup(scan_id)
+        if not ret:
+            print("[-] Shodan Failed")
+            return
+
+        # Execute nmap
+        ret = self.nmap_scan(scan_id)
+        if not ret:
+            print("[-] Nmap Failed")
+            return
+
+        # Execute pyshot
+        ret = self.pyshot_scan(scan_id)
+        if not ret:
+            print("[-] Pyshot Failed")
+            return
+
+        # Execute nuclei
+        ret = self.nuclei_scan(scan_id)
+        if not ret:
+            print("[-] Nuclei scan Failed")
+            return
+
+        # Cleanup files
+        #ret = scan_pipeline.scan_cleanup(scan_id)
+
+        if self.connection_manager:
+            # Connect to extender to remove scheduled scan and update scan status
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+            # Remove scheduled scan
+            self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
+
+            # Update scan status
+            self.recon_manager.update_scan_status(scan_id, "COMPLETED")
+
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+    def run(self):
+
+        if not self._is_running:
+
+            # Check that the recon manager object exists
+            recon_manager = self.recon_manager
+            if recon_manager:
+                # Set running flag
+                self._is_running = True
+                while self._is_running:
+
+                    if self._enabled:
+                        print("[*] Checking for any scheduled scans")
+                        lock_val = True
+                        try:
+
+                            if self.connection_manager:
+                                lock_val = self.connection_manager.connect_to_extender()
+
+                            if lock_val:
+                                sched_scan_obj_arr = recon_manager.get_scheduled_scans()
+
+                                if self.connection_manager:
+                                    # Free the connection lock so we can scan the target
+                                    self.connection_manager.free_connection_lock(lock_val)
+
+                                if sched_scan_obj_arr and len(sched_scan_obj_arr) > 0:
+                                    sched_scan_obj = sched_scan_obj_arr[0]
+                                    self.process_scan_obj(sched_scan_obj)
+
+                            else:
+                                print("[-] Connection lock is currently held. Retrying")
+                                time.sleep(5)
+                                continue
+
+                        except Exception as e:
+                            print(traceback.format_exc())
+                            pass
+                        finally:
+                            if self.connection_manager:
+                                if lock_val:
+                                    self.connection_manager.free_connection_lock(lock_val)
+
+                    self.exit_event.wait(60)
+
+    def stop(self, timeout=None):
+        # Check if thread is dead
+        self._is_running = False
+        self.exit_event.set()
+
+
 class ReconManager:
 
     def __init__(self, token, manager_url):
@@ -29,6 +543,11 @@ class ReconManager:
         self.manager_url = manager_url
         self.headers = {'User-Agent': custom_user_agent, 'Authorization': 'Bearer ' + self.token}
         self.session_key = self._get_session_key()
+
+    # Stub to be overwritten in case anything needs to be done by a specific connection manager
+    # in regards to the target specified
+    def set_current_target(self, connection_manager, target_id):
+        return
 
     def _decrypt_json(self, content):
 
@@ -172,7 +691,8 @@ class ReconManager:
 
         content = r.json()
         data = self._decrypt_json(content)
-        sched_scan_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        if data:
+            sched_scan_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
 
         return sched_scan_arr
 

@@ -148,25 +148,28 @@ def shodan_wrapper(shodan_key, ip, cidr):
 
 def reduce_subnets(ip_subnets):
 
+    # Get results for the whole class C
     ret_list = []
     i = 24
-    #Attempt to consolidate subnets to reduce the number of shodan calls
-    # for i in range(24, 22, -1):
+
     subnet_list =[]
     for subnet in ip_subnets: 
         #Add class C networks for all IPs
+        #print(subnet)
         net_inst = netaddr.IPNetwork(subnet.strip())
-        net_ip= str(net_inst.network)
-        c_network = netaddr.IPNetwork(net_ip + "/%d" % i)
-        subnet_list.append(c_network)
+        net_ip = str(net_inst.network)
+        
+        if net_inst.prefixlen > i:
+            #print(net_ip)
+            network = netaddr.IPNetwork(net_ip + "/%d" % i)
+            #print(c_network)
+            c_network = network.cidr
+            subnet_list.append(c_network)
+        else:
+            subnet_list.append(net_inst)
 
-    #print("Reduce to /%d" % i)
-    #print("CIDRS Before: %d" % len(subnet_list))
+    # Merge subnets
     ret_list = netaddr.cidr_merge(subnet_list)
-    #print("CIDRS After: %d" % len(new_list))
-
-        # if len(ret_list) < 100:
-        #     break
 
     return ret_list
 
@@ -205,9 +208,11 @@ class ShodanScan(luigi.Task):
 
         #Attempt to consolidate subnets to reduce the number of shodan calls
         print("[*] Attempting to reduce subnets queried by Shodan")
-        shodan_subnets = reduce_subnets(ip_subnets)
-        print("CIDRS After: %d" % len(shodan_subnets))
-
+        
+        if len(ip_subnets) > 50:
+            print("CIDRS Before: %d" % len(ip_subnets))
+            ip_subnets = reduce_subnets(ip_subnets)
+            print("CIDRS After: %d" % len(ip_subnets))
 
         # Get the shodan key
         print("[*] Retrieving Shodan data")
@@ -216,7 +221,7 @@ class ShodanScan(luigi.Task):
 
             pool = ThreadPool(processes=10)
             thread_list = []
-            for subnet in shodan_subnets:
+            for subnet in ip_subnets:
 
                 #print(subnet)
                 # Get the subnet
@@ -281,7 +286,8 @@ class ParseShodanOutput(luigi.Task):
         if len(data) > 0:
             # Import the shodan data
             json_data = json.loads(data)
-            #print(json_data)
-            print("Entries: %d" % len(json_data))
-            ret_val = self.recon_manager.import_shodan_data(self.scan_id, json_data)
+            if len(json_data) > 0:
+                #print(json_data)
+                print("Entries: %d" % len(json_data))
+                ret_val = self.recon_manager.import_shodan_data(self.scan_id, json_data)
 

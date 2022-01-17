@@ -321,7 +321,12 @@ class NmapScan(luigi.Task):
 
             # Nmap command args
             nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (port, self.scan_id)
-            command = [
+
+            command = []
+            if os.name != 'nt':
+                command.append("sudo")
+
+            command_arr = [
                 "nmap",
                 "-v",
                 "-Pn",
@@ -342,6 +347,9 @@ class NmapScan(luigi.Task):
                 "-iL",
                 in_file.strip()
             ]
+
+            command.extend(command_arr)
+            
             print(command)
             commands.append(command)
 

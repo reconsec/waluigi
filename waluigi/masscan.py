@@ -131,7 +131,6 @@ class MasscanScan(luigi.Task):
                     command.append("sudo")
 
                 command_arr = [
-                    "sudo",
                     "masscan",
                     "--open",
                     "--rate",

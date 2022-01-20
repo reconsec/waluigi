@@ -75,15 +75,15 @@ class NmapScope(luigi.ExternalTask):
                 for port in port_list:
                     port = str(port)
 
-                    cur_list = []
+                    cur_list = set()
                     if port in port_target_map.keys():
                         cur_list = port_target_map[port]
 
-                    cur_list.append(target_ip)
+                    cur_list.add(target_ip)
 
                     # Add the domains
                     for domain in domains:
-                        cur_list.append(domain.name)
+                        cur_list.add(domain.name)
 
                     port_target_map[port] = cur_list
         else:
@@ -96,11 +96,11 @@ class NmapScope(luigi.ExternalTask):
                 for port in port_arr:
                     port = str(port)
 
-                    cur_list = []
+                    cur_list = set()
                     if port in port_target_map.keys():
                         cur_list = port_target_map[port]
 
-                    cur_list.append(subnet)
+                    cur_list.add(subnet)
                     port_target_map[port] = cur_list
 
 
@@ -112,6 +112,17 @@ class NmapScope(luigi.ExternalTask):
             
                 # Add the url to the list for the port
                 u = urlparse(url)
+                
+                if len(u.netloc) == 0:
+                    # Remove any wildcards
+                    url = url.replace("*.","")
+                    for port in port_arr:
+                        cur_list = set()
+                        if port in port_target_map.keys():
+                            cur_list = port_target_map[port]
+
+                        cur_list.add(url)
+                        port_target_map[port] = cur_list
 
                 secure = 0
                 if u.scheme == 'https':
@@ -130,10 +141,10 @@ class NmapScope(luigi.ExternalTask):
                 if port_str in port_target_map:
                     cur_list = port_target_map[port_str]
                 else:
-                    cur_list = []
+                    cur_list = set()
                     port_target_map[port_str] = cur_list
 
-                cur_list.append(domain)
+                cur_list.add(domain)
 
         # path to each input file
         if len(port_target_map) > 0:

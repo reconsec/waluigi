@@ -412,14 +412,15 @@ class ScheduledScanThread(threading.Thread):
         self.recon_manager.set_current_target(self.connection_manager, target_id)
 
 
-        # Execute crobat
-        ret = self.dns_lookup(scan_id)
-        if not ret:
-            print("[-] DNS Resolution Failed")
-            return
-
         #print(sched_scan_obj)
-        if sched_scan_obj.rescan == 0:
+        if sched_scan_obj.dns_scan_flag == 1:
+            # Execute crobat
+            ret = self.dns_lookup(scan_id)
+            if not ret:
+                print("[-] DNS Resolution Failed")
+                return
+
+        if sched_scan_obj.masscan_scan_flag == 1 and sched_scan_obj.rescan == 0:
 
             # Get target scope and urls to see what to kick off first
             subnets = self.recon_manager.get_subnets(scan_id)
@@ -436,29 +437,33 @@ class ScheduledScanThread(threading.Thread):
                 # TODO - Get URLs
                 print("[*] No subnets retrieved. Skipping masscan.")
 
-        # Execute shodan
-        ret = self.shodan_lookup(scan_id)
-        if not ret:
-            print("[-] Shodan Failed")
-            return
+        if sched_scan_obj.shodan_scan_flag == 1:
+            # Execute shodan
+            ret = self.shodan_lookup(scan_id)
+            if not ret:
+                print("[-] Shodan Failed")
+                return
 
-        # Execute nmap
-        ret = self.nmap_scan(scan_id)
-        if not ret:
-            print("[-] Nmap Failed")
-            return
+        if sched_scan_obj.nmap_scan_flag == 1:
+            # Execute nmap
+            ret = self.nmap_scan(scan_id)
+            if not ret:
+                print("[-] Nmap Failed")
+                return
 
-        # Execute pyshot
-        ret = self.pyshot_scan(scan_id)
-        if not ret:
-            print("[-] Pyshot Failed")
-            return
+        if sched_scan_obj.pyshot_scan_flag == 1:
+            # Execute pyshot
+            ret = self.pyshot_scan(scan_id)
+            if not ret:
+                print("[-] Pyshot Failed")
+                return
 
-        # Execute nuclei
-        ret = self.nuclei_scan(scan_id)
-        if not ret:
-            print("[-] Nuclei scan Failed")
-            return
+        if sched_scan_obj.nuclei_scan_flag == 1:
+            # Execute nuclei
+            ret = self.nuclei_scan(scan_id)
+            if not ret:
+                print("[-] Nuclei scan Failed")
+                return
 
         # Cleanup files
         ret = scan_pipeline.scan_cleanup(scan_id)

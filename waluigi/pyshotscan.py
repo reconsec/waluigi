@@ -49,7 +49,7 @@ class PyshotScope(luigi.ExternalTask):
 
         hosts = self.recon_manager.get_hosts(self.scan_id)
         print("[+] Retrieved %d hosts from database" % len(hosts))
-        if hosts:
+        if hosts and len(hosts) > 0:
 
             # open input file
             pyshot_inputs_f = open(pyshot_inputs_file, 'w')

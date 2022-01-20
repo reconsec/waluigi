@@ -52,7 +52,7 @@ class NmapScope(luigi.ExternalTask):
         hosts = self.recon_manager.get_hosts(self.scan_id)
         print("[+] Retrieved %d hosts from database" % len(hosts))
         port_target_map = {}
-        if hosts:
+        if hosts and len(hosts) > 0:
 
             for host in hosts:
 
@@ -86,6 +86,23 @@ class NmapScope(luigi.ExternalTask):
                         cur_list.append(domain.name)
 
                     port_target_map[port] = cur_list
+        else:
+            
+            # If no hosts exist then get the target subnets
+            subnets = self.recon_manager.get_subnets(self.scan_id)
+            print("[+] Retrieved %d subnets from database" % len(subnets))
+            for subnet in subnets:
+
+                for port in port_arr:
+                    port = str(port)
+
+                    cur_list = []
+                    if port in port_target_map.keys():
+                        cur_list = port_target_map[port]
+
+                    cur_list.append(subnet)
+                    port_target_map[port] = cur_list
+
 
         urls = self.recon_manager.get_urls(self.scan_id)
         print("[+] Retrieved %d urls from database" % len(urls))
@@ -349,7 +366,7 @@ class NmapScan(luigi.Task):
             ]
 
             command.extend(command_arr)
-            
+
             print(command)
             commands.append(command)
 

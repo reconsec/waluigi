@@ -92,6 +92,7 @@ class NmapScope(luigi.ExternalTask):
         if urls:
 
             for url in urls:
+            
                 # Add the url to the list for the port
                 u = urlparse(url)
 
@@ -387,7 +388,13 @@ class ParseNmapOutput(luigi.Task):
         #print("Glob: %s" % glob_check)
         for nmap_out in glob.glob(glob_check):
 
-            nmap_report = NmapParser.parse_fromfile(nmap_out)
+            nmap_report = None
+            try:
+                nmap_report = NmapParser.parse_fromfile(nmap_out)
+            except Exception as e:
+                print("[-] Failed parsing nmap output: %s" % nmap_out)
+                print(traceback.format_exc())
+                continue
 
             # Loop through hosts
             port_arr = []

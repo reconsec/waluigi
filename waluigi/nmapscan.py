@@ -191,12 +191,13 @@ def request_wrapper(ip_addr, port_num):
     while True and retry < 3:
         try:
             req_url = '%s://%s:%d' % (protocol, ip_addr, port_num)
-            #print("[*] Request URL: %s" % req_url)
+            print("[*] Request URL: %s" % req_url)
             x = requests.head(req_url, headers=headers, verify=False, timeout=1)
             if len(x.headers) > 0:
-                return ip_addr, port_num
+                return ip_addr, port_num              
             break
         except requests.exceptions.ReadTimeout as e:
+            print("[*] Request timed out: %s" % req_url)
             break
         except requests.exceptions.ConnectionError as e:
             if 'reset' in str(e):
@@ -245,7 +246,7 @@ class NmapPruningScan(luigi.Task):
             os.chmod(dir_path, 0o777)
 
         commands = []
-        port_map = {80:[], 443:[], 8080:[], 8443:[]}
+        port_map = {80:set(), 443:set(), 8080:set(), 8443:set()}
         for ip_path in input_file_paths:
 
             in_file = ip_path.strip()
@@ -279,7 +280,7 @@ class NmapPruningScan(luigi.Task):
                         port = output[1]
                         ip = output[0]
                         ip_list_internal = port_map[port]
-                        ip_list_internal.append(ip)
+                        ip_list_internal.add(ip)
             else:
                  shutil.copy(in_file, dir_path + os.path.sep +filename )
 

@@ -391,7 +391,7 @@ class ImportCrobatOutput(luigi.Task):
             domains = list(domain_set)
 
             ip_addr_int = int(netaddr.IPAddress(ip_addr))
-            print(domains)
+            #print(domains)
             port_obj = {'scan_id': self.scan_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
 
             # Add to list

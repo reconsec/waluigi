@@ -159,7 +159,7 @@ def reduce_subnets(ip_subnets):
         net_inst = netaddr.IPNetwork(subnet.strip())
         net_ip = str(net_inst.network)
         
-        if net_inst.prefixlen > i:
+        if net_inst.prefixlen < i:
             #print(net_ip)
             network = netaddr.IPNetwork(net_ip + "/%d" % i)
             #print(c_network)

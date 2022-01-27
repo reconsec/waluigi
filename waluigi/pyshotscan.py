@@ -5,6 +5,7 @@ import shutil
 import netaddr
 import glob
 from datetime import date
+import binascii
 
 import luigi
 from luigi.util import inherits
@@ -231,11 +232,14 @@ def check_for_duplicates(files_paths, hash=hashlib.sha1):
     # For all files with the same file size, get their hash on the 1st 1024 bytes only
     for size_in_bytes, files in hashes_by_size.items():
         if len(files) < 2:
-            continue    # this file size is unique, no need to spend CPU cycles on it
+            small_hash = get_hash(files[0], first_chunk_only=True)
+            print(binascii.hexlify(small_hash))
+            continue # this file size is unique, no need to spend CPU cycles on it
 
         for filename in files:
             try:
                 small_hash = get_hash(filename, first_chunk_only=True)
+                print(binascii.hexlify(small_hash))
                 hashes_on_1k[(small_hash, size_in_bytes)].append(filename)
             except (OSError,):
                 continue

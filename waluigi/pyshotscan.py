@@ -319,10 +319,15 @@ class ParsePyshotOutput(luigi.Task):
                 domain = filename_arr[2]
 
             image_data = b""
+            hash_alg=hashlib.sha1
             with open(pyshot_output_dir + "/" + filename, "rb") as rf:
                 image_data = rf.read()
+                hashobj = hash_alg()
+                hashobj.update(image_data)
+                image_hash = hashobj.digest()
+                image_hash_str = binascii.hexlify(image_hash).decode()
 
-            ret_val = self.recon_manager.import_screenshot(port_id, url, image_data)
+            ret_val = self.recon_manager.import_screenshot(port_id, url, image_data, image_hash_str)
             count += 1
 
         print("[+] Imported %d screenshots to manager." % (count))

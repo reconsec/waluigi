@@ -346,7 +346,7 @@ class NmapScan(luigi.Task):
 
             in_file = ip_path.strip()
             filename = os.path.basename(in_file)
-            print(filename)
+            #print(filename)
             port = filename.split("_")[2]
 
             # Nmap command args
@@ -380,7 +380,7 @@ class NmapScan(luigi.Task):
 
             command.extend(command_arr)
 
-            print(command)
+            #print(command)
             commands.append(command)
 
         # Run threaded

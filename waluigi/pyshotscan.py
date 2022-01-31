@@ -4,21 +4,19 @@ import subprocess
 import shutil
 import netaddr
 import glob
-from datetime import date
 import binascii
-
 import luigi
+import multiprocessing
+import traceback
+import hashlib
+
+from datetime import date
 from luigi.util import inherits
 from pyshot import pyshot
 from waluigi import recon_manager
 from tqdm import tqdm
-
 from multiprocessing.pool import ThreadPool
-import multiprocessing
-import traceback
-
-import hashlib
-from collections import defaultdict
+from urllib.parse import urlparse, ParseResult
 
 class PyshotScope(luigi.ExternalTask):
     scan_id = luigi.Parameter()
@@ -37,7 +35,7 @@ class PyshotScope(luigi.ExternalTask):
 
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "inputs-pyshot-" + self.scan_id
+        dir_path = cwd + os.path.sep + "pyshot-inputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -100,7 +98,7 @@ def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
 
     ret_msg = ""
     try:
-        ret_msg = pyshot.take_screenshot(ip_addr, port, "", dir_path, ssl_val, port_id, domain)
+        ret_msg = pyshot.take_screenshot(host=ip_addr, port_arg=port, query_arg="", dest_dir=dir_path, secure=ssl_val, port_id=port_id, domain=domain)
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
@@ -144,6 +142,7 @@ class PyshotScan(luigi.Task):
         thread_list = []
         for port_ip_line in port_ip_lines:
 
+            #print("[*] Port line: %s" % port_ip_line)
             port_arr = port_ip_line.split(":")
             port_id = port_arr[0]
             ip_addr = port_arr[1].strip()
@@ -176,11 +175,11 @@ class PyshotScan(luigi.Task):
             output = thread_obj.get()
 
         # Remove temp dir
-        try:
-            shutil.rmtree(os.path.dirname(pyshot_input_file.path))
-        except Exception as e:
-            print("[-] Error deleting output directory: %s" % str(e))
-            pass
+        #try:
+        #    shutil.rmtree(os.path.dirname(pyshot_input_file.path))
+        #except Exception as e:
+        #    print("[-] Error deleting output directory: %s" % str(e))
+        #    pass
 
         # Path to scan outputs log
         cwd = os.getcwd()
@@ -191,86 +190,6 @@ class PyshotScan(luigi.Task):
         f = open(all_inputs_file, 'a')
         f.write(self.output().path + '\n')
         f.close()
-
-def chunk_reader(fobj, chunk_size=1024):
-    while True:
-        chunk = fobj.read(chunk_size)
-        if not chunk:
-            return
-        yield chunk
-
-def get_hash(filename, first_chunk_only=False, hash=hashlib.sha1):
-    hashobj = hash()
-    file_object = open(filename, 'rb')
-
-    if first_chunk_only:
-        hashobj.update(file_object.read(1024))
-    else:
-        for chunk in chunk_reader(file_object):
-            hashobj.update(chunk)
-    hashed = hashobj.digest()
-
-    file_object.close()
-    return hashed
-
-def check_for_duplicates(files_paths, hash=hashlib.sha1):
-    hashes_by_size = defaultdict(list)
-    hashes_on_1k = defaultdict(list)
-    hashes_full = {}
-    duplicate_set = set()
-
-    for full_path in files_paths:
-
-        try:
-            full_path = os.path.realpath(full_path)
-            file_size = os.path.getsize(full_path)
-            hashes_by_size[file_size].append(full_path)
-        except (OSError,):
-            continue
-
-
-    # For all files with the same file size, get their hash on the 1st 1024 bytes only
-    for size_in_bytes, files in hashes_by_size.items():
-        if len(files) < 2:
-            small_hash = get_hash(files[0], first_chunk_only=True)
-            print(binascii.hexlify(small_hash))
-            continue # this file size is unique, no need to spend CPU cycles on it
-
-        for filename in files:
-            try:
-                small_hash = get_hash(filename, first_chunk_only=True)
-                print(binascii.hexlify(small_hash))
-                hashes_on_1k[(small_hash, size_in_bytes)].append(filename)
-            except (OSError,):
-                continue
-
-    # For all files with the hash on the 1st 1024 bytes, get their hash on the full file - collisions will be duplicates
-    for __, files_list in hashes_on_1k.items():
-        if len(files_list) < 2:
-            continue    # this hash of fist 1k file bytes is unique, no need to spend cpy cycles on it
-        for filename in files_list:
-            try:
-                full_hash = get_hash(filename, first_chunk_only=False)
-                duplicate = hashes_full.get(full_hash)
-                if duplicate:
-                    duplicate_set.add(filename)
-                else:
-                    hashes_full[full_hash] = filename
-            except (OSError,):
-                continue
-
-    return list(duplicate_set)
-
-
-def remove_duplicates(file_dir):
-    # Check for duplicates in vhosts screenshots
-    files = glob.glob('%s/*.png' % file_dir)
-#    print("File list: %d" % len(files))
-    dup_list = check_for_duplicates(files)
-#    print("Dup list: %d" % len(dup_list))
-    for dupe in dup_list:
-        os.remove(dupe)
-
 
 @inherits(PyshotScan)
 class ParsePyshotOutput(luigi.Task):
@@ -288,39 +207,37 @@ class ParsePyshotOutput(luigi.Task):
 
         pyshot_output_dir = self.input().path
 
-        # Remove duplicates
-        print("[+] Removing duplicates in '%s'" % pyshot_output_dir)
-        remove_duplicates(pyshot_output_dir)
-
-        # Convert the screenshots
-        convert_cmd = "mogrify -format jpg -quality 10 *.png"
-        # Execute process
-        subprocess.run(convert_cmd, cwd=pyshot_output_dir, shell=True)
-
-        print("[*] Converted screenshot image files.")
+        #print("[*] Converted screenshot image files.")
+        # Read meta data file
+        meta_file = '%s%s%s' % (pyshot_output_dir, os.path.sep, 'screenshots.meta' )
+        f = open(meta_file, 'r')
+        lines = f.readlines()
+        f.close()
 
         count = 0
-        glob_check = '%s%s*.jpg' % (pyshot_output_dir, os.path.sep)
-        print("Glob: %s" % glob_check)
-        for f in glob.glob(glob_check):
+        for line in lines:
 
-            filename = os.path.basename(f)
-            filename_arr = filename.split('@')
-            # print(filename_arr)
+            screenshot_meta = json.loads(line)
+            filename = screenshot_meta['file']
+            url = screenshot_meta['url']
+            port_id = screenshot_meta['port_id']
+            host_hdr = screenshot_meta['host_header']
 
-            # Check array length before indexing
-            if len(filename_arr) < 2:
-                continue
+            # If the host header made the difference then replace it in the url
+            if host_hdr and len(host_hdr) > 0:
+                u = urlparse(url)
+                host = u.netloc
+                port = ''
+                if ":" in host:
+                    host_arr = host.split(":")
+                    port = ":" + host_arr[1]
 
-            port_id = filename_arr[0]
-            url = filename_arr[1].strip('.jpg')
-
-            if len(filename_arr) == 3:
-                domain = filename_arr[2]
+                res = ParseResult(scheme=u.scheme, netloc=host_hdr + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
+                url = res.geturl()
 
             image_data = b""
             hash_alg=hashlib.sha1
-            with open(pyshot_output_dir + "/" + filename, "rb") as rf:
+            with open(filename, "rb") as rf:
                 image_data = rf.read()
                 hashobj = hash_alg()
                 hashobj.update(image_data)

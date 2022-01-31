@@ -842,7 +842,7 @@ class ReconManager:
                      'hash': str(image_hash),
                      'data': b64_image}]
 
-        print(b64_image)
+        #print(b64_image)
         json_data = json.dumps(obj_data).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)

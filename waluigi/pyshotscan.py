@@ -17,6 +17,7 @@ from waluigi import recon_manager
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from urllib.parse import urlparse, ParseResult
+from os.path import exists
 
 class PyshotScope(luigi.ExternalTask):
     scan_id = luigi.Parameter()
@@ -219,33 +220,34 @@ class ParsePyshotOutput(luigi.Task):
 
             screenshot_meta = json.loads(line)
             filename = screenshot_meta['file']
-            url = screenshot_meta['url']
-            port_id = screenshot_meta['port_id']
-            host_hdr = screenshot_meta['host_header']
+            if exists(filename):
+                url = screenshot_meta['url']
+                port_id = screenshot_meta['port_id']
+                host_hdr = screenshot_meta['host_header']
 
-            # If the host header made the difference then replace it in the url
-            if host_hdr and len(host_hdr) > 0:
-                u = urlparse(url)
-                host = u.netloc
-                port = ''
-                if ":" in host:
-                    host_arr = host.split(":")
-                    port = ":" + host_arr[1]
+                # If the host header made the difference then replace it in the url
+                if host_hdr and len(host_hdr) > 0:
+                    u = urlparse(url)
+                    host = u.netloc
+                    port = ''
+                    if ":" in host:
+                        host_arr = host.split(":")
+                        port = ":" + host_arr[1]
 
-                res = ParseResult(scheme=u.scheme, netloc=host_hdr + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
-                url = res.geturl()
+                    res = ParseResult(scheme=u.scheme, netloc=host_hdr + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
+                    url = res.geturl()
 
-            image_data = b""
-            hash_alg=hashlib.sha1
-            with open(filename, "rb") as rf:
-                image_data = rf.read()
-                hashobj = hash_alg()
-                hashobj.update(image_data)
-                image_hash = hashobj.digest()
-                image_hash_str = binascii.hexlify(image_hash).decode()
+                image_data = b""
+                hash_alg=hashlib.sha1
+                with open(filename, "rb") as rf:
+                    image_data = rf.read()
+                    hashobj = hash_alg()
+                    hashobj.update(image_data)
+                    image_hash = hashobj.digest()
+                    image_hash_str = binascii.hexlify(image_hash).decode()
 
-            ret_val = self.recon_manager.import_screenshot(port_id, url, image_data, image_hash_str)
-            count += 1
+                ret_val = self.recon_manager.import_screenshot(port_id, url, image_data, image_hash_str)
+                count += 1
 
         print("[+] Imported %d screenshots to manager." % (count))
 

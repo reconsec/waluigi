@@ -151,7 +151,7 @@ class NucleiScan(luigi.Task):
                 nuclei_template_root = '%userprofile%'
                 use_shell = True
             else:
-                nuclei_template_root = os.getcwd()
+                nuclei_template_root = '/opt'
 
             # Set nuclei path
             nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"

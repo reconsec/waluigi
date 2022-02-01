@@ -118,7 +118,7 @@ def crobat_wrapper(lookup_value, lookup_type):
             root_domain = lookup_value.replace("*.","")
             # Add to the domain list
             for domain in domains:
-            
+
                 domain = domain.strip().decode()
                 if root_domain in domain:
                     #print("[*] Adding %s" % domain)
@@ -133,7 +133,7 @@ def crobat_wrapper(lookup_value, lookup_type):
         # print(port_obj_arr)
         thread_map = {}
         pool = ThreadPool(processes=100)
-        
+
         for domain in domain_set:
             # Add argument without domain first
             thread_map[domain] = pool.apply_async(socket.gethostbyname, (domain, ))
@@ -343,7 +343,7 @@ class CrobatDNS(luigi.Task):
 
         # Write output file to final input file for cleanup
         f = open(all_inputs_file, 'a')
-        output_dir = self.output().path
+        output_dir = os.path.dirname(self.output().path)
         f.write(output_dir + '\n')
         f.close()
 
@@ -402,10 +402,3 @@ class ImportCrobatOutput(luigi.Task):
             ret_val = self.recon_manager.import_ports(port_arr)
 
             print("[+] Imported domains to manager.")
-
-        # Remove temp dir
-        #try:
-        #    shutil.rmtree(crobat_output_dir)
-        #except Exception as e:
-        #    print("[-] Error deleting output directory: %s" % str(e))
-        #    pass

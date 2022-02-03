@@ -214,9 +214,6 @@ class CrobatDNS(luigi.Task):
 
         # path to input file
         dns_outputs_file = dir_path + os.path.sep + "crobat_outputs_" + self.scan_id
-        if os.path.isfile(dns_outputs_file):
-            return luigi.LocalTarget(dns_outputs_file) 
-
         return luigi.LocalTarget(dns_outputs_file)
 
     def run(self):
@@ -228,6 +225,8 @@ class CrobatDNS(luigi.Task):
         f.close()
 
         domain_map = {}
+        output_f = open(self.output().path, 'w')
+        #print("[*] Opened out file")
         if data:
             ips_file_path = data[0].strip()
             urls_file_path = data[1].strip()
@@ -331,9 +330,11 @@ class CrobatDNS(luigi.Task):
 
             # Write to file
             if len(domain_map) > 0:
-                f = open(self.output().path, 'w')
-                f.write(json.dumps(domain_map))
-                f.close()
+                output_f.write(json.dumps(domain_map))
+                
+        # Close file    
+        #print("[*] Closed out file")
+        output_f.close()
 
 
         # Path to scan outputs log
@@ -367,38 +368,39 @@ class ImportCrobatOutput(luigi.Task):
         data = f.read()
         f.close()
 
-        domain_map = json.loads(data)
+        if len(data) > 0:
+            domain_map = json.loads(data)
 
-        ip_map = {}
-        #Convert from domain to ip map to ip to domain map
-        for domain in domain_map:
+            ip_map = {}
+            #Convert from domain to ip map to ip to domain map
+            for domain in domain_map:
 
-            # Get IP for domain
-            ip_addr_int = domain_map[domain]
-            if ip_addr_int in ip_map:
-                domain_list = ip_map[ip_addr_int]
-            else:
-                domain_list = set()
-                ip_map[ip_addr_int] = domain_list
+                # Get IP for domain
+                ip_addr_int = domain_map[domain]
+                if ip_addr_int in ip_map:
+                    domain_list = ip_map[ip_addr_int]
+                else:
+                    domain_list = set()
+                    ip_map[ip_addr_int] = domain_list
 
-            domain_list.add(domain)
+                domain_list.add(domain)
 
 
-        port_arr = []
-        for ip_addr in ip_map:
+            port_arr = []
+            for ip_addr in ip_map:
 
-            domain_set = ip_map[ip_addr]
-            domains = list(domain_set)
+                domain_set = ip_map[ip_addr]
+                domains = list(domain_set)
 
-            ip_addr_int = int(netaddr.IPAddress(ip_addr))
-            #print(domains)
-            port_obj = {'scan_id': self.scan_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
+                ip_addr_int = int(netaddr.IPAddress(ip_addr))
+                #print(domains)
+                port_obj = {'scan_id': self.scan_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
 
-            # Add to list
-            port_arr.append(port_obj)
+                # Add to list
+                port_arr.append(port_obj)
 
-        if len(port_arr) > 0:
-            # Import the ports to the manager
-            ret_val = self.recon_manager.import_ports(port_arr)
+            if len(port_arr) > 0:
+                # Import the ports to the manager
+                ret_val = self.recon_manager.import_ports(port_arr)
 
-            print("[+] Imported domains to manager.")
+                print("[+] Imported domains to manager.")

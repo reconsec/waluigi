@@ -157,6 +157,11 @@ def reduce_subnets(ip_subnets):
         #Add class C networks for all IPs
         #print(subnet)
         net_inst = netaddr.IPNetwork(subnet.strip())
+
+        #Skip private IPs
+        if net_inst.is_private():
+            continue
+
         net_ip = str(net_inst.network)
         
         if net_inst.prefixlen < i:
@@ -232,6 +237,11 @@ class ShodanScan(luigi.Task):
                 cidr = 32
                 if len(subnet_arr) > 1:
                     cidr = int(subnet_arr[1])
+
+                # Skip private IPs
+                subnet = netaddr.IPNetwork(str(ip)+"/"+str(cidr))
+                if subnet.is_private():
+                    continue
 
                 thread_list.append(pool.apply_async(shodan_wrapper, (shodan_key, ip, cidr)))
 

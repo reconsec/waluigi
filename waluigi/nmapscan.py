@@ -63,9 +63,16 @@ class NmapScope(luigi.ExternalTask):
 
                 # Get the ports
                 if len(host.ports) > 0:
+
                     for port in host.ports:
-                        port = str(port.port)
+                        port = str(port.port)    
+
+                        # Skip any possible load balanced ports that haven't already been marked as http from pre scan
+                        if (port == '80' or port == '443' or port == '8080' or port == '8443') and 'http' not in port.service:
+                            continue
+
                         port_list.append(port)
+
                 elif len(port_arr) > 0:
                     port_list.extend(port_arr)
                 else:
@@ -74,6 +81,7 @@ class NmapScope(luigi.ExternalTask):
 
                 for port in port_list:
                     port = str(port)
+
 
                     cur_list = set()
                     if port in port_target_map.keys():
@@ -177,148 +185,148 @@ class NmapScope(luigi.ExternalTask):
         return luigi.LocalTarget(nmap_inputs_file)
 
 
-def request_wrapper(ip_addr, port_num):
+# def request_wrapper(ip_addr, port_num):
 
-    if ip_addr ==None or len(ip_addr) == 0:
-        return None
+#     if ip_addr ==None or len(ip_addr) == 0:
+#         return None
 
-    headers = {'User-Agent': custom_user_agent}
-    protocol = 'http'
-    if port_num == 443:
-        protocol = 'https'
+#     headers = {'User-Agent': custom_user_agent}
+#     protocol = 'http'
+#     if port_num == 443:
+#         protocol = 'https'
 
-    retry = 0
-    while True and retry < 3:
-        try:
-            req_url = '%s://%s:%d' % (protocol, ip_addr, port_num)
-            print("[*] Request URL: %s" % req_url)
-            x = requests.head(req_url, headers=headers, verify=False, timeout=1)
-            if len(x.headers) > 0:
-                return ip_addr, port_num              
-            break
-        except requests.exceptions.ReadTimeout as e:
-            print("[*] Request timed out: %s" % req_url)
-            break
-        except requests.exceptions.ConnectionError as e:
-            if 'reset' in str(e):
-                if protocol != 'https':
-                    #print("[*] Switching to https")
-                    protocol = 'https'
-                else:
-                    break
-            retry += 1
-            continue
-        except Exception as e:
-            print("[*] IP: %s   Port: %s" % (ip_addr, port_num))
-            print(traceback.format_exc())
-            retry += 1
-            continue
+#     retry = 0
+#     while True and retry < 3:
+#         try:
+#             req_url = '%s://%s:%d' % (protocol, ip_addr, port_num)
+#             print("[*] Request URL: %s" % req_url)
+#             x = requests.head(req_url, headers=headers, verify=False, timeout=1)
+#             if len(x.headers) > 0:
+#                 return ip_addr, port_num              
+#             break
+#         except requests.exceptions.ReadTimeout as e:
+#             print("[*] Request timed out: %s" % req_url)
+#             break
+#         except requests.exceptions.ConnectionError as e:
+#             if 'reset' in str(e):
+#                 if protocol != 'https':
+#                     #print("[*] Switching to https")
+#                     protocol = 'https'
+#                 else:
+#                     break
+#             retry += 1
+#             continue
+#         except Exception as e:
+#             print("[*] IP: %s   Port: %s" % (ip_addr, port_num))
+#             print(traceback.format_exc())
+#             retry += 1
+#             continue
+
+
+# @inherits(NmapScope)
+# class NmapPruningScan(luigi.Task):
+
+#     def requires(self):
+#         # Requires the target scope
+#         return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+
+#     def output(self):
+
+#         cwd = os.getcwd()
+#         dir_path = cwd + os.path.sep + "pruned-outputs-" + self.scan_id
+#         nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + self.scan_id
+#         return luigi.LocalTarget(nmap_inputs_file)
+
+#     def run(self):
+
+#         # Read masscan input files
+#         nmap_input_file = self.input()
+#         f = nmap_input_file.open()
+#         input_file_paths = f.readlines()
+#         #print(input_file_paths)
+#         f.close()
+
+#         # Ensure output folder exists
+#         output_file = self.output()
+#         dir_path = os.path.dirname(output_file.path)
+#         if not os.path.isdir(dir_path):
+#             os.mkdir(dir_path)
+#             os.chmod(dir_path, 0o777)
+
+#         commands = []
+#         port_map = {80:set(), 443:set(), 8080:set(), 8443:set()}
+#         for ip_path in input_file_paths:
+
+#             in_file = ip_path.strip()
+#             filename = os.path.basename(in_file)
+#             port = int(filename.split("_")[2])
+
+#             if port == 80 or port == 443 or port == 8443 or port == 8080:
+#                 print("[*] Running web pruning job for port %d" % port)
+#                 f_path = in_file.strip()
+#                 f = open(f_path, 'r')
+#                 ip_list = f.readlines()
+#                 #print(ip_list)
+#                 f.close()
+
+#                 pool = ThreadPool(processes=30)
+#                 thread_list = []
+#                 for ip_addr in ip_list:
+#                     ip_addr = ip_addr.strip()
+#                     if len(ip_addr) > 0:
+#                     #print("%s:%d" % (ip_addr,port))
+#                     # Add argument without domain first
+#                         thread_list.append( pool.apply_async(request_wrapper, (ip_addr, port)) )
+
+#                 # Close the pool
+#                 pool.close()
+
+#                 # Loop through outputs
+#                 for thread_obj in tqdm(thread_list):
+#                     output = thread_obj.get()
+#                     if output:
+#                         port = output[1]
+#                         ip = output[0]
+#                         ip_list_internal = port_map[port]
+#                         ip_list_internal.add(ip)
+#             else:
+#                  shutil.copy(in_file, dir_path + os.path.sep +filename )
+
+#         #print(port_map)
+#         for port_num in port_map:
+#             ip_list = port_map[port_num]
+#             in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (port_num, self.scan_id)
+
+#             # Write subnets to file
+#             f = open(in_path, 'w')
+#             for target in ip_list:
+#                 f.write(target + "\n")
+#             f.close()
+
+#         # path to each input file
+#         glob_check = '%s%snmap_in_*' % (dir_path, os.path.sep)
+#         nmap_inputs_f = open(output_file.path, 'w')
+#         for nmap_input_path in glob.glob(glob_check):
+#             nmap_inputs_f.write(nmap_input_path + '\n')
+#         nmap_inputs_f.close()
+
+#         # Path to scan outputs log
+#         cwd = os.getcwd()
+#         dir_path = cwd + os.path.sep
+#         all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+
+#         # Write output file to final input file for cleanup
+#         f = open(all_inputs_file, 'a')
+#         f.write(os.path.dirname(output_file.path) + '\n')
+#         f.close()
 
 
 @inherits(NmapScope)
-class NmapPruningScan(luigi.Task):
-
-    def requires(self):
-        # Requires the target scope
-        return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
-
-    def output(self):
-
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "pruned-outputs-" + self.scan_id
-        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + self.scan_id
-        return luigi.LocalTarget(nmap_inputs_file)
-
-    def run(self):
-
-        # Read masscan input files
-        nmap_input_file = self.input()
-        f = nmap_input_file.open()
-        input_file_paths = f.readlines()
-        #print(input_file_paths)
-        f.close()
-
-        # Ensure output folder exists
-        output_file = self.output()
-        dir_path = os.path.dirname(output_file.path)
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
-        commands = []
-        port_map = {80:set(), 443:set(), 8080:set(), 8443:set()}
-        for ip_path in input_file_paths:
-
-            in_file = ip_path.strip()
-            filename = os.path.basename(in_file)
-            port = int(filename.split("_")[2])
-
-            if port == 80 or port == 443 or port == 8443 or port == 8080:
-                print("[*] Running web pruning job for port %d" % port)
-                f_path = in_file.strip()
-                f = open(f_path, 'r')
-                ip_list = f.readlines()
-                #print(ip_list)
-                f.close()
-
-                pool = ThreadPool(processes=30)
-                thread_list = []
-                for ip_addr in ip_list:
-                    ip_addr = ip_addr.strip()
-                    if len(ip_addr) > 0:
-                    #print("%s:%d" % (ip_addr,port))
-                    # Add argument without domain first
-                        thread_list.append( pool.apply_async(request_wrapper, (ip_addr, port)) )
-
-                # Close the pool
-                pool.close()
-
-                # Loop through outputs
-                for thread_obj in tqdm(thread_list):
-                    output = thread_obj.get()
-                    if output:
-                        port = output[1]
-                        ip = output[0]
-                        ip_list_internal = port_map[port]
-                        ip_list_internal.add(ip)
-            else:
-                 shutil.copy(in_file, dir_path + os.path.sep +filename )
-
-        #print(port_map)
-        for port_num in port_map:
-            ip_list = port_map[port_num]
-            in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (port_num, self.scan_id)
-
-            # Write subnets to file
-            f = open(in_path, 'w')
-            for target in ip_list:
-                f.write(target + "\n")
-            f.close()
-
-        # path to each input file
-        glob_check = '%s%snmap_in_*' % (dir_path, os.path.sep)
-        nmap_inputs_f = open(output_file.path, 'w')
-        for nmap_input_path in glob.glob(glob_check):
-            nmap_inputs_f.write(nmap_input_path + '\n')
-        nmap_inputs_f.close()
-
-        # Path to scan outputs log
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
-
-        # Write output file to final input file for cleanup
-        f = open(all_inputs_file, 'a')
-        f.write(os.path.dirname(output_file.path) + '\n')
-        f.close()
-
-
-@inherits(NmapPruningScan)
 class NmapScan(luigi.Task):
 
     def requires(self):
         # Requires the target scope
-        return NmapPruningScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
 
@@ -442,18 +450,9 @@ class ParseNmapOutput(luigi.Task):
                     banner_str = svc.banner
                     svc_proto = svc.service.strip()
 
-                    ssl_str = svc.tunnel
-                    if ssl_str == 'ssl' or svc_proto == 'ssl':
-                        ssl_val = 1
-                    else:
-                        ssl_val = 0
-
-                    svc_proto = svc_proto.replace("https","http")
-
                     port_obj = { 'scan_id' : self.scan_id,
                                  'port' : port_num,
                                  'ipv4_addr' : ip_addr_int,
-                                 'secure' :  ssl_val,
                                  'banner' : banner_str,
                                  'service' : svc_proto}
 
@@ -468,33 +467,6 @@ class ParseNmapOutput(luigi.Task):
                         script_res_json = json.dumps(script_res)
                         port_obj['nmap_script_results'] = script_res_json
 
-                        # Add domains in certificate to port if SSL
-                        for script in script_res:
-
-                            script_id = script['id']
-                            if script_id == 'ssl-cert':
-
-                                output = script['output']
-                                lines = output.split("\n")
-                                domains = []
-                                for line in lines:
-
-                                    if "Subject Alternative Name:" in line:
-
-                                        line = line.replace("Subject Alternative Name:","")
-                                        line_arr = line.split(",")
-                                        for dns_entry in line_arr:
-                                            if "DNS" in dns_entry:
-                                                dns_stripped = dns_entry.replace("DNS:","").strip()
-                                                domain_id = None
-                                                domains.append(dns_stripped)
-
-                                if len(domains) > 0:
-                                    port_obj['domains'] = domains
-                                    print(domains)
-
-                                break
-
                     # Add to list
                     port_arr.append(port_obj)
 
@@ -507,9 +479,3 @@ class ParseNmapOutput(luigi.Task):
 
         print("[+] Updated ports database with Nmap results.")
 
-        # Remove temp dir - not until the end of everything - Consider added input directories of all into another file
-        #try:
-        #    shutil.rmtree(nmap_output_file.path)
-        #except Exception as e:
-        #    print("[-] Error deleting output directory: %s" % str(e))
-        #    pass

@@ -344,8 +344,8 @@ class ParseNmapPreOutput(luigi.Task):
                                 port_obj['service'] = 'http'
 
 
-                    # Add to list
-                    port_arr.append(port_obj)
+                        # Add to list
+                        port_arr.append(port_obj)
 
             # Add the IP list
             if len(port_arr) > 0:

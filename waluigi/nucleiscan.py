@@ -169,27 +169,17 @@ class NucleiScan(luigi.Task):
                 "nuclei",
                 "-silent",
                 "-json",
-                "-timeout 2",
-                "-mhe 3",
+                "-timeout",
+                "2",
+                "-mhe",
+                "3",
                 "-spm",
                 "-l",
                 in_file.strip(),
                 "-o",
                 nuclei_output_file,
                 "-t",
-                cve_template_path,
-                "-t",
-                vuln_template_path,
-                "-t",
-                cnvd_template_path,
-                "-t",
-                def_logins_template_path,
-                "-t",
-                explosures_template_path,
-                "-t",
-                exposed_panels_template_path,
-                "-t",
-                iot_path
+                cve_template_path
             ]
             #print(command)
             command_list.append(command)

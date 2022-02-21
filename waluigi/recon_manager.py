@@ -81,13 +81,14 @@ class ReconManager:
 
         session_key = None
         if os.path.exists('session'):
-            print("[*] Session Key File Exists. Key: %s" % binascii.hexlify(session_key).decode())
-
+            
             f = open("session", "r")
-            hex_session = f.read()
+            hex_session = f.read().strip()
             f.close()
 
-            session_key = binascii.unhexlify(hex_session.strip())
+            print("[*] Session Key File Exists. Key: %s" % hex_session)
+
+            session_key = binascii.unhexlify(hex_session)
 
         return session_key
 

@@ -58,21 +58,45 @@ class ReconManager:
                 data = cipher_aes.decrypt_and_verify(ciphertext, tag).decode()
             except Exception as e:
                 print("[-] Error decrypting response: %s" % str(e))
-                if os.path.exists('session'):
-                    os.remove('session')
+
+                # Attempting to decrypt from the session key on disk
+                session_key = self._get_session_key_from_disk()
+                if session_key:
+                    cipher_aes = AES.new(session_key, AES.MODE_EAX, nonce)
+                    try:
+                        data = cipher_aes.decrypt_and_verify(ciphertext, tag).decode()
+                        self.session_key = session_key
+                        return data
+                    except Exception as e:
+
+                        print("[-] Error decrypting response with session from disk. Refreshing session: %s" % str(e))
+                        os.remove('session')
+
                 # Attempt to get a new session token
                 self.session_key = self._get_session_key()
 
         return data
 
-    def _get_session_key(self):
+    def _get_session_key_from_disk(self):
 
+        session_key = None
         if os.path.exists('session'):
+            print("[*] Session Key File Exists. Key: %s" % binascii.hexlify(session_key).decode())
+
             f = open("session", "r")
             hex_session = f.read()
             f.close()
 
             session_key = binascii.unhexlify(hex_session.strip())
+
+        return session_key
+
+
+    def _get_session_key(self):
+
+
+        session_key = self._get_session_key_from_disk()
+        if session_key:
             return session_key
 
         # Generate temp RSA keys to encrypt session key

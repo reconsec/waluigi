@@ -4,7 +4,9 @@ import argparse
 import threading
 import time
 import sys
+
 from threading import Event
+from waluigi import scan_pipeline
 
 local_extender_port = 33333
 

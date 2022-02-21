@@ -72,7 +72,7 @@ class ReconManager:
             hex_session = f.read()
             f.close()
 
-            session_key = binascii.unhexlify(hex_session.strip()).encode()
+            session_key = binascii.unhexlify(hex_session.strip())
             return session_key
 
         # Generate temp RSA keys to encrypt session key
@@ -101,9 +101,8 @@ class ReconManager:
             session_key = cipher_rsa.decrypt(enc_session_key)
 
             print("[*] Session Key: %s" % binascii.hexlify(session_key).decode())
-            f = open("session", "w")
-            f.write(binascii.hexlify(session_key).decode())
-            f.close()
+            with open(os.open('session', os.O_CREAT | os.O_WRONLY, 0o777), 'w') as fh:
+                fh.write(binascii.hexlify(session_key).decode())
 
         return session_key
 

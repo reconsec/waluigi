@@ -4,6 +4,7 @@ import argparse
 import threading
 import time
 import sys
+from threading import Event
 
 local_extender_port = 33333
 
@@ -631,6 +632,9 @@ def main(args):
                 print("[*] Connection done. Retrying in 30 seconds")
                 time.sleep(30) # Stop scan scheduler thread
                 continue
+            else:
+                print(traceback.format_exc())
+
             break
 
         if scan_thread:

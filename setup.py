@@ -22,8 +22,7 @@ setup(name='waluigi',
       install_requires=[
 
           'luigi',
-          'pycryptodomex',
-          'pyshot'
+          'pycryptodomex'
 
       ],
 

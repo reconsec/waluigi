@@ -61,7 +61,7 @@ class ReconManager:
 
                 # Attempting to decrypt from the session key on disk
                 session_key = self._get_session_key_from_disk()
-                if session_key:
+                if session_key and session_key != self.session_key:
                     cipher_aes = AES.new(session_key, AES.MODE_EAX, nonce)
                     try:
                         data = cipher_aes.decrypt_and_verify(ciphertext, tag).decode()

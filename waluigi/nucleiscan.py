@@ -184,14 +184,6 @@ class NucleiScan(luigi.Task):
             for command_args in command_list:
                 executor.submit(subprocess.run, command_args, shell=use_shell)
 
-        # # Remove temp dir
-        # try:
-        #     dir_path = os.path.dirname(nuclei_input_file.path)
-        #     shutil.rmtree(dir_path)
-        # except Exception as e:
-        #     print("[-] Error deleting input directory: %s" % str(e))
-        #     pass
-
         # Path to scan outputs log
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep
@@ -253,10 +245,3 @@ class ParseNucleiOutput(luigi.Task):
             ret_val = self.recon_manager.import_ports(port_arr)
 
             print("[+] Imported nuclei scans to manager.")
-
-        # Remove temp dir
-        #try:
-        #    shutil.rmtree(nuclei_output_file.path)
-        #except Exception as e:
-        #    print("[-] Error deleting output directory: %s" % str(e))
-        #    pass

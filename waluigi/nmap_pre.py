@@ -8,6 +8,7 @@ import requests
 import luigi
 import glob
 import traceback
+import shutil
 
 from luigi.util import inherits
 from datetime import date
@@ -35,7 +36,7 @@ class NmapPreScope(luigi.ExternalTask):
 
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-inputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nmap-pre-inputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -285,8 +286,14 @@ class ParseNmapPreOutput(luigi.Task):
                 nmap_report = NmapParser.parse_fromfile(nmap_out)
             except Exception as e:
                 print("[-] Failed parsing nmap output: %s" % nmap_out)
-                print(traceback.format_exc())
-                continue
+                print("[-] Deleting nmap output directory and throwing failure to rescan.")
+                
+                try:
+                    shutil.rmtree(nmap_output_file.path)
+                except Exception as e:
+                    pass
+
+                raise
 
             # Loop through hosts
             port_arr = []

@@ -65,13 +65,15 @@ class NmapScope(luigi.ExternalTask):
                 if len(host.ports) > 0:
 
                     for port in host.ports:
-                        port = str(port.port)    
+                        port_str = str(port.port)    
 
                         # Skip any possible load balanced ports that haven't already been marked as http from pre scan
-                        if (port == '80' or port == '443' or port == '8080' or port == '8443') and 'http' not in port.service:
-                            continue
+                        if port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443':
 
-                        port_list.append(port)
+                            if port.service == None or 'http' not in port.service:
+                                continue
+
+                        port_list.append(port_str)
 
                 elif len(port_arr) > 0:
                     port_list.extend(port_arr)

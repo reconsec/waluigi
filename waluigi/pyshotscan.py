@@ -211,49 +211,46 @@ class ParsePyshotOutput(luigi.Task):
         #print("[*] Converted screenshot image files.")
         # Read meta data file
         meta_file = '%s%s%s' % (pyshot_output_dir, os.path.sep, 'screenshots.meta' )
-        f = open(meta_file, 'r')
-        lines = f.readlines()
-        f.close()
+        if os.path.exists(meta_file):
 
-        count = 0
-        for line in lines:
+            f = open(meta_file, 'r')
+            lines = f.readlines()
+            f.close()
 
-            screenshot_meta = json.loads(line)
-            filename = screenshot_meta['file']
-            if exists(filename):
-                url = screenshot_meta['url']
-                port_id = screenshot_meta['port_id']
-                host_hdr = screenshot_meta['host_header']
+            count = 0
+            for line in lines:
 
-                # If the host header made the difference then replace it in the url
-                if host_hdr and len(host_hdr) > 0:
-                    u = urlparse(url)
-                    host = u.netloc
-                    port = ''
-                    if ":" in host:
-                        host_arr = host.split(":")
-                        port = ":" + host_arr[1]
+                screenshot_meta = json.loads(line)
+                filename = screenshot_meta['file']
+                if exists(filename):
+                    url = screenshot_meta['url']
+                    port_id = screenshot_meta['port_id']
+                    host_hdr = screenshot_meta['host_header']
 
-                    res = ParseResult(scheme=u.scheme, netloc=host_hdr + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
-                    url = res.geturl()
+                    # If the host header made the difference then replace it in the url
+                    if host_hdr and len(host_hdr) > 0:
+                        u = urlparse(url)
+                        host = u.netloc
+                        port = ''
+                        if ":" in host:
+                            host_arr = host.split(":")
+                            port = ":" + host_arr[1]
 
-                image_data = b""
-                hash_alg=hashlib.sha1
-                with open(filename, "rb") as rf:
-                    image_data = rf.read()
-                    hashobj = hash_alg()
-                    hashobj.update(image_data)
-                    image_hash = hashobj.digest()
-                    image_hash_str = binascii.hexlify(image_hash).decode()
+                        res = ParseResult(scheme=u.scheme, netloc=host_hdr + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
+                        url = res.geturl()
 
-                ret_val = self.recon_manager.import_screenshot(port_id, url, image_data, image_hash_str)
-                count += 1
+                    image_data = b""
+                    hash_alg=hashlib.sha1
+                    with open(filename, "rb") as rf:
+                        image_data = rf.read()
+                        hashobj = hash_alg()
+                        hashobj.update(image_data)
+                        image_hash = hashobj.digest()
+                        image_hash_str = binascii.hexlify(image_hash).decode()
 
-        print("[+] Imported %d screenshots to manager." % (count))
+                    ret_val = self.recon_manager.import_screenshot(port_id, url, image_data, image_hash_str)
+                    count += 1
 
-        # Remove temp dir - not until the end of everything - Consider added input directories of all into another file
-        #try:
-        #    shutil.rmtree(pyshot_output_dir)
-        #except Exception as e:
-        #    print("[-] Error deleting output directory: %s" % str(e))
-        #    pass
+            print("[+] Imported %d screenshots to manager." % (count))
+
+

@@ -161,7 +161,7 @@ class ScheduledScanThread(threading.Thread):
             # Execute nmap
             ret = scan_pipeline.nmap_pre_scan(scan_id, self.recon_manager)
             if not ret:
-                print("[-] Masscan Failed")
+                print("[-] Nmap Prescan Failed")
                 ret_val = False
 
         finally:
@@ -230,7 +230,7 @@ class ScheduledScanThread(threading.Thread):
             # Execute nmap
             ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager)
             if not ret:
-                print("[-] Masscan Failed")
+                print("[-] Nmap Failed")
                 ret_val = False
 
         finally:
@@ -360,7 +360,7 @@ class ScheduledScanThread(threading.Thread):
             # Execute pyshot
             ret = scan_pipeline.pyshot_scan(scan_id, self.recon_manager)
             if not ret:
-                print("[-] Masscan Failed")
+                print("[-] Pyshot Failed")
                 ret_val = False
 
         finally:
@@ -394,7 +394,7 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def nuclei_scan(self, scan_id):
+    def nuclei_scan(self, scan_id ):
 
         ret_val = True
 
@@ -421,11 +421,29 @@ class ScheduledScanThread(threading.Thread):
             # Sleep to ensure routing is setup
             time.sleep(3)
 
+
+        # Set nuclei path
+        #cve_template_path = nuclei_template_path + os.path.sep + "cves"
+        #vuln_template_path = nuclei_template_path + os.path.sep + "vulnerabilities"
+        #cnvd_template_path = nuclei_template_path + os.path.sep + "cnvd"
+        #def_logins_template_path = nuclei_template_path + os.path.sep + "default-logins"
+        #explosures_template_path = nuclei_template_path + os.path.sep + "explosures"
+        #exposed_panels_template_path = nuclei_template_path + os.path.sep + "exposed_panels"
+        #iot_path = nuclei_template_path + os.path.sep + "iot"
+
+        fingerprint_template_path = "technologies:fingerprinthub-web-fingerprints.yaml"
+        cves_template_path = "cves"
         try:
             # Execute nuclei
-            ret = scan_pipeline.nuclei_scan(scan_id, self.recon_manager)
+            ret = scan_pipeline.nuclei_scan(scan_id, fingerprint_template_path, self.recon_manager)
             if not ret:
-                print("[-] Masscan Failed")
+                print("[-] Nuclei Scan Failed")
+                ret_val = False
+
+            # Execute nuclei
+            ret = scan_pipeline.nuclei_scan(scan_id, cves_template_path, self.recon_manager)
+            if not ret:
+                print("[-] Nuclei Scan Failed")
                 ret_val = False
 
         finally:
@@ -447,14 +465,22 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Import nuclei results
-            ret = scan_pipeline.parse_nuclei(scan_id, self.recon_manager)
+            ret = scan_pipeline.parse_nuclei(scan_id, nuclei_template_path, self.recon_manager)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
+
+            # Import nuclei results
+            ret = scan_pipeline.parse_nuclei(scan_id, cves_template_path, self.recon_manager)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+
         finally:
             if self.connection_manager:
                 # Free the lock
                 self.connection_manager.free_connection_lock(lock_val)
+    
 
         return ret_val
 
@@ -525,7 +551,6 @@ class ScheduledScanThread(threading.Thread):
             # Execute nuclei
             ret = self.nuclei_scan(scan_id)
             if not ret:
-                print("[-] Nuclei scan Failed")
                 return
 
         # Cleanup files

@@ -31,7 +31,7 @@ class CrobatScope(luigi.ExternalTask):
 
          # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "dns-inputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "crobat-inputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -207,7 +207,7 @@ class CrobatDNS(luigi.Task):
 
         # Get screenshot directory
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "crobat-dns-" + self.scan_id
+        dir_path = cwd + os.path.sep + "crobat-outputs-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)

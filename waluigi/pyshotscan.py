@@ -71,9 +71,12 @@ class PyshotScope(luigi.ExternalTask):
                     # Loop through domains
                     domain_str = ''
                     if host.domains and len(host.domains) > 0:
-                        domains = []
+                        domains = set()
                         for domain in host.domains[:20]:
-                            domains.append(domain.name)
+
+                            # Remove any wildcards
+                            domain_str = domain.name.lstrip("*.")
+                            domains.add(domain_str)
 
                         if len(domains) > 0:
                             domain_str = ",".join(domains)

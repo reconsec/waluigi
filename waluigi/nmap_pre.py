@@ -343,7 +343,7 @@ class ParseNmapPreOutput(luigi.Task):
 
                                 if len(domains) > 0:
                                     port_obj['domains'] = domains
-                                    print(domains)
+                                    #print(domains)
                                     
                             elif 'http' in script_id and (port_int == 80 or port_int == 443 or port_int == 8443 or port_int == 8080):
                                 # Set to http

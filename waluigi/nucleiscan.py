@@ -188,7 +188,9 @@ class NucleiScan(luigi.Task):
             command = [
                 "nuclei",
                 "-silent",
-                "-json",
+                "-json",                
+                "-duc",
+                "-ni",
                 "-l",
                 in_file.strip(),
                 "-o",

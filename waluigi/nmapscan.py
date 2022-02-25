@@ -8,6 +8,8 @@ import requests
 import luigi
 import glob
 import traceback
+import hashlib
+import binascii
 
 from luigi.util import inherits
 from datetime import date
@@ -15,10 +17,8 @@ from libnmap.parser import NmapParser
 from urllib.parse import urlparse
 from waluigi import recon_manager
 from multiprocessing.pool import ThreadPool
-from tqdm import tqdm
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
-
 
 class NmapScope(luigi.ExternalTask):
 
@@ -26,6 +26,7 @@ class NmapScope(luigi.ExternalTask):
     token = luigi.Parameter(default=None)
     manager_url = luigi.Parameter(default=None)
     recon_manager = luigi.Parameter(default=None)
+    skip_load_balance_ports = luigi.Parameter(default=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -37,6 +38,9 @@ class NmapScope(luigi.ExternalTask):
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nmap-inputs-" + self.scan_id
+        if self.skip_load_balance_ports == True:
+            dir_path += "-load-balanced"
+
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -68,10 +72,10 @@ class NmapScope(luigi.ExternalTask):
                         port_str = str(port.port)    
 
                         # Skip any possible load balanced ports that haven't already been marked as http from pre scan
-                        if port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443':
-
-                            if port.service == None or 'http' not in port.service:
-                                continue
+                        if self.skip_load_balance_ports:
+                            if port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443':
+                                if port.service == None or 'http' not in port.service:
+                                    continue
 
                         port_list.append(port_str)
 
@@ -190,23 +194,39 @@ class NmapScope(luigi.ExternalTask):
 @inherits(NmapScope)
 class NmapScan(luigi.Task):
 
+    script_args_arr = luigi.Parameter()
+
     def requires(self):
         # Requires the target scope
-        return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager, skip_load_balance_ports=self.skip_load_balance_ports)
 
     def output(self):
 
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
+
+        # If script_args then hash and create unique output dir
+        if self.script_args_arr and len(self.script_args_arr) > 0:
+            script_str = "".join(self.script_args_arr).encode()
+            # Hash it
+            hash_alg=hashlib.sha1
+            hashobj = hash_alg()
+            hashobj.update(script_str)
+            args_hash = hashobj.digest()
+
+            args_hash_str = binascii.hexlify(args_hash).decode()
+            dir_path += "-" + args_hash_str
+
         return luigi.LocalTarget(dir_path)
 
     def run(self):
 
         # Read masscan input files
-        nmap_input_file = self.input()
+        nmap_input_file = self.input()                
+        print("[*] Input file: %s" % nmap_input_file.path)
+
         f = nmap_input_file.open()
         input_file_paths = f.readlines()
-        #print(input_file_paths)
         f.close()
 
         # Ensure output folder exists
@@ -241,8 +261,6 @@ class NmapScan(luigi.Task):
                 "2m",
                 "--script-args",
                 'http.useragent="%s"' % custom_user_agent,
-                "-sV",
-                "-sC",
                 "-sT",
                 "-p",
                 port,
@@ -253,6 +271,10 @@ class NmapScan(luigi.Task):
             ]
 
             command.extend(command_arr)
+
+            # Add script args
+            if self.script_args_arr and len(self.script_args_arr) > 0:
+                command.extend(self.script_args_arr)
 
             #print(command)
             commands.append(command)
@@ -282,7 +304,7 @@ class ParseNmapOutput(luigi.Task):
 
     def requires(self):
         # Requires MassScan Task to be run prior
-        return NmapScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return NmapScan(scan_id=self.scan_id, script_args_arr=self.script_args_arr, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def run(self):
 
@@ -315,18 +337,26 @@ class ParseNmapOutput(luigi.Task):
                 # Loop through ports
                 for port in host.get_open_ports():
 
-                    port_num = str(port[0])
-                    port_id = port[1] + "." + port_num
-                    svc = host.get_service_byid(port_id)
+                    port_str = str(port[0])
+                    port_id = port[1] + "." + port_str
 
-                    banner_str = svc.banner
-                    svc_proto = svc.service.strip()
-
+                    # Greate basic port object
                     port_obj = { 'scan_id' : self.scan_id,
-                                 'port' : port_num,
+                                 'port' : port_str,
                                  'ipv4_addr' : ip_addr_int,
-                                 'banner' : banner_str,
-                                 'service' : svc_proto}
+                                 'secure' : 0}
+
+                    # Get service details if present
+                    svc = host.get_service_byid(port_id)
+                    if svc:
+
+                        if svc.banner:
+                            port_obj['banner'] = svc.banner
+
+                        if svc.service:
+                            svc_proto = svc.service.strip()
+                            port_obj['service'] = svc_proto
+
 
                     script_res = svc.scripts_results
                     if len(script_res) == 0:
@@ -338,6 +368,37 @@ class ParseNmapOutput(luigi.Task):
                     else:
                         script_res_json = json.dumps(script_res)
                         port_obj['nmap_script_results'] = script_res_json
+
+                        # Add domains in certificate to port if SSL
+                        for script in script_res:
+
+                            script_id = script['id']
+                            port_int = int(port_str)
+                            if script_id == 'ssl-cert':
+
+                                port_obj['secure'] = 1
+                                output = script['output']
+                                lines = output.split("\n")
+                                domains = []
+                                for line in lines:
+
+                                    if "Subject Alternative Name:" in line:
+
+                                        line = line.replace("Subject Alternative Name:","")
+                                        line_arr = line.split(",")
+                                        for dns_entry in line_arr:
+                                            if "DNS" in dns_entry:
+                                                dns_stripped = dns_entry.replace("DNS:","").strip()
+                                                domain_id = None
+                                                domains.append(dns_stripped)
+
+                                if len(domains) > 0:
+                                    port_obj['domains'] = domains
+                                    #print(domains)
+                                    
+                            elif 'http' in script_id and (port_int == 80 or port_int == 443 or port_int == 8443 or port_int == 8080):
+                                # Set to http
+                                port_obj['service'] = 'http'
 
                     # Add to list
                     port_arr.append(port_obj)

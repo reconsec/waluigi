@@ -343,29 +343,16 @@ class ParseNmapOutput(luigi.Task):
                     # Greate basic port object
                     port_obj = { 'scan_id' : self.scan_id,
                                  'port' : port_str,
-                                 'ipv4_addr' : ip_addr_int,
-                                 'secure' : 0}
+                                 'ipv4_addr' : ip_addr_int }
 
                     # Get service details if present
                     svc = host.get_service_byid(port_id)
                     if svc:
 
-                        if svc.banner:
-                            port_obj['banner'] = svc.banner
+                        svc_dict = svc.service_dict
+                        port_obj['service'] = svc_dict
 
-                        if svc.service:
-                            svc_proto = svc.service.strip()
-                            port_obj['service'] = svc_proto
-
-
-                    script_res = svc.scripts_results
-                    if len(script_res) == 0:
-
-                        # If the service is supposed to HTTP and the results are empty then reset the svc value
-                        if 'http' in svc_proto:
-                            port_obj['service'] = ''
-
-                    else:
+                        script_res = svc.scripts_results
                         script_res_json = json.dumps(script_res)
                         port_obj['nmap_script_results'] = script_res_json
 
@@ -396,9 +383,9 @@ class ParseNmapOutput(luigi.Task):
                                     port_obj['domains'] = domains
                                     #print(domains)
                                     
-                            elif 'http' in script_id and (port_int == 80 or port_int == 443 or port_int == 8443 or port_int == 8080):
+                            #elif 'http' in script_id and (port_int == 80 or port_int == 443 or port_int == 8443 or port_int == 8080):
                                 # Set to http
-                                port_obj['service'] = 'http'
+                            #        port_obj['service'] = 'http'
 
                     # Add to list
                     port_arr.append(port_obj)

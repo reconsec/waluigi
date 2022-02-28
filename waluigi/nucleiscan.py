@@ -62,6 +62,11 @@ class NucleiScope(luigi.ExternalTask):
                 ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
                 for port_obj in host.ports:
 
+                    port_str = str(port_obj.port)
+                    #Skip port 5985 - WinRS
+                    if port_str == 5985 and port_obj.service == 'wsman':
+                        continue
+
                     if 'http-' not in str(port_obj.nmap_script_results):
                         #print("[*] NMAP Results are empty so skipping.")
                         continue
@@ -76,9 +81,8 @@ class NucleiScope(luigi.ExternalTask):
 
                     endpoint_set = set()
                     port_id = str(port_obj.id)
-                    port = str(port_obj.port)
 
-                    endpoint = prefix + ip_addr + ":" + port
+                    endpoint = prefix + ip_addr + ":" + port_str
                     # print("[*] Endpoint: %s" % endpoint)
 
                     if endpoint not in total_endpoint_set:
@@ -91,7 +95,7 @@ class NucleiScope(luigi.ExternalTask):
                         # Remove any wildcards
                         domain_str = domain.name.lstrip("*.")
 
-                        endpoint = prefix + domain_str + ":" + port
+                        endpoint = prefix + domain_str + ":" + port_str
                         # print("[*] Endpoint: %s" % endpoint)
                         if endpoint not in total_endpoint_set:
                             endpoint_set.add(endpoint)

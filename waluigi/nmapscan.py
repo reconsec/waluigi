@@ -349,6 +349,9 @@ class ParseNmapOutput(luigi.Task):
                     svc = host.get_service_byid(port_id)
                     if svc:
 
+                        if svc.banner and len(svc.banner) > 0:`                            
+                            port_obj['banner'] = svc.banner
+
                         svc_dict = svc.service_dict
                         port_obj['service'] = svc_dict
 
@@ -383,9 +386,6 @@ class ParseNmapOutput(luigi.Task):
                                     port_obj['domains'] = domains
                                     #print(domains)
                                     
-                            #elif 'http' in script_id and (port_int == 80 or port_int == 443 or port_int == 8443 or port_int == 8080):
-                                # Set to http
-                            #        port_obj['service'] = 'http'
 
                     # Add to list
                     port_arr.append(port_obj)

@@ -67,7 +67,7 @@ class NucleiScope(luigi.ExternalTask):
                     if port_str == 5985 and port_obj.service == 'wsman':
                         continue
 
-                    if 'http-' not in str(port_obj.nmap_script_results):
+                    if 'http' not in str(port_obj.service):
                         #print("[*] NMAP Results are empty so skipping.")
                         continue
 

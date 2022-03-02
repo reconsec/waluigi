@@ -58,8 +58,8 @@ class PyshotScope(luigi.ExternalTask):
                 ip_str = str(netaddr.IPAddress(host.ipv4_addr))
                 for port_obj in host.ports:
 
-                    # Check if nmap scan results have http results
-                    if 'http-' not in str(port_obj.nmap_script_results):
+                    # Check if nmap service is http
+                    if 'http' not in str(port_obj.service):
                         # print("[*] NMAP Results are empty so skipping.")
                         continue
 

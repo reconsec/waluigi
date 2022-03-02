@@ -349,7 +349,7 @@ class ParseNmapOutput(luigi.Task):
                     svc = host.get_service_byid(port_id)
                     if svc:
 
-                        if svc.banner and len(svc.banner) > 0:`                            
+                        if svc.banner and len(svc.banner) > 0:                          
                             port_obj['banner'] = svc.banner
 
                         svc_dict = svc.service_dict

@@ -233,6 +233,18 @@ class ParseNucleiOutput(luigi.Task):
         # Requires NucleiScan
         return NucleiScan(scan_id=self.scan_id, template_path=self.template_path, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
+    def output(self):
+
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep + "nuclei-outputs-" + self.scan_id
+        if not os.path.isdir(dir_path):
+            os.mkdir(dir_path)
+            os.chmod(dir_path, 0o777)
+
+        out_file = dir_path + os.path.sep + "nuclei_import_complete"
+
+        return luigi.LocalTarget(out_file)
+
     def run(self):
 
         nuclei_output_file = self.input()
@@ -271,3 +283,8 @@ class ParseNucleiOutput(luigi.Task):
             ret_val = self.recon_manager.import_ports(port_arr)
 
             print("[+] Imported nuclei scans to manager.")
+
+            # Write to output file
+            f = open(self.output().path, 'w')
+            f.write("complete")
+            f.close()

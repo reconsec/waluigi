@@ -285,6 +285,18 @@ class ParseShodanOutput(luigi.Task):
         # Requires MassScan Task to be run prior
         return ShodanScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
+    def output(self):
+
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep + "shodan-outputs-" + self.scan_id
+        if not os.path.isdir(dir_path):
+            os.mkdir(dir_path)
+            os.chmod(dir_path, 0o777)
+
+        out_file = dir_path + os.path.sep + "shodan_import_complete"
+
+        return luigi.LocalTarget(out_file)
+
     def run(self):
         
         port_arr = []
@@ -300,4 +312,9 @@ class ParseShodanOutput(luigi.Task):
                 #print(json_data)
                 print("Entries: %d" % len(json_data))
                 ret_val = self.recon_manager.import_shodan_data(self.scan_id, json_data)
+
+                # Write to output file
+                f = open(self.output().path, 'w')
+                f.write("complete")
+                f.close()
 

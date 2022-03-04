@@ -129,79 +129,11 @@ class ScheduledScanThread(threading.Thread):
                 self.connection_manager.free_connection_lock(lock_val)
 
         return ret_val
-
-    # def nmap_pre_scan(self, scan_id):
-
-    #     ret_val = True
-
-    #     # Check if scan is cancelled
-    #     if self.is_scan_cancelled(scan_id):
-    #         return
-
-    #     # Get scope for nmap
-    #     ret = scan_pipeline.nmap_pre_scope(scan_id, self.recon_manager)
-    #     if not ret:
-    #         print("[-] Failed")
-    #         return False
-
-    #     if self.connection_manager:
-    #         # Connect to synack target
-    #         con = self.connection_manager.connect_to_target()
-    #         if not con:
-    #             print("[-] Failed connecting to target")
-    #             return False
-
-    #         # Obtain the lock before we start a scan
-    #         lock_val = self.connection_manager.get_connection_lock()
-
-    #         # Sleep to ensure routing is setup
-    #         time.sleep(3)
-
-    #     try:
-    #         # Execute nmap
-    #         ret = scan_pipeline.nmap_pre_scan(scan_id, self.recon_manager)
-    #         if not ret:
-    #             print("[-] Nmap Prescan Failed")
-    #             ret_val = False
-
-    #     finally:
-    #         if self.connection_manager:
-    #             # Release the lock after scan
-    #             self.connection_manager.free_connection_lock(lock_val)
-    #         if not ret_val:
-    #             return ret_val
-
-    #     if self.connection_manager:
-    #         # Connect to extender for import
-    #         lock_val = self.connection_manager.connect_to_extender()
-    #         if not lock_val:
-    #             print("[-] Failed connecting to extender")
-    #             return False
-
-    #         # Sleep to ensure routing is setup
-    #         time.sleep(3)
-
-    #     try:
-    #         # Import nmap results
-    #         ret = scan_pipeline.parse_nmap_pre(scan_id, self.recon_manager)
-    #         if not ret:
-    #             print("[-] Failed")
-    #             ret_val = False
-    #     finally:
-    #         if self.connection_manager:
-    #             # Free the lock
-    #             self.connection_manager.free_connection_lock(lock_val)
-
-    #     return ret_val
+    
 
     def nmap_scan(self, scan_id):
 
         ret_val = True
-
-        # # Run prescan first        
-        # ret_val = self.nmap_pre_scan(scan_id)
-        # if ret_val == False:
-        #     return False
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_id):
@@ -210,8 +142,8 @@ class ScheduledScanThread(threading.Thread):
         # Prune all 80,443,8080,8443 that are not service http
 
         # Get scope for nmap
-        ssl_http_scripts = ["--script", "ssl-cert,http-methods,http-title,http-headers"]
-        version_args = ["-sV"]
+        ssl_http_scripts = ["--script", "ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
+        version_args = ["-sV","-n"]
 
         ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager)
         if not ret:

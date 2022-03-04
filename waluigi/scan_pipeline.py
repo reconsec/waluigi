@@ -53,27 +53,6 @@ def parse_nmap(scan_id, recon_manager, script_args_arr=None, ):
         return False
     return True
 
-# def nmap_pre_scope(scan_id, recon_manager):
-#     luigi_run_result = luigi.build([nmap_pre.NmapPreScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
-#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-#         return False
-#     return True
-
-
-# def nmap_pre_scan(scan_id, recon_manager):
-#     luigi_run_result = luigi.build([nmap_pre.NmapPreScan(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
-#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-#         return False
-#     return True
-
-
-# def parse_nmap_pre(scan_id, recon_manager):
-#     luigi_run_result = luigi.build([nmap_pre.ParseNmapPreOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
-#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-#         return False
-#     return True
-
-
 def dns_scope(scan_id, recon_manager):
     luigi_run_result = luigi.build([crobatdns.CrobatScope(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:

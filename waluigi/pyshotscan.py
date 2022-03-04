@@ -125,7 +125,7 @@ class PyshotScan(luigi.Task):
 
         # Get screenshot directory
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "screenshots-" + self.scan_id
+        dir_path = cwd + os.path.sep + "pyshot-outputs-" + self.scan_id
         return luigi.LocalTarget(dir_path)
 
     def run(self):
@@ -178,13 +178,6 @@ class PyshotScan(luigi.Task):
         for thread_obj in tqdm(thread_list):
             output = thread_obj.get()
 
-        # Remove temp dir
-        #try:
-        #    shutil.rmtree(os.path.dirname(pyshot_input_file.path))
-        #except Exception as e:
-        #    print("[-] Error deleting output directory: %s" % str(e))
-        #    pass
-
         # Path to scan outputs log
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep
@@ -206,6 +199,18 @@ class ParsePyshotOutput(luigi.Task):
     def requires(self):
         # Requires PyshotScan Task to be run prior
         return PyshotScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+
+    def output(self):
+
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep + "pyshot-outputs-" + self.scan_id
+        if not os.path.isdir(dir_path):
+            os.mkdir(dir_path)
+            os.chmod(dir_path, 0o777)
+
+        out_file = dir_path + os.path.sep + "pyshot_import_complete"
+
+        return luigi.LocalTarget(out_file)
 
     def run(self):
 
@@ -255,5 +260,11 @@ class ParsePyshotOutput(luigi.Task):
                     count += 1
 
             print("[+] Imported %d screenshots to manager." % (count))
+
+            # Write to output file
+            f = open(self.output().path, 'w')
+            f.write("complete")
+            f.close()
+
 
 

@@ -306,6 +306,29 @@ class ParseNmapOutput(luigi.Task):
         # Requires MassScan Task to be run prior
         return NmapScan(scan_id=self.scan_id, script_args_arr=self.script_args_arr, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
+    def output(self):
+
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
+        if not os.path.isdir(dir_path):
+            os.mkdir(dir_path)
+            os.chmod(dir_path, 0o777)
+
+        # If script_args then hash and create unique output dir
+        if self.script_args_arr and len(self.script_args_arr) > 0:
+            script_str = "".join(self.script_args_arr).encode()
+            # Hash it
+            hash_alg=hashlib.sha1
+            hashobj = hash_alg()
+            hashobj.update(script_str)
+            args_hash = hashobj.digest()
+
+            args_hash_str = binascii.hexlify(args_hash).decode()
+
+        out_file = dir_path + os.path.sep + "nmap_import_" + args_hash_str +"_complete"
+
+        return luigi.LocalTarget(out_file)
+
     def run(self):
 
         nmap_output_file = self.input()
@@ -353,38 +376,51 @@ class ParseNmapOutput(luigi.Task):
                             port_obj['banner'] = svc.banner
 
                         svc_dict = svc.service_dict
-                        port_obj['service'] = svc_dict
 
                         script_res = svc.scripts_results
-                        script_res_json = json.dumps(script_res)
-                        port_obj['nmap_script_results'] = script_res_json
+                        if len(script_res) > 0:
+                            #script_res_json = json.dumps(script_res)
+                            #port_obj['nmap_script_results'] = script_res_json
 
-                        # Add domains in certificate to port if SSL
-                        for script in script_res:
+                            # Add domains in certificate to port if SSL
+                            script_arr = []
+                            for script in script_res:
 
-                            script_id = script['id']
-                            port_int = int(port_str)
-                            if script_id == 'ssl-cert':
+                                script_id = script['id']
+                                port_int = int(port_str)
+                                if script_id == 'ssl-cert':
 
-                                port_obj['secure'] = 1
-                                output = script['output']
-                                lines = output.split("\n")
-                                domains = []
-                                for line in lines:
+                                    port_obj['secure'] = 1
+                                    output = script['output']
+                                    lines = output.split("\n")
+                                    domains = []
+                                    for line in lines:
 
-                                    if "Subject Alternative Name:" in line:
+                                        if "Subject Alternative Name:" in line:
 
-                                        line = line.replace("Subject Alternative Name:","")
-                                        line_arr = line.split(",")
-                                        for dns_entry in line_arr:
-                                            if "DNS" in dns_entry:
-                                                dns_stripped = dns_entry.replace("DNS:","").strip()
-                                                domain_id = None
-                                                domains.append(dns_stripped)
+                                            line = line.replace("Subject Alternative Name:","")
+                                            line_arr = line.split(",")
+                                            for dns_entry in line_arr:
+                                                if "DNS" in dns_entry:
+                                                    dns_stripped = dns_entry.replace("DNS:","").strip()
+                                                    domain_id = None
+                                                    domains.append(dns_stripped)
 
-                                if len(domains) > 0:
-                                    port_obj['domains'] = domains
-                                    #print(domains)
+                                    if len(domains) > 0:
+                                        port_obj['domains'] = domains
+                                        #print(domains)
+                                elif 'http' in script_id:
+                                    script_arr.append(script)
+                                    # Set to http
+                                    if 'name' in svc_dict:
+                                        svc_dict['name'] = 'http'
+
+                            # Add the output of the script results we care about
+                            if len(script_arr) > 0:
+                                port_obj['nmap_script_results'] = script_arr
+
+                        # Set the service dictionary
+                        port_obj['service'] = svc_dict
                                     
 
                     # Add to list
@@ -396,6 +432,11 @@ class ParseNmapOutput(luigi.Task):
 
                 # Import the ports to the manager
                 ret_val = self.recon_manager.import_ports(port_arr)
+
+                # Write to output file
+                f = open(self.output().path, 'w')
+                f.write("complete")
+                f.close()
 
         print("[+] Updated ports database with Nmap results.")
 

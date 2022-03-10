@@ -5,7 +5,6 @@ import sys
 from waluigi import pyshotscan
 from waluigi import masscan
 from waluigi import nmapscan
-from waluigi import nmap_pre
 from waluigi import nucleiscan
 from waluigi import crobatdns
 from waluigi import scancleanup

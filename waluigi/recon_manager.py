@@ -131,7 +131,7 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
     
 
-    def nmap_scan(self, scan_id):
+    def nmap_scan(self, scan_id, module_list=None, script_args=None, skip_load_balance_ports=False):
 
         ret_val = True
 
@@ -139,13 +139,7 @@ class ScheduledScanThread(threading.Thread):
         if self.is_scan_cancelled(scan_id):
             return
 
-        # Prune all 80,443,8080,8443 that are not service http
-
-        # Get scope for nmap
-        ssl_http_scripts = ["--script", "ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
-        version_args = ["-sV","-n"]
-
-        ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager)
+        ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager, module_list, script_args, skip_load_balance_ports)
         if not ret:
             print("[-] Failed")
             return False
@@ -166,7 +160,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Execute nmap
-            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager, ssl_http_scripts)
+            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager, script_args, skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Failed")
                 ret_val = False
@@ -191,7 +185,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Import nmap results
-            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager, ssl_http_scripts)
+            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager, script_args)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -201,49 +195,19 @@ class ScheduledScanThread(threading.Thread):
                 # Free the lock
                 self.connection_manager.free_connection_lock(lock_val)
 
+        return ret_val
+
+
+    def module_scan(self, scan_id):
+
+        ret_val = True
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_id):
             return
 
-
-        # Skip load balanced ports
-        skip_load_balance_ports = self.recon_manager.is_load_balanced()
-
-        ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager, skip_load_balance_ports)
-        if not ret:
-            print("[-] Failed")
-            return False
-
         if self.connection_manager:
-            # Connect to synack target
-            con = self.connection_manager.connect_to_target()
-            if not con:
-                print("[-] Failed connecting to target")
-                return False
 
-            # Obtain the lock before we start a scan
-            lock_val = self.connection_manager.get_connection_lock()
-
-            # Sleep to ensure routing is setup
-            time.sleep(3)
-
-        try:
-
-            # Execute nmap
-            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager, version_args, skip_load_balance_ports)
-            if not ret:
-                print("[-] Nmap Failed")
-                ret_val = False
-
-        finally:
-            if self.connection_manager:
-                # Release the lock after scan
-                self.connection_manager.free_connection_lock(lock_val)
-            if not ret_val:
-                return ret_val
-
-        if self.connection_manager:
             # Connect to extender for import
             lock_val = self.connection_manager.connect_to_extender()
             if not lock_val:
@@ -253,18 +217,41 @@ class ScheduledScanThread(threading.Thread):
             # Sleep to ensure routing is setup
             time.sleep(3)
 
+        # Get modules for this scan
         try:
-
-            # Import nmap results
-            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager, version_args)
-            if not ret:
-                print("[-] Failed")
-                ret_val = False
+            modules = self.recon_manager.get_modules(scan_id)
 
         finally:
+            # Release lock
             if self.connection_manager:
                 # Free the lock
                 self.connection_manager.free_connection_lock(lock_val)
+
+
+        args_list = []
+        tool_module_dict = {}
+        for module in modules:
+            tool_name = module['tool']
+            module_list = []
+            if tool_name in tool_module_dict:
+                module_list = tool_module_dict[tool_name]
+            else:
+                tool_module_dict[tool_name] = module_list
+
+            module_list.append(module)
+
+        # Iterate over tool list
+        for tool_name in tool_module_dict:
+            module_list = tool_module_dict[tool_name]
+            if tool_name == 'nmap':
+
+                # Execute nmap
+                ret = self.nmap_scan(scan_id, module_list=module_list)
+                if not ret:
+                    print("[-] Nmap Module Scan Failed")
+                    return
+
+        
 
         return ret_val
 
@@ -539,10 +526,22 @@ class ScheduledScanThread(threading.Thread):
                 return
 
         if sched_scan_obj.nmap_scan_flag == 1:
+
+
+            ssl_http_scripts = ["--script", "ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
+            version_args = ["-sV","-n"]
+
             # Execute nmap
-            ret = self.nmap_scan(scan_id)
+            ret = self.nmap_scan(scan_id, script_args=ssl_http_scripts)
             if not ret:
-                print("[-] Nmap Failed")
+                print("[-] Nmap Intial Scan Failed")
+                return
+
+            skip_load_balance_ports = self.recon_manager.is_load_balanced()
+            # Execute nmap
+            ret = self.nmap_scan(scan_id, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
+            if not ret:
+                print("[-] Nmap Service Scan Failed")
                 return
 
         if sched_scan_obj.pyshot_scan_flag == 1:
@@ -556,6 +555,14 @@ class ScheduledScanThread(threading.Thread):
             # Execute nuclei
             ret = self.nuclei_scan(scan_id)
             if not ret:
+                print("[-] Nuclei Scan Failed")
+                return
+
+        if sched_scan_obj.module_scan_flag == 1:
+            # Execute pyshot
+            ret = self.module_scan(scan_id)
+            if not ret:
+                print("[-] Module Scan Failed")
                 return
 
         # Cleanup files
@@ -844,6 +851,23 @@ class ReconManager:
             sched_scan_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
 
         return sched_scan_arr
+
+    def get_modules(self, scan_id):
+
+        module_arr = []
+        r = requests.get('%s/api/scan/%s/modules' % (self.manager_url,scan_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return module_arr
+        elif r.status_code != 200:
+            print("[-] Unknown Error")
+            return module_arr
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        if data:
+            module_arr = json.loads(data)
+
+        return module_arr
 
     def get_scheduled_scan(self, sched_scan_id):
 

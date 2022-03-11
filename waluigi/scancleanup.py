@@ -10,15 +10,16 @@ import traceback
 class ScanCleanup(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()
+    task_complete = False
 
-    def output(self):
+    def run(self):
 
         # Path to scan outputs log
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep
         all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
 
-        # Write output file to final input file for cleanup
+        # Delete all the files defined in the cleanup file
         if os.path.isfile(all_inputs_file):
             with open(all_inputs_file, "r") as rf:
                 lines = rf.readlines()
@@ -33,6 +34,11 @@ class ScanCleanup(luigi.ExternalTask):
 
             # Delete the file
             os.remove(all_inputs_file)
+
+        self.task_complete = True
+
+    def complete(self):
+        return self.task_complete
 
 
 

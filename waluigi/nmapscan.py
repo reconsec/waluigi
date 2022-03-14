@@ -23,6 +23,7 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 class NmapScope(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()
+    random_instance_id = luigi.Parameter()
     token = luigi.OptionalParameter(default=None)
     manager_url = luigi.OptionalParameter(default=None)
     recon_manager = luigi.OptionalParameter(default=None)
@@ -39,7 +40,7 @@ class NmapScope(luigi.ExternalTask):
 
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-inputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nmap-inputs-" + self.random_instance_id
         if self.skip_load_balance_ports == True:
             dir_path += "-load-balanced"
 
@@ -48,7 +49,7 @@ class NmapScope(luigi.ExternalTask):
             os.chmod(dir_path, 0o777)
 
         # Convert date to str
-        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + self.scan_id
+        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + self.random_instance_id
         if os.path.isfile(nmap_inputs_file):
             return luigi.LocalTarget(nmap_inputs_file)
 
@@ -196,7 +197,7 @@ class NmapScope(luigi.ExternalTask):
                 for port in port_target_map.keys():
 
                     scan_inst = {}
-                    in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (port, self.scan_id)
+                    in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (port, self.random_instance_id)
 
                     # Get port dict
                     port_dict = port_target_map[port]
@@ -229,7 +230,7 @@ class NmapScope(luigi.ExternalTask):
 
                 scan_inst = {}
                 port_list = []
-                in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, self.scan_id)
+                in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, self.random_instance_id)
 
                 script_args = module['args']
                 # Split on space as the script args are stored as strings not arrays
@@ -287,24 +288,12 @@ class NmapScan(luigi.Task):
 
     def requires(self):
         # Requires the target scope
-        return NmapScope(scan_id=self.scan_id, token=self.token, script_args_arr=self.script_args_arr, manager_url=self.manager_url, recon_manager=self.recon_manager, skip_load_balance_ports=self.skip_load_balance_ports)
+        return NmapScope(scan_id=self.scan_id, random_instance_id=self.random_instance_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager, skip_load_balance_ports=self.skip_load_balance_ports)
 
     def output(self):
 
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
-
-        # If script_args then hash and create unique output dir
-        if self.script_args_arr and len(self.script_args_arr) > 0:
-            script_str = "".join(self.script_args_arr).encode()
-            # Hash it
-            hash_alg=hashlib.sha1
-            hashobj = hash_alg()
-            hashobj.update(script_str)
-            args_hash = hashobj.digest()
-
-            args_hash_str = binascii.hexlify(args_hash).decode()
-            dir_path += "-" + args_hash_str
+        dir_path = cwd + os.path.sep + "nmap-outputs-" + self.random_instance_id
 
         return luigi.LocalTarget(dir_path)
 
@@ -340,7 +329,7 @@ class NmapScan(luigi.Task):
                 script_args = nmap_scan_arr['script-args']
 
             # Nmap command args
-            nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (counter, self.scan_id)
+            nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (counter, self.random_instance_id)
 
             # Add sudo if on linux based system
             command = []
@@ -404,34 +393,20 @@ class ParseNmapOutput(luigi.Task):
 
     def requires(self):
         # Requires MassScan Task to be run prior
-        return NmapScan(scan_id=self.scan_id, script_args_arr=self.script_args_arr, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return NmapScan(scan_id=self.scan_id, random_instance_id=self.random_instance_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
 
     def output(self):
 
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
-        args_hash_str = ''
-
-        # If script_args then hash and create unique output dir
-        if self.script_args_arr and len(self.script_args_arr) > 0:
-            script_str = "".join(self.script_args_arr).encode()
-            # Hash it
-            hash_alg=hashlib.sha1
-            hashobj = hash_alg()
-            hashobj.update(script_str)
-            args_hash = hashobj.digest()
-
-            args_hash_str = binascii.hexlify(args_hash).decode()
-            dir_path += "-" + args_hash_str
-
-        out_file = dir_path + os.path.sep + "nmap_import_" + args_hash_str +"_complete"
+        dir_path = cwd + os.path.sep + "nmap-outputs-" + self.random_instance_id
+        out_file = dir_path + os.path.sep + "nmap_import_" + self.random_instance_id +"_complete"
 
         return luigi.LocalTarget(out_file)
 
     def run(self):
 
         nmap_output_file = self.input()
-        glob_check = '%s%snmap_out*_%s' % (nmap_output_file.path, os.path.sep, self.scan_id)
+        glob_check = '%s%snmap_out*_%s' % (nmap_output_file.path, os.path.sep, self.random_instance_id)
         #print("Glob: %s" % glob_check)
         for nmap_out in glob.glob(glob_check):
 

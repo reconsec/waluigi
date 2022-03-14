@@ -13,6 +13,8 @@ import threading
 import time
 import traceback
 import os
+import string
+import random
 
 # User Agent
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -134,12 +136,13 @@ class ScheduledScanThread(threading.Thread):
     def nmap_scan(self, scan_id, module_list=None, script_args=None, skip_load_balance_ports=False):
 
         ret_val = True
+        random_instance_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k = 12))
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_id):
             return
 
-        ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager, module_list, script_args, skip_load_balance_ports)
+        ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager, random_instance_str, module_list, script_args, skip_load_balance_ports)
         if not ret:
             print("[-] Failed")
             return False
@@ -160,7 +163,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Execute nmap
-            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager, script_args, skip_load_balance_ports)
+            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager, random_instance_str, skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Failed")
                 ret_val = False
@@ -185,7 +188,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Import nmap results
-            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager, script_args)
+            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager, random_instance_str )
             if not ret:
                 print("[-] Failed")
                 ret_val = False

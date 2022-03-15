@@ -232,6 +232,7 @@ class NmapScope(luigi.ExternalTask):
                 port_list = []
                 in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, self.random_instance_id)
 
+                module_id = module['id']
                 script_args = module['args']
                 # Split on space as the script args are stored as strings not arrays
                 script_args_arr = script_args.split(" ")
@@ -252,6 +253,7 @@ class NmapScope(luigi.ExternalTask):
                 f.close()
  
                 # Create scan instance
+                scan_inst['module_id'] = module_id
                 scan_inst['port_list'] = port_list
                 scan_inst['ip_list_path'] = in_path
                 scan_inst['script-args'] = script_args_arr
@@ -294,8 +296,9 @@ class NmapScan(luigi.Task):
 
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nmap-outputs-" + self.random_instance_id
+        meta_file_path = dir_path + os.path.sep + "nmap_scans.meta"
 
-        return luigi.LocalTarget(dir_path)
+        return luigi.LocalTarget(meta_file_path)
 
     def run(self):
 
@@ -311,14 +314,19 @@ class NmapScan(luigi.Task):
         nmap_json_arr = json.loads(json_input)
 
         # Ensure output folder exists
-        dir_path = self.output().path
+        meta_file_path = self.output().path
+        dir_path = os.path.dirname(meta_file_path)
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
         commands = []
         counter = 0
+
+        nmap_scan_data = []
         for nmap_scan_arr in nmap_json_arr:
+
+            nmap_scan_inst = {}
 
             script_args = None
             port_list = nmap_scan_arr['port_list']
@@ -364,9 +372,22 @@ class NmapScan(luigi.Task):
             if script_args and len(script_args) > 0:
                 command.extend(script_args)
 
-            print(command)
+            # Add to meta data
+            nmap_scan_inst['nmap_command'] = command
+            nmap_scan_inst['output_file'] = nmap_output_xml_file
+            # Add module id if it exists
+            if 'module_id' in nmap_scan_arr:
+                nmap_scan_inst['module_id'] = nmap_scan_arr['module_id']
+            nmap_scan_data.append(nmap_scan_inst)
+
+            #print(command)
             commands.append(command)
             counter += 1
+
+        # Write out meta data file
+        f = open(meta_file_path, 'w')
+        f.write(json.dumps(nmap_scan_data))
+        f.close()
 
         # Run threaded
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -374,13 +395,28 @@ class NmapScan(luigi.Task):
 
         # Path to scan outputs log
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+        cur_path = cwd + os.path.sep
+        all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
 
         # Write output file to final input file for cleanup
         f = open(all_inputs_file, 'a')
-        f.write(self.output().path + '\n')
+        f.write(dir_path + '\n')
         f.close()
+
+
+def remove_dups_from_dict(dict_array):
+    ret_arr = []
+
+    script_set = set()
+    for script_json in dict_array:
+        script_entry = json.dumps(script_json)
+        script_set.add(script_entry)
+
+    for script_entry in script_set:
+        script_json = json.loads(script_entry)
+        ret_arr.append(script_json)
+
+    return ret_arr
 
 
 @inherits(NmapScan)
@@ -405,112 +441,126 @@ class ParseNmapOutput(luigi.Task):
 
     def run(self):
 
-        nmap_output_file = self.input()
-        glob_check = '%s%snmap_out*_%s' % (nmap_output_file.path, os.path.sep, self.random_instance_id)
-        #print("Glob: %s" % glob_check)
-        for nmap_out in glob.glob(glob_check):
+        meta_file = self.input().path
+        if os.path.exists(meta_file):
+            f = open(meta_file)
+            json_input = f.read()
+            f.close()
 
-            nmap_report = None
-            try:
-                nmap_report = NmapParser.parse_fromfile(nmap_out)
-            except Exception as e:
-                print("[-] Failed parsing nmap output: %s" % nmap_out)
-                print(traceback.format_exc())
-                
+            #load input file 
+            nmap_json_arr = json.loads(json_input)
+            for nmap_scan_entry in nmap_json_arr:
+
+                # For each file
+                nmap_out = nmap_scan_entry['output_file']                
+                nmap_report = None
                 try:
-                    shutil.rmtree(nmap_output_file.path)
+                    nmap_report = NmapParser.parse_fromfile(nmap_out)
                 except Exception as e:
-                    pass
+                    print("[-] Failed parsing nmap output: %s" % nmap_out)
+                    print(traceback.format_exc())
+                    
+                    try:
+                        shutil.rmtree(nmap_output_file.path)
+                    except Exception as e:
+                        pass
 
-                raise
+                    raise
 
-            # Loop through hosts
-            port_arr = []
-            for host in nmap_report.hosts:
+                # Loop through hosts
+                port_arr = []
+                for host in nmap_report.hosts:
 
-                host_ip = host.id
-                ip_addr_int = int(netaddr.IPAddress(host_ip))
+                    host_ip = host.id
+                    ip_addr_int = int(netaddr.IPAddress(host_ip))
 
-                # Loop through ports
-                for port in host.get_open_ports():
+                    # Loop through ports
+                    for port in host.get_open_ports():
 
-                    port_str = str(port[0])
-                    port_id = port[1] + "." + port_str
+                        port_str = str(port[0])
+                        port_id = port[1] + "." + port_str
 
-                    # Greate basic port object
-                    port_obj = { 'scan_id' : self.scan_id,
-                                 'port' : port_str,
-                                 'ipv4_addr' : ip_addr_int }
+                        # Greate basic port object
+                        port_obj = { 'scan_id' : self.scan_id,
+                                     'port' : port_str,
+                                     'ipv4_addr' : ip_addr_int }
 
-                    # Get service details if present
-                    svc = host.get_service_byid(port_id)
-                    if svc:
+                        # Get service details if present
+                        svc = host.get_service_byid(port_id)
+                        if svc:
 
-                        if svc.banner and len(svc.banner) > 0:                          
-                            port_obj['banner'] = svc.banner
+                            if svc.banner and len(svc.banner) > 0:                          
+                                port_obj['banner'] = svc.banner
 
-                        svc_dict = svc.service_dict
+                            # Set the service dictionary
+                            svc_dict = svc.service_dict
 
-                        script_res = svc.scripts_results
-                        if len(script_res) > 0:
-                            #script_res_json = json.dumps(script_res)
-                            #port_obj['nmap_script_results'] = script_res_json
+                            script_res_arr = svc.scripts_results
+                            if len(script_res_arr) > 0:
 
-                            # Add domains in certificate to port if SSL
-                            script_arr = []
-                            for script in script_res:
+                                # Remove dups
+                                script_res = remove_dups_from_dict(script_res_arr)
 
-                                script_id = script['id']
-                                port_int = int(port_str)
-                                if script_id == 'ssl-cert':
+                                # Add domains in certificate to port if SSL
+                                for script in script_res:
 
-                                    port_obj['secure'] = 1
-                                    output = script['output']
-                                    lines = output.split("\n")
-                                    domains = []
-                                    for line in lines:
+                                    script_id = script['id']
+                                    port_int = int(port_str)
+                                    if script_id == 'ssl-cert':
 
-                                        if "Subject Alternative Name:" in line:
+                                        port_obj['secure'] = 1
+                                        output = script['output']
+                                        lines = output.split("\n")
+                                        domains = []
+                                        for line in lines:
 
-                                            line = line.replace("Subject Alternative Name:","")
-                                            line_arr = line.split(",")
-                                            for dns_entry in line_arr:
-                                                if "DNS" in dns_entry:
-                                                    dns_stripped = dns_entry.replace("DNS:","").strip()
-                                                    domain_id = None
-                                                    domains.append(dns_stripped)
+                                            if "Subject Alternative Name:" in line:
 
-                                    if len(domains) > 0:
-                                        port_obj['domains'] = domains
-                                        #print(domains)
-                                elif 'http' in script_id:
-                                    script_arr.append(script)
-                                    # Set to http
-                                    if 'name' in svc_dict:
-                                        svc_dict['name'] = 'http'
+                                                line = line.replace("Subject Alternative Name:","")
+                                                line_arr = line.split(",")
+                                                for dns_entry in line_arr:
+                                                    if "DNS" in dns_entry:
+                                                        dns_stripped = dns_entry.replace("DNS:","").strip()
+                                                        domain_id = None
+                                                        domains.append(dns_stripped)
 
-                            # Add the output of the script results we care about
-                            if len(script_arr) > 0:
-                                port_obj['nmap_script_results'] = script_arr
+                                        if len(domains) > 0:
+                                            port_obj['domains'] = domains
+                                            #print(domains)
+                                    elif 'http' in script_id:
+                                        # Set to http if nmap detected http in a script
+                                        if 'name' in svc_dict:
+                                            svc_dict['name'] = 'http'
 
-                        # Set the service dictionary
-                        port_obj['service'] = svc_dict
-                                    
+                                # Add the output of the script results we care about
+                                script_dict = {'results' : script_res}
 
-                    # Add to list
-                    port_arr.append(port_obj)
+                                # Add module id if it exists
+                                if 'module_id' in nmap_scan_entry:
+                                    module_id = nmap_scan_entry['module_id']
+                                    script_dict['module_id'] = module_id
 
-            # Add the IP list
-            if len(port_arr) > 0:
-                #print(port_arr)
+                                port_obj['nmap_script_dict'] = script_dict
 
-                # Import the ports to the manager
-                ret_val = self.recon_manager.import_ports(port_arr)
 
-                # Write to output file
-                f = open(self.output().path, 'w')
-                f.write("complete")
-                f.close()
+                            # Set the service dictionary
+                            port_obj['service'] = svc_dict
+                                        
 
-        print("[+] Updated ports database with Nmap results.")
+                        # Add to list
+                        port_arr.append(port_obj)
+
+                # Add the IP list
+                if len(port_arr) > 0:
+                    #print(port_arr)
+
+                    # Import the ports to the manager
+                    ret_val = self.recon_manager.import_ports(port_arr)
+
+                    # Write to output file
+                    f = open(self.output().path, 'w')
+                    f.write("complete")
+                    f.close()
+
+            print("[+] Updated ports database with Nmap results.")
 

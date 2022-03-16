@@ -136,6 +136,8 @@ class ScheduledScanThread(threading.Thread):
     def nmap_scan(self, scan_id, module_list=None, script_args=None, skip_load_balance_ports=False):
 
         ret_val = True
+        #TODO figure out a way to identify a new scan is being run
+        random.seed(int(scan_id))
         random_instance_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k = 12))
 
         # Check if scan is cancelled

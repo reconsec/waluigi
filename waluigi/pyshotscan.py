@@ -59,7 +59,8 @@ class PyshotScope(luigi.ExternalTask):
                 for port_obj in host.ports:
 
                     # Check if nmap service is http
-                    if 'http' not in str(port_obj.service):
+                    print(port_obj)
+                    if port_obj.service_inst and 'http' not in str(port_obj.service_inst.name):
                         # print("[*] NMAP Results are empty so skipping.")
                         continue
 

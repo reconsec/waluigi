@@ -392,16 +392,21 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
         # Create the nmap script array
-        nmap_scan_arr = self.get_nmap_scan_arr(scan_id, module_list, script_args, skip_load_balance_ports)
-        print(nmap_scan_arr)
-        # Get a hash of the inputs
-        input_hash = hash_nmap_inputs(nmap_scan_arr)
-        print(input_hash)
+        try:
+            nmap_scan_arr = self.get_nmap_scan_arr(scan_id, module_list, script_args, skip_load_balance_ports)
+            #print(nmap_scan_arr)
+            # Get a hash of the inputs
+            input_hash = hash_nmap_inputs(nmap_scan_arr)
+            #print(input_hash)
 
-        ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager, nmap_scan_arr, input_hash)
-        if not ret:
-            print("[-] Failed")
-            return False
+            ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager, nmap_scan_arr, input_hash)
+            if not ret:
+                print("[-] Failed")
+                return False
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
 
         if self.connection_manager:
             # Connect to synack target

@@ -14,6 +14,7 @@ from luigi.util import inherits
 from tqdm import tqdm
 from waluigi import recon_manager
 from multiprocessing.pool import ThreadPool
+from waluigi import scan_utils
 
 
 class CrobatScope(luigi.ExternalTask):
@@ -78,15 +79,8 @@ class CrobatScope(luigi.ExternalTask):
         # Close output file
         f_inputs.close()
 
-        # Path to scan outputs log
-        cwd = os.getcwd()
-        cur_path = cwd + os.path.sep
-        all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
-
-        # Write output file to final input file for cleanup
-        f = open(all_inputs_file, 'a')
-        f.write(dir_path + '\n')
-        f.close()
+        # Path to scan inputs
+        scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
 
         return luigi.LocalTarget(dns_inputs_file)
 
@@ -338,15 +332,8 @@ class CrobatDNS(luigi.Task):
 
 
         # Path to scan outputs log
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
-
-        # Write output file to final input file for cleanup
-        f = open(all_inputs_file, 'a')
         output_dir = os.path.dirname(self.output().path)
-        f.write(output_dir + '\n')
-        f.close()
+        scan_utils.add_file_to_cleanup(self.scan_id, output_dir)
 
 
 @inherits(CrobatDNS)

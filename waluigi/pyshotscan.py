@@ -14,10 +14,12 @@ from datetime import date
 from luigi.util import inherits
 from pyshot import pyshot
 from waluigi import recon_manager
+from waluigi import scan_utils
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from urllib.parse import urlparse, ParseResult
 from os.path import exists
+
 
 class PyshotScope(luigi.ExternalTask):
     scan_id = luigi.Parameter()
@@ -31,9 +33,6 @@ class PyshotScope(luigi.ExternalTask):
             self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def output(self):
-
-        today = date.today()
-
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "pyshot-inputs-" + self.scan_id
@@ -41,9 +40,7 @@ class PyshotScope(luigi.ExternalTask):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        # Convert date to str
-        date_str = today.strftime("%Y%m%d")
-        pyshot_inputs_file = dir_path + os.path.sep + "pyshot_inputs_" + date_str + "_" + self.scan_id
+        pyshot_inputs_file = dir_path + os.path.sep + "pyshot_inputs_" + self.scan_id
         if os.path.isfile(pyshot_inputs_file):
             return luigi.LocalTarget(pyshot_inputs_file)
 
@@ -87,14 +84,7 @@ class PyshotScope(luigi.ExternalTask):
             pyshot_inputs_f.close()
 
             # Path to scan outputs log
-            cwd = os.getcwd()
-            cur_path = cwd + os.path.sep
-            all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
-
-            # Write output file to final input file for cleanup
-            f = open(all_inputs_file, 'a')
-            f.write(dir_path + '\n')
-            f.close()
+            scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
 
         return luigi.LocalTarget(pyshot_inputs_file)
 
@@ -180,14 +170,8 @@ class PyshotScan(luigi.Task):
             output = thread_obj.get()
 
         # Path to scan outputs log
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+        scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
 
-        # Write output file to final input file for cleanup
-        f = open(all_inputs_file, 'a')
-        f.write(self.output().path + '\n')
-        f.close()
 
 @inherits(PyshotScan)
 class ParsePyshotOutput(luigi.Task):

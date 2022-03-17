@@ -12,6 +12,7 @@ import errno
 from luigi.util import inherits
 from datetime import date
 from waluigi import recon_manager
+from waluigi import scan_utils
 
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -117,14 +118,7 @@ class NucleiScope(luigi.ExternalTask):
             print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
 
             # Path to scan outputs log
-            cwd = os.getcwd()
-            cur_path = cwd + os.path.sep
-            all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
-
-            # Write output file to final input file for cleanup
-            f = open(all_inputs_file, 'a')
-            f.write(dir_path + '\n')
-            f.close()
+            scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
 
             return luigi.LocalTarget(nuclei_inputs_file)
 
@@ -211,14 +205,7 @@ class NucleiScan(luigi.Task):
                 executor.submit(subprocess.run, command_args, shell=use_shell)
 
         # Path to scan outputs log
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
-
-        # Write output file to final input file for cleanup
-        f = open(all_inputs_file, 'a')
-        f.write(self.output().path + '\n')
-        f.close()
+        scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
 
 
 @inherits(NucleiScan)
@@ -235,8 +222,10 @@ class ParseNucleiOutput(luigi.Task):
 
     def output(self):
 
+        template_path = self.template_path.replace(":", "-")
+
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nuclei-outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nuclei-outputs-" + template_path + "-" + self.scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)

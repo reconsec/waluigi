@@ -3,13 +3,13 @@ import os
 import subprocess
 import shutil
 import netaddr
-from datetime import date
 import xml.etree.ElementTree as ET
-
 import luigi
-from luigi.util import inherits
 
+from luigi.util import inherits
+from datetime import date
 from waluigi import recon_manager
+from waluigi import scan_utils
 
 TCP = 'tcp'
 UDP = 'udp'
@@ -81,15 +81,8 @@ class MassScanScope(luigi.ExternalTask):
             # Close output file
             f_inputs.close()
 
-            # Path to scan outputs log
-            cwd = os.getcwd()
-            cur_path = cwd + os.path.sep
-            all_inputs_file = cur_path + "all_outputs_" + self.scan_id + ".txt"
-
-            # Write output file to final input file for cleanup
-            f = open(all_inputs_file, 'a')
-            f.write(dir_path + '\n')
-            f.close()
+            # Add the file to the cleanup file
+            scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
 
             return luigi.LocalTarget(masscan_inputs_file)
 
@@ -146,16 +139,9 @@ class MasscanScan(luigi.Task):
             # Execute process
             subprocess.run(command)
 
-        # Path to scan outputs log
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
-
-        # Write output file to final input file for cleanup
-        f = open(all_inputs_file, 'a')
+        # Add the file to the cleanup file
         output_dir = os.path.dirname(self.output().path)
-        f.write(output_dir + '\n')
-        f.close()
+        scan_utils.add_file_to_cleanup(self.scan_id, output_dir)
 
 
 @inherits(MasscanScan)

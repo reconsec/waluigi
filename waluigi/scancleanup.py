@@ -1,10 +1,12 @@
 import os
 import shutil
-from datetime import date
 import luigi
+import traceback
+
 from luigi.util import inherits
 from waluigi import recon_manager
-import traceback
+from waluigi import scan_utils
+from datetime import date
 
 
 class ScanCleanup(luigi.ExternalTask):
@@ -14,10 +16,8 @@ class ScanCleanup(luigi.ExternalTask):
 
     def run(self):
 
-        # Path to scan outputs log
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep
-        all_inputs_file = dir_path + "all_outputs_" + self.scan_id + ".txt"
+        # Path to cleanup file
+        all_inputs_file = scan_utils.get_cleanup_file_path(self.scan_id)
 
         # Delete all the files defined in the cleanup file
         if os.path.isfile(all_inputs_file):

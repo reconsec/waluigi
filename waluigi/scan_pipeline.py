@@ -32,22 +32,22 @@ def parse_masscan(scan_id, recon_manager):
     return True
 
 
-def nmap_scope(scan_id, recon_manager, random_instance_id, module_list=None, script_args_arr=None, skip_load_balance_ports=False):
-    luigi_run_result = luigi.build([nmapscan.NmapScope(scan_id=scan_id, recon_manager=recon_manager, random_instance_id=random_instance_id, module_list=module_list, script_args_arr=script_args_arr, skip_load_balance_ports=skip_load_balance_ports)], local_scheduler=True, detailed_summary=True)
+def nmap_scope(scan_id, recon_manager, nmap_scan_arr, scan_hash):
+    luigi_run_result = luigi.build([nmapscan.NmapScope(scan_id=scan_id, recon_manager=recon_manager, nmap_scan_arr=nmap_scan_arr, scan_hash=scan_hash)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def nmap_scan(scan_id, recon_manager, random_instance_id, skip_load_balance_ports=False):
-    luigi_run_result = luigi.build([nmapscan.NmapScan(scan_id=scan_id, recon_manager=recon_manager, random_instance_id=random_instance_id, skip_load_balance_ports=skip_load_balance_ports)], local_scheduler=True, detailed_summary=True)
+def nmap_scan(scan_id, recon_manager, scan_hash ):
+    luigi_run_result = luigi.build([nmapscan.NmapScan(scan_id=scan_id, recon_manager=recon_manager, scan_hash=scan_hash )], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def parse_nmap(scan_id, recon_manager, random_instance_id ):
-    luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, recon_manager=recon_manager, random_instance_id=random_instance_id)], local_scheduler=True, detailed_summary=True)
+def parse_nmap(scan_id, recon_manager, scan_hash ):
+    luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, recon_manager=recon_manager, scan_hash=scan_hash)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

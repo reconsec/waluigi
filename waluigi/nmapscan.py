@@ -324,6 +324,8 @@ class ParseNmapOutput(luigi.Task):
 
                             # Set the service dictionary
                             svc_dict = svc.service_dict
+                            if 'name' in svc_dict and 'http' in svc_dict['name']:
+                                svc_dict['name'] = ''
 
                             script_res_arr = svc.scripts_results
                             if len(script_res_arr) > 0:

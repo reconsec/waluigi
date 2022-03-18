@@ -28,7 +28,7 @@ class NmapScope(luigi.ExternalTask):
     token = luigi.OptionalParameter(default=None)
     manager_url = luigi.OptionalParameter(default=None)
     recon_manager = luigi.OptionalParameter(default=None)
-    nmap_scan_arr = luigi.Parameter(default=None)
+    nmap_scan_arr = luigi.OptionalParameter(default=None)
     scan_hash = luigi.Parameter(default=None)
 
     def __init__(self, *args, **kwargs):
@@ -90,14 +90,14 @@ class NmapScan(luigi.Task):
 
         # Read input file
         nmap_input_file = self.input()                
-        #print("[*] Input file: %s" % nmap_input_file.path)
+        print("[*] Input file: %s" % nmap_input_file.path)
 
         f = nmap_input_file.open()
         json_input = f.read()
         f.close()
 
         #load input file
-        meta_file_path = None
+        meta_file_path = ''
         if len(json_input) > 0:
             nmap_scan_obj = json.loads(json_input)
             nmap_scan_id = nmap_scan_obj['nmap_scan_id']
@@ -105,6 +105,10 @@ class NmapScan(luigi.Task):
             cwd = os.getcwd()
             dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
             meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ nmap_scan_id +".meta"
+        else:
+            # Remove just in case it was an earlier error
+            os.remove(nmap_input_file.path)
+            raise RuntimeError("[-] Input file is empty")
 
         return luigi.LocalTarget(meta_file_path)
 

@@ -198,7 +198,16 @@ class ScheduledScanThread(threading.Thread):
                             # Skip any possible load balanced ports that haven't already been marked as http from pre scan
                             if skip_load_balance_ports:
                                 if port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443':
-                                    if port.service_inst == None or 'http' not in port.service_inst.name:
+                                    #print(port)
+                                    http_found = False
+                                    if port.components:
+                                        for component in port.components:
+                                            if 'http' in component.component_name:
+                                                http_found = True
+                                                break
+
+                                    # Skip if not already detected as http based
+                                    if http_found == False:
                                         continue
 
                             port_list.append(port_str)

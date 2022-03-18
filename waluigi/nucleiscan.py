@@ -65,16 +65,31 @@ class NucleiScope(luigi.ExternalTask):
 
                     port_str = str(port_obj.port)
                     #Skip port 5985 - WinRS
-                    if port_str == 5985 and port_obj.service_inst and port_obj.service_inst.name == 'wsman':
+                    #if port_str == 5985 and port_obj.service_inst and port_obj.service_inst.name == 'wsman':
+                    #    continue
+
+                    http_found = False
+                    ws_man_found = False
+                    if port_obj.components:
+                        for component in port_obj.components:
+                            if 'http' in component.component_name:
+                                http_found = True
+                            elif 'wsman' in component.component_name:
+                                ws_man_found = True
+
+                    # Skip if not already detected as http based
+                    if http_found == False or ws_man_found==True:
                         continue
 
-                    if port_obj.service_inst is None or 'http' not in str(port_obj.service_inst.name):
-                        #print("[*] NMAP Results are empty so skipping.")
-                        continue
+                    # if port_obj.service_inst is None or 'http' not in str(port_obj.service_inst.name):
+                    #     #print("[*] NMAP Results are empty so skipping.")
+                    #     continue
 
                         # Setup inputs
                     prefix = ''
-                    if port_obj.service_inst and 'http' in port_obj.service_inst.name:
+                    #if port_obj.service_inst and 'http' in port_obj.service_inst.name:
+                    #    prefix = 'http://'
+                    if http_found:
                         prefix = 'http://'
 
                     if port_obj.secure == 1:

@@ -241,7 +241,7 @@ class ScheduledScanThread(threading.Thread):
 
             else:
 
-                if scan_sched_obj.masscan_scan_flag == 1:
+                if scan_sched_obj and scan_sched_obj.masscan_scan_flag == 1:
                     print("[*] Masscan already executed and no ports were detected. Aborting")
                     return nmap_scan_arr
 
@@ -387,7 +387,7 @@ class ScheduledScanThread(threading.Thread):
         return nmap_scan_arr
     
 
-    def nmap_scan(self, scan_id, scan_sched_obj, module_list=None, script_args=None, skip_load_balance_ports=False):
+    def nmap_scan(self, scan_id, scan_sched_obj=None, module_list=None, script_args=None, skip_load_balance_ports=False):
 
         ret_val = True
 
@@ -410,7 +410,7 @@ class ScheduledScanThread(threading.Thread):
             nmap_scan_arr = self.get_nmap_scan_arr(scan_id, scan_sched_obj, module_list, script_args, skip_load_balance_ports)
             if len(nmap_scan_arr) == 0:
                 return ret_val
-                
+
             #print(nmap_scan_arr)
             # Get a hash of the inputs
             input_hash = hash_nmap_inputs(nmap_scan_arr)

@@ -166,7 +166,7 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
 
 
-    def get_nmap_scan_arr(self, scan_id, module_list, script_args_arr, skip_load_balance_ports):
+    def get_nmap_scan_arr(self, scan_id, scan_sched_obj, module_list, script_args_arr, skip_load_balance_ports):
 
         nmap_scan_arr = []
         if module_list is None or len(module_list) == 0:
@@ -241,6 +241,11 @@ class ScheduledScanThread(threading.Thread):
                                 cur_set.add(domain_name)
 
             else:
+
+                if scan_sched_obj and scan_sched_obj.masscan_scan_flag == 1:
+                    print("[*] Masscan already executed and no ports were detected. Aborting")
+                    return nmap_scan_arr
+
                 
                 # If no hosts exist then get the target subnets
                 subnets = self.recon_manager.get_subnets(scan_id)
@@ -378,13 +383,13 @@ class ScheduledScanThread(threading.Thread):
         return nmap_scan_arr
     
 
-    def nmap_scan(self, scan_id, module_list=None, script_args=None, skip_load_balance_ports=False):
+    def nmap_scan(self, scan_id, scan_sched_obj=None, module_list=None, script_args=None, skip_load_balance_ports=False):
 
         ret_val = True
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_id):
-            return
+            return ret_val
 
         if self.connection_manager:
             # Connect to extender for import
@@ -398,7 +403,10 @@ class ScheduledScanThread(threading.Thread):
 
         # Create the nmap script array
         try:
-            nmap_scan_arr = self.get_nmap_scan_arr(scan_id, module_list, script_args, skip_load_balance_ports)
+            nmap_scan_arr = self.get_nmap_scan_arr(scan_id, scan_sched_obj, module_list, script_args, skip_load_balance_ports)
+            if len(nmap_scan_arr) == 0:
+                return ret_val
+
             #print(nmap_scan_arr)
             # Get a hash of the inputs
             input_hash = hash_nmap_inputs(nmap_scan_arr)
@@ -801,14 +809,14 @@ class ScheduledScanThread(threading.Thread):
             version_args = ["-sV","-n"]
 
             # Execute nmap
-            ret = self.nmap_scan(scan_id, script_args=ssl_http_scripts)
+            ret = self.nmap_scan(scan_id, sched_scan_obj, script_args=ssl_http_scripts)
             if not ret:
                 print("[-] Nmap Intial Scan Failed")
                 return
 
             skip_load_balance_ports = self.recon_manager.is_load_balanced()
             # Execute nmap
-            ret = self.nmap_scan(scan_id, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
+            ret = self.nmap_scan(scan_id, sched_scan_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Service Scan Failed")
                 return

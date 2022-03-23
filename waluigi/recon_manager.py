@@ -237,6 +237,7 @@ class ScheduledScanThread(threading.Thread):
                         for domain in domains:
                             domain_name = domain.name
                             if len(domain_name) > 0:
+                                domain_name = domain_name.replace("*.","")
                                 cur_set.add(domain_name)
 
             else:
@@ -346,7 +347,6 @@ class ScheduledScanThread(threading.Thread):
 
                 scan_inst = {}
                 port_list = []
-                #in_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, self.random_instance_id)
 
                 module_id = module['id']
                 script_args = module['args']
@@ -356,7 +356,6 @@ class ScheduledScanThread(threading.Thread):
 
                 # Write IPs to file
                 ip_list = []
-                #f = open(in_path, 'w')
                 for target in target_list:
                     port_str = str(target['port'])
                     port_list.append(port_str)
@@ -365,14 +364,11 @@ class ScheduledScanThread(threading.Thread):
                     ip_str = str(netaddr.IPAddress(target_ip))
                     if len(ip_str) > 0:
                         ip_list.append(ip_str)
-                        #f.write(ip_str + "\n")
-
  
                 # Create scan instance
                 scan_inst['module_id'] = module_id
                 scan_inst['ip_list'] = ip_list
                 scan_inst['port_list'] = port_list
-                #scan_inst['ip_list_path'] = in_path
                 scan_inst['script-args'] = script_args_arr
 
                 # Add the scan instance

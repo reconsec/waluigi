@@ -9,6 +9,7 @@ from waluigi import nucleiscan
 from waluigi import crobatdns
 from waluigi import scancleanup
 from waluigi import shodanlookup
+from waluigi import dirsearchscan
 
 
 def masscan_scope(scan_id, recon_manager):
@@ -39,15 +40,15 @@ def nmap_scope(scan_id, recon_manager, nmap_scan_arr, scan_hash):
     return True
 
 
-def nmap_scan(scan_id, recon_manager, scan_hash ):
-    luigi_run_result = luigi.build([nmapscan.NmapScan(scan_id=scan_id, recon_manager=recon_manager, scan_hash=scan_hash )], local_scheduler=True, detailed_summary=True)
+def nmap_scan(scan_id, recon_manager ):
+    luigi_run_result = luigi.build([nmapscan.NmapScan(scan_id=scan_id, recon_manager=recon_manager )], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def parse_nmap(scan_id, recon_manager, scan_hash ):
-    luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, recon_manager=recon_manager, scan_hash=scan_hash)], local_scheduler=True, detailed_summary=True)
+def parse_nmap(scan_id, recon_manager ):
+    luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
@@ -121,6 +122,25 @@ def import_shodan(scan_id, recon_manager):
         return False
     return True
 
+def dirsearch_scope(scan_id, recon_manager, scan_dict, scan_hash):
+    luigi_run_result = luigi.build([dirsearchscan.DirsearchScope(scan_id=scan_id, recon_manager=recon_manager, scan_dict=scan_dict, scan_hash=scan_hash)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def dirsearch_scan(scan_id, recon_manager ):
+    luigi_run_result = luigi.build([dirsearchscan.DirsearchScan(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def parse_dirsearch(scan_id, recon_manager ):
+    luigi_run_result = luigi.build([dirsearchscan.ParseDirsearchOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
 
 def scan_cleanup(scan_id):
     luigi_run_result = luigi.build([scancleanup.ScanCleanup(scan_id=scan_id)], local_scheduler=True, detailed_summary=True)

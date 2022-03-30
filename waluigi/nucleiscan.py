@@ -1,7 +1,6 @@
 import json
 import os
 import subprocess
-import shutil
 import netaddr
 import luigi
 import glob
@@ -31,10 +30,6 @@ class NucleiScope(luigi.ExternalTask):
 
     def output(self):
 
-        today = date.today()
-        # Convert date to str
-        date_str = today.strftime("%Y%m%d%H%M%f")
-
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nuclei-inputs-" + self.scan_id
@@ -43,8 +38,7 @@ class NucleiScope(luigi.ExternalTask):
             os.chmod(dir_path, 0o777)
 
         # Convert date to str
-        date_str = today.strftime("%Y%m%d")
-        nuclei_inputs_file = dir_path + os.path.sep + "nuclei_inputs_" + date_str + "_" + self.scan_id
+        nuclei_inputs_file = dir_path + os.path.sep + "nuclei_inputs_" + self.scan_id
         if os.path.isfile(nuclei_inputs_file):
             return luigi.LocalTarget(nuclei_inputs_file)
 
@@ -164,9 +158,6 @@ class NucleiScan(luigi.Task):
         # print(input_file_paths)
         f.close()
 
-        today = date.today()
-        date_str = today.strftime("%Y%m%d")
-
         # Make sure template path exists
         use_shell = False
         if os.name == 'nt':
@@ -197,7 +188,7 @@ class NucleiScan(luigi.Task):
             port_id = filename.split("_")[3]
 
             # Nmap command args
-            nuclei_output_file = dir_path + os.path.sep + "nuclei_out_" + date_str + "_" + port_id
+            nuclei_output_file = dir_path + os.path.sep + "nuclei_out_" + port_id
             command = [
                 "nuclei",
                 "-silent",

@@ -437,7 +437,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Execute nmap
-            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager, input_hash)
+            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager)
             if not ret:
                 print("[-] Nmap Failed")
                 ret_val = False
@@ -462,7 +462,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Import nmap results
-            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager, input_hash)
+            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -471,6 +471,105 @@ class ScheduledScanThread(threading.Thread):
             if self.connection_manager:
                 # Free the lock
                 self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+
+    def dirsearch_scan(self, scan_id, scan_sched_obj=None ):
+
+        ret_val = True
+        #print(scan_sched_obj)
+        port_obj_list = scan_sched_obj.ports
+        if port_obj_list and len(port_obj_list) > 0:
+            for port_inst in port_obj_list:
+                host = port_inst.host
+                print(host)
+                secure = port_inst.secure
+                print(secure)
+                port_num = port_inst.port
+                print(port_num)
+
+
+        # Check if scan is cancelled
+        # if self.is_scan_cancelled(scan_id):
+        #     return ret_val
+
+        # if self.connection_manager:
+        #     # Connect to extender
+        #     lock_val = self.connection_manager.connect_to_extender()
+        #     if not lock_val:
+        #         print("[-] Failed connecting to extender")
+        #         return False
+
+        #     # Sleep to ensure routing is setup
+        #     time.sleep(3)
+
+        # # Create the dirsearch scan input obj
+        # try:
+        #     #print(nmap_scan_arr)
+        #     # Get a hash of the inputs
+        #     input_hash = hash_dirsearch_inputs(nmap_scan_arr)
+        #     #print(input_hash)
+
+        #     ret = scan_pipeline.dirsearch_scope(scan_id, self.recon_manager, scan_obj, input_hash)
+        #     if not ret:
+        #         print("[-] Failed")
+        #         return False
+        # finally:
+        #     if self.connection_manager:
+        #         # Free the lock
+        #         self.connection_manager.free_connection_lock(lock_val)
+
+        # if self.connection_manager:
+        #     # Connect to synack target
+        #     con = self.connection_manager.connect_to_target()
+        #     if not con:
+        #         print("[-] Failed connecting to target")
+        #         return False
+
+        #     # Obtain the lock before we start a scan
+        #     lock_val = self.connection_manager.get_connection_lock()
+
+        #     # Sleep to ensure routing is setup
+        #     time.sleep(3)
+
+        # try:
+
+        #     # Execute dirsearch
+        #     ret = scan_pipeline.dirsearch_scan(scan_id, self.recon_manager)
+        #     if not ret:
+        #         print("[-] Dirsearch Failed")
+        #         ret_val = False
+
+        # finally:
+        #     if self.connection_manager:
+        #         # Release the lock after scan
+        #         self.connection_manager.free_connection_lock(lock_val)
+        #     if not ret_val:
+        #         return ret_val
+
+        # if self.connection_manager:
+        #     # Connect to extender for import
+        #     lock_val = self.connection_manager.connect_to_extender()
+        #     if not lock_val:
+        #         print("[-] Failed connecting to extender")
+        #         return False
+
+        #     # Sleep to ensure routing is setup
+        #     time.sleep(3)
+
+        # try:
+
+        #     # Import results
+        #     ret = scan_pipeline.parse_dirsearch(scan_id, self.recon_manager)
+        #     if not ret:
+        #         print("[-] Failed")
+        #         ret_val = False
+
+        # finally:
+        #     if self.connection_manager:
+        #         # Free the lock
+        #         self.connection_manager.free_connection_lock(lock_val)
 
         return ret_val
 
@@ -691,15 +790,6 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
 
-        # Set nuclei path
-        #cve_template_path = nuclei_template_path + os.path.sep + "cves"
-        #vuln_template_path = nuclei_template_path + os.path.sep + "vulnerabilities"
-        #cnvd_template_path = nuclei_template_path + os.path.sep + "cnvd"
-        #def_logins_template_path = nuclei_template_path + os.path.sep + "default-logins"
-        #explosures_template_path = nuclei_template_path + os.path.sep + "explosures"
-        #exposed_panels_template_path = nuclei_template_path + os.path.sep + "exposed_panels"
-        #iot_path = nuclei_template_path + os.path.sep + "iot"
-
         fingerprint_template_path = "technologies:fingerprinthub-web-fingerprints.yaml"
         cves_template_path = "cves"
         try:
@@ -770,7 +860,8 @@ class ScheduledScanThread(threading.Thread):
         self.recon_manager.set_current_target(self.connection_manager, target_id)
 
 
-        #print(sched_scan_obj)
+        # Print the schedule object
+        self.recon_manager.dbg_print(sched_scan_obj)
         if sched_scan_obj.dns_scan_flag == 1:
             # Execute crobat
             ret = self.dns_lookup(scan_id)
@@ -778,7 +869,7 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] DNS Resolution Failed")
                 return
 
-        if sched_scan_obj.masscan_scan_flag == 1 and sched_scan_obj.rescan == 0:
+        if sched_scan_obj.masscan_scan_flag == 1:
 
             # Get target scope and urls to see what to kick off first
             subnets = self.recon_manager.get_subnets(scan_id)
@@ -836,10 +927,17 @@ class ScheduledScanThread(threading.Thread):
                 return
 
         if sched_scan_obj.module_scan_flag == 1:
-            # Execute pyshot
+            # Execute module scan
             ret = self.module_scan(scan_id)
             if not ret:
                 print("[-] Module Scan Failed")
+                return
+
+        if sched_scan_obj.dirsearch_scan_flag == 1:
+            # Execute dirsearch
+            ret = self.dirsearch_scan(scan_id, sched_scan_obj)
+            if not ret:
+                print("[-] Dirsearch Scan Failed")
                 return
 
         # Cleanup files
@@ -929,9 +1027,17 @@ class ReconManager:
 
     def __init__(self, token, manager_url):
         self.token = token
+        self.debug = False
         self.manager_url = manager_url
         self.headers = {'User-Agent': custom_user_agent, 'Authorization': 'Bearer ' + self.token}
         self.session_key = self._get_session_key()
+
+    def set_debug(self, debug):
+        self.debug = debug
+
+    def dbg_print(self, output):
+        if self.debug:
+            print(output)
 
     # Stub to be overwritten in case anything needs to be done by a specific connection manager
     # in regards to the target specified

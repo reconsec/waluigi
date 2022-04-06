@@ -11,15 +11,17 @@ def print_usage():
     print("Help:")
     print(" q - quit")
     print(" h - help")
+    print(" d - debug")
     print(" x - Toggle Scanner Thread")
     print("")
-
 
 def main(args):
 
     # Create Synack connection manager thread
     scan_thread = None
-    while True:
+    debug = False
+    exit_loop = False
+    while exit_loop == False:
         try:
             # Create instance of recon manager
             recon_manager_inst =  recon_manager.get_recon_manager(args.token, "http://127.0.0.1:%d" % local_extender_port)
@@ -30,15 +32,23 @@ def main(args):
             scan_thread.toggle_poller()
 
             # interactive console
-            while True:
+            while exit_loop == False:
                 print("Enter a command")
                 print(">", end="")
                 command = input()
                 if command == "q":
-                    sys.exit(0)
+                    exit_loop = True
                     break
                 elif command == 'h':
                     print_usage()
+                elif command == 'd':
+                    if debug == True:
+                        debug = False
+                        print("[*] Debugging disabled")
+                    else:
+                        debug = True
+                        print("[*] Debugging enabled")
+                    recon_manager_inst.set_debug(debug)
                 elif command == 'x':
                     # Toggle the scan poller
                     scan_thread.toggle_poller()

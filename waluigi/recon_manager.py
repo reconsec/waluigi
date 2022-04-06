@@ -56,6 +56,65 @@ def hash_nmap_inputs(nmap_scan_list):
     image_hash_str = binascii.hexlify(image_hash).decode()
     return image_hash_str
 
+class ScanInput():
+
+    def __init__(self, scheduled_scan_thread, scheduled_scan):
+        self.scan_thread = scheduled_scan_thread
+        self.scheduled_scan = scheduled_scan
+        self.scan_id = None
+        self.scan_target = None
+        self.shodan_key = None
+        self.hosts = None
+
+        # Create a scan id if it does not exist
+        if self.scheduled_scan.scan_id is None:
+            scan_obj = self.scan_thread.recon_manager.get_scheduled_scan(self.scheduled_scan.id)
+            if not scan_obj:
+                raise RuntimeError("[-] No scan object returned for scheduled scan.")
+            else:
+                self.scan_id = str(scan_obj.scan_id)
+        else:
+             self.scan_id = str(self.scheduled_scan.scan_id)
+
+        # Get the initial subnets and urls for this target
+        self.scan_target = self.scan_thread.recon_manager.get_target(self.scan_id)
+
+        # Get the shodan key
+        #print("[*] Retrieving Shodan data")
+        self.shodan_key = self.scan_thread.recon_manager.get_shodan_key()
+
+    #Convert port bitmap into port list
+    def port_map_to_port_list(self):
+
+        port_list = []
+        port_map_str = self.scheduled_scan.port_map
+        if port_map_str and len(port_map_str) > 0:
+            port_map_obj = base64.b64decode(port_map_str)
+
+            # Get byte
+            for i in range(0, len(port_map_obj)):
+                current_byte = port_map_obj[i]
+                for j in range(8):
+                    mask = 1 << j
+                    if current_byte & mask:
+                        port_list.append(j + (i*8))
+
+        return port_list
+
+
+    def refresh(self):
+
+        # Refresh hosts,ports,components
+        self.hosts = self.scan_thread.recon_manager.get_hosts(self.scan_id)
+        return
+
+
+    # This is necessary because luigi hashes input parameters and dictionaries won't work
+    def __hash__(self):
+        return 0
+
+
+
 class ScheduledScanThread(threading.Thread):
 
     def __init__(self, recon_manager, connection_manager=None):
@@ -103,19 +162,13 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def mass_scan(self, scan_id):
+    def mass_scan(self, scan_input_obj):
 
         ret_val = True
 
         # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_id):
-            return
-
-        # Get scope for masscan
-        ret = scan_pipeline.masscan_scope(scan_id, self.recon_manager)
-        if not ret:
-            print("[-] Failed")
-            return False
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
+            return     
 
         # Connect to synack target
         if self.connection_manager:
@@ -131,7 +184,7 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
         # Execute masscan
-        ret = scan_pipeline.masscan_scan(scan_id, self.recon_manager)
+        ret = scan_pipeline.masscan_scan(scan_input_obj)
         if not ret:
             print("[-] Masscan Failed")
             ret_val = False
@@ -153,7 +206,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Import masscan results
-            ret = scan_pipeline.parse_masscan(scan_id, self.recon_manager)
+            ret = scan_pipeline.parse_masscan(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -574,7 +627,7 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
 
 
-    def module_scan(self, scan_id):
+    def module_scan(self, scan_id, scan_sched_obj):
 
         ret_val = True
 
@@ -632,12 +685,12 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
 
 
-    def shodan_lookup(self, scan_id):
+    def shodan_lookup(self, scan_input_obj):
 
         ret_val = True
 
         # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_id):
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
             return
 
         if self.connection_manager:
@@ -652,8 +705,12 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
         try:
+
+            # Refresh scan data (Get updated ports and hosts)
+            scan_input_obj.refresh()
+
             # Do Shodan lookup and import results
-            ret = scan_pipeline.import_shodan(scan_id, self.recon_manager)
+            ret = scan_pipeline.import_shodan(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -664,12 +721,12 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def dns_lookup(self, scan_id):
+    def dns_lookup(self, scan_input_obj):
 
         ret_val = True
 
         # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_id):
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
             return
 
         if self.connection_manager:
@@ -685,7 +742,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Do DNS lookup and import results
-            ret = scan_pipeline.import_dns(scan_id, self.recon_manager)
+            ret = scan_pipeline.import_dns(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -697,16 +754,19 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
 
 
-    def pyshot_scan(self, scan_id):
+    def pyshot_scan(self, scan_input_obj):
 
         ret_val = True
 
         # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_id):
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
             return
 
+        # Refresh scan data (Get updated ports and hosts)
+        scan_input_obj.refresh()
+
         # Get scope for pyshot
-        ret = scan_pipeline.pyshot_scope(scan_id, self.recon_manager)
+        ret = scan_pipeline.pyshot_scope(scan_input_obj)
         if not ret:
             print("[-] Failed")
             return False
@@ -726,7 +786,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Execute pyshot
-            ret = scan_pipeline.pyshot_scan(scan_id, self.recon_manager)
+            ret = scan_pipeline.pyshot_scan(scan_input_obj)
             if not ret:
                 print("[-] Pyshot Failed")
                 ret_val = False
@@ -750,7 +810,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Import pyshot results
-            ret = scan_pipeline.import_screenshots(scan_id, self.recon_manager)
+            ret = scan_pipeline.import_screenshots(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -762,16 +822,19 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def nuclei_scan(self, scan_id ):
+    def nuclei_scan(self, scan_input_obj ):
 
         ret_val = True
 
         # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_id):
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
             return
 
+        # Refresh scan data (Get updated ports and hosts)
+        scan_input_obj.refresh()
+
         # Get scope for nuclei scan
-        ret = scan_pipeline.nuclei_scope(scan_id, self.recon_manager)
+        ret = scan_pipeline.nuclei_scope(scan_input_obj)
         if not ret:
             print("[-] Failed")
             return False
@@ -794,13 +857,13 @@ class ScheduledScanThread(threading.Thread):
         cves_template_path = "cves"
         try:
             # Execute nuclei
-            ret = scan_pipeline.nuclei_scan(scan_id, fingerprint_template_path, self.recon_manager)
+            ret = scan_pipeline.nuclei_scan(scan_input_obj, fingerprint_template_path)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 ret_val = False
 
             # Execute nuclei
-            ret = scan_pipeline.nuclei_scan(scan_id, cves_template_path, self.recon_manager)
+            ret = scan_pipeline.nuclei_scan(scan_input_obj, cves_template_path)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 ret_val = False
@@ -824,13 +887,13 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Import nuclei results
-            ret = scan_pipeline.parse_nuclei(scan_id, fingerprint_template_path, self.recon_manager)
+            ret = scan_pipeline.parse_nuclei(scan_input_obj, fingerprint_template_path)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
 
             # Import nuclei results
-            ret = scan_pipeline.parse_nuclei(scan_id, cves_template_path, self.recon_manager)
+            ret = scan_pipeline.parse_nuclei(scan_input_obj, cves_template_path)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -846,25 +909,39 @@ class ScheduledScanThread(threading.Thread):
     def process_scan_obj(self, sched_scan_obj):
 
         # Create scan object
-        scan_obj = self.recon_manager.get_scheduled_scan(sched_scan_obj.id)
-        if not scan_obj:
-            print("[-] No scan object returned for scheduled scan.")
-            return
+        self.recon_manager.dbg_print(sched_scan_obj)
+        scan_input_obj = ScanInput(self, sched_scan_obj)
+        # if sched_scan_obj.scan_id is None:
+        #     scan_obj = self.recon_manager.get_scheduled_scan(sched_scan_obj.id)
+        #     if not scan_obj:
+        #          print("[-] No scan object returned for scheduled scan.")
+        #          return
 
-        scan_id = str(scan_obj.scan_id)
-        print("[*] Scan ID: %s" % scan_id)
+        # Print the schedule object
+        #self.recon_manager.dbg_print(scan_obj)
 
-        target_id = sched_scan_obj.target_id
+        #scan_id = str(scan_obj.scan_id)
+        #print("[*] Scan ID: %s" % scan_id)
+
+        #scan_target = self.recon_manager.get_target(scan_id)
+        #self.recon_manager.dbg_print(scan_target)
+        # print("[+] Retrieved %d subnets from database" % len(subnets))
+
+        # Consolidate to get a target that returns urls and subnets
+        # subnets = self.recon_manager.get_subnets(scan_id)
+        # print("[+] Retrieved %d subnets from database" % len(subnets))
+
+        # urls = self.recon_manager.get_urls(scan_id)
+        # print("[+] Retrieved %d urls from database" % len(urls))
 
         # Set connection target in connection manager to this target 
+        target_id = scan_input_obj.scheduled_scan.target_id
         self.recon_manager.set_current_target(self.connection_manager, target_id)
 
 
-        # Print the schedule object
-        self.recon_manager.dbg_print(sched_scan_obj)
         if sched_scan_obj.dns_scan_flag == 1:
             # Execute crobat
-            ret = self.dns_lookup(scan_id)
+            ret = self.dns_lookup(scan_input_obj)
             if not ret:
                 print("[-] DNS Resolution Failed")
                 return
@@ -872,26 +949,31 @@ class ScheduledScanThread(threading.Thread):
         if sched_scan_obj.masscan_scan_flag == 1:
 
             # Get target scope and urls to see what to kick off first
-            subnets = self.recon_manager.get_subnets(scan_id)
+            #subnets = self.recon_manager.get_subnets(scan_id)
             # Possible check for ports too before scanning in rescan cases
-            if subnets and len(subnets) > 0:
+            #if subnets and len(subnets) > 0:
                 # print(subnets)
 
-                # Execute masscan
-                ret = self.mass_scan(scan_id)
-                if not ret:
-                    print("[-] Masscan Failed")
-                    return
-            else:
+            # Execute masscan
+            ret = self.mass_scan(scan_input_obj)
+            if not ret:
+                print("[-] Masscan Failed")
+                return
+            #else:
                 # TODO - Get URLs
-                print("[*] No subnets retrieved. Skipping masscan.")
+            #    print("[*] No subnets retrieved. Skipping masscan.")
+
 
         if sched_scan_obj.shodan_scan_flag == 1:
             # Execute shodan
-            ret = self.shodan_lookup(scan_id)
+            ret = self.shodan_lookup(scan_input_obj)
             if not ret:
                 print("[-] Shodan Failed")
                 return
+
+
+        # hosts = self.recon_manager.get_hosts(scan_id)
+        # print("[+] Retrieved %d hosts from database" % len(hosts))
 
         if sched_scan_obj.nmap_scan_flag == 1:
 
@@ -914,21 +996,21 @@ class ScheduledScanThread(threading.Thread):
 
         if sched_scan_obj.pyshot_scan_flag == 1:
             # Execute pyshot
-            ret = self.pyshot_scan(scan_id)
+            ret = self.pyshot_scan(scan_input_obj)
             if not ret:
                 print("[-] Pyshot Failed")
                 return
 
         if sched_scan_obj.nuclei_scan_flag == 1:
             # Execute nuclei
-            ret = self.nuclei_scan(scan_id)
+            ret = self.nuclei_scan(scan_input_obj)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 return
 
         if sched_scan_obj.module_scan_flag == 1:
             # Execute module scan
-            ret = self.module_scan(scan_id)
+            ret = self.module_scan(scan_id, sched_scan_obj)
             if not ret:
                 print("[-] Module Scan Failed")
                 return
@@ -941,7 +1023,7 @@ class ScheduledScanThread(threading.Thread):
                 return
 
         # Cleanup files
-        ret = scan_pipeline.scan_cleanup(scan_id)
+        ret = scan_pipeline.scan_cleanup(scan_input_obj.scan_id)
 
         if self.connection_manager:
             # Connect to extender to remove scheduled scan and update scan status
@@ -958,7 +1040,7 @@ class ScheduledScanThread(threading.Thread):
             self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
 
             # Update scan status
-            self.recon_manager.update_scan_status(scan_id, "COMPLETED")
+            self.recon_manager.update_scan_status(scan_input_obj.scan_id, "COMPLETED")
 
         finally:
             if self.connection_manager:
@@ -1161,6 +1243,22 @@ class ReconManager:
                 subnets.append(subnet_inst)
 
         return subnets
+
+    def get_target(self, scan_id):
+
+        target_obj = None
+        r = requests.get('%s/api/target/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return subnets
+        if r.status_code != 200:
+            print("[-] Unknown Error")
+            return subnets
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        target_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+
+        return target_obj
 
     def get_shodan_key(self):
 

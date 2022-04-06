@@ -17,33 +17,54 @@ from waluigi import scan_utils
 
 class ShodanScope(luigi.ExternalTask):
 
-    scan_id = luigi.Parameter()
-    token = luigi.Parameter(default=None)
-    manager_url = luigi.Parameter(default=None)
-    recon_manager = luigi.Parameter(default=None)
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+    scan_input = luigi.Parameter()
 
     def output(self):
 
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        shodan_inputs_dir = cwd + os.path.sep + "shodan-inputs-" + self.scan_id
+        shodan_inputs_dir = cwd + os.path.sep + "shodan-inputs-" + scan_id
         if not os.path.isdir(shodan_inputs_dir):
             os.mkdir(shodan_inputs_dir)
             os.chmod(shodan_inputs_dir, 0o777)
 
         # path to each input file
-        shodan_ip_file = shodan_inputs_dir + os.path.sep + "shodan_ips_" + self.scan_id
+        shodan_ip_file = shodan_inputs_dir + os.path.sep + "shodan_ips_" + scan_id
         if os.path.isfile(shodan_ip_file):
-            return luigi.LocalTarget(shodan_ip_file) 
+            return luigi.LocalTarget(shodan_ip_file)
 
-        subnets = self.recon_manager.get_subnets(self.scan_id)
+        subnets = []
+
+        # Get selected ports
+        selected_port_list = scan_input_obj.scheduled_scan.ports
+        if len(selected_port_list) > 0:
+            port_set = set()
+            ip_set = set()
+            for port_entry in selected_port_list:
+
+                #Add IP
+                ip_addr = port_entry.host.ipv4_addr
+                ip_set.add(ip_addr)
+
+            subnets = list(ip_set)
+
+        else:
+
+            # Get hosts
+            hosts = scan_input_obj.hosts
+            #hosts = self.recon_manager.get_hosts(self.scan_id)
+            print("[+] Retrieved %d hosts from database" % len(hosts))
+            if hosts:
+                for host in hosts:
+                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
+                    # Write IP to file
+                    subnets.append(target_ip)
+
+        #subnets = self.recon_manager.get_subnets(self.scan_id)
         print("[+] Retrieved %d subnets from database" % len(subnets))
-
         if len(subnets) > 0:
             
             # Write subnets to file
@@ -52,21 +73,8 @@ class ShodanScope(luigi.ExternalTask):
                 f.write(subnet + '\n')
             f.close()
 
-        else:
-            # Get hosts
-            hosts = self.recon_manager.get_hosts(self.scan_id)
-            print("[+] Retrieved %d hosts from database" % len(hosts))
-            port_target_map = {}
-            if hosts:
-                f = open(shodan_ip_file, 'a+')
-                for host in hosts:
-                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
-                    # Write IP to file
-                    f.write(target_ip + '\n')
-                f.close()
-
         # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(self.scan_id, shodan_inputs_dir)
+        scan_utils.add_file_to_cleanup(scan_id, shodan_inputs_dir)
 
         return luigi.LocalTarget(shodan_ip_file)
 
@@ -176,28 +184,30 @@ def reduce_subnets(ip_subnets):
 @inherits(ShodanScope)
 class ShodanScan(luigi.Task):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
     def requires(self):
         # Requires the target scope
-        return ShodanScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return ShodanScope(scan_input=self.scan_input)
 
     def output(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+
         # Returns shodan output file
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "shodan-outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "shodan-outputs-" + scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        out_file = dir_path + os.path.sep + "shodan_out_" + self.scan_id
+        out_file = dir_path + os.path.sep + "shodan_out_" + scan_id
 
         return luigi.LocalTarget(out_file)
 
     def run(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         # Read shodan input files
         shodan_input_file = self.input()
@@ -215,7 +225,7 @@ class ShodanScan(luigi.Task):
 
         # Get the shodan key
         print("[*] Retrieving Shodan data")
-        shodan_key = self.recon_manager.get_shodan_key()
+        shodan_key = scan_input_obj.shodan_key
         if shodan_key:
 
             pool = ThreadPool(processes=10)
@@ -257,25 +267,23 @@ class ShodanScan(luigi.Task):
 
             # Path to scan outputs log
             output_dir = os.path.dirname(self.output().path)
-            scan_utils.add_file_to_cleanup(self.scan_id, output_dir)
+            scan_utils.add_file_to_cleanup(scan_id, output_dir)
 
 
 @inherits(ShodanScan)
 class ParseShodanOutput(luigi.Task):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
     def requires(self):
         # Requires MassScan Task to be run prior
-        return ShodanScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return ShodanScan(scan_input=self.scan_input)
 
     def output(self):
 
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "shodan-outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "shodan-outputs-" + scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -285,6 +293,10 @@ class ParseShodanOutput(luigi.Task):
         return luigi.LocalTarget(out_file)
 
     def run(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+        recon_manager = scan_input_obj.scan_thread.recon_manager
         
         port_arr = []
         shodan_output_file = self.input().path
@@ -298,7 +310,7 @@ class ParseShodanOutput(luigi.Task):
             if len(json_data) > 0:
                 #print(json_data)
                 print("Entries: %d" % len(json_data))
-                ret_val = self.recon_manager.import_shodan_data(self.scan_id, json_data)
+                ret_val = recon_manager.import_shodan_data(scan_id, json_data)
 
                 # Write to output file
                 f = open(self.output().path, 'w')

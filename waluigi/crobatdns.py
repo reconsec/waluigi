@@ -18,53 +18,77 @@ from waluigi import scan_utils
 
 
 class CrobatScope(luigi.ExternalTask):
-    scan_id = luigi.Parameter()
-    token = luigi.Parameter(default=None)
-    manager_url = luigi.Parameter(default=None)
-    recon_manager = luigi.Parameter(default=None)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+    scan_input = luigi.Parameter()
 
     def output(self):
 
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+
          # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "crobat-inputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "crobat-inputs-" + scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-
         # path to each input file
-        dns_inputs_file = dir_path + os.path.sep + "dns_inputs_" + self.scan_id
+        dns_inputs_file = dir_path + os.path.sep + "dns_inputs_" + scan_id
         if os.path.isfile(dns_inputs_file):
             return luigi.LocalTarget(dns_inputs_file) 
 
-        subnets = self.recon_manager.get_subnets(self.scan_id)
-        print("[+] Retrieved %d subnets from database" % len(subnets))
+        subnets = []
+        urls = []
 
-        urls = self.recon_manager.get_urls(self.scan_id)
+        # Get selected ports
+        selected_port_list = scan_input_obj.scheduled_scan.ports
+        if len(selected_port_list) > 0:
+            port_set = set()
+            ip_set = set()
+            for port_entry in selected_port_list:
+
+                #Add IP
+                ip_addr = port_entry.host.ipv4_addr
+                ip_set.add(ip_addr)
+
+            subnets = list(ip_set)
+
+        else:
+
+            target_obj = scan_input_obj.scan_target
+            subnets_obj_arr = target_obj.subnets
+
+            # Add subnets
+            for subnet_obj in subnets_obj_arr:
+                ip = subnet_obj.subnet
+                subnet_inst = ip + "/" + str(subnet_obj.mask)
+                subnets.append(subnet_inst)
+
+            # Add URLs
+            for url in target_obj.urls:
+                urls.append(url.url)
+
+
         print("[+] Retrieved %d urls from database" % len(urls))
+        print("[+] Retrieved %d subnets from database" % len(subnets))
 
         # Create output file
         f_inputs = open(dns_inputs_file, 'w')
-        dns_ip_file = dir_path + os.path.sep + "dns_ips_" + self.scan_id
+        dns_ip_file = dir_path + os.path.sep + "dns_ips_" + scan_id
         if len(subnets) > 0:
 
             # Write subnets to file
             f = open(dns_ip_file, 'w')
-            for subnet in subnets:
-                f.write(subnet + '\n')
+            for subnet_inst in subnets:
+                f.write(subnet_inst + '\n')
             f.close()
 
         # Write to input file
         f_inputs.write(dns_ip_file + '\n')
 
         # Write urls to file
-        dns_url_file = dir_path + os.path.sep + "dns_urls_" + self.scan_id
+        dns_url_file = dir_path + os.path.sep + "dns_urls_" + scan_id
         if len(urls) > 0:
 
             # Write urls to file
@@ -80,7 +104,7 @@ class CrobatScope(luigi.ExternalTask):
         f_inputs.close()
 
         # Path to scan inputs
-        scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
+        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(dns_inputs_file)
 
@@ -187,30 +211,31 @@ def crobat_wrapper(lookup_value, lookup_type):
 @inherits(CrobatScope)
 class CrobatDNS(luigi.Task):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
 
     def requires(self):
         # Requires CrobatScope Task to be run prior
-        return CrobatScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return CrobatScope(scan_input=self.scan_input)
 
     def output(self):
 
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+
         # Get screenshot directory
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "crobat-outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "crobat-outputs-" + scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
         # path to input file
-        dns_outputs_file = dir_path + os.path.sep + "crobat_outputs_" + self.scan_id
+        dns_outputs_file = dir_path + os.path.sep + "crobat_outputs_" + scan_id
         return luigi.LocalTarget(dns_outputs_file)
 
     def run(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         # Read dns input files
         dns_input_file = self.input()
@@ -333,25 +358,23 @@ class CrobatDNS(luigi.Task):
 
         # Path to scan outputs log
         output_dir = os.path.dirname(self.output().path)
-        scan_utils.add_file_to_cleanup(self.scan_id, output_dir)
+        scan_utils.add_file_to_cleanup(scan_id, output_dir)
 
 
 @inherits(CrobatDNS)
 class ImportCrobatOutput(luigi.Task):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
     def requires(self):
         # Requires CrobatDNS Task to be run prior
-        return CrobatDNS(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return CrobatDNS(scan_input=self.scan_input)
 
     def output(self):
 
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "crobat-outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "crobat-outputs-" + scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -361,6 +384,10 @@ class ImportCrobatOutput(luigi.Task):
         return luigi.LocalTarget(out_file)
 
     def run(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+        recon_manager = scan_input_obj.scan_thread.recon_manager
 
         crobat_output_file = self.input().path
         f = open(crobat_output_file, 'r')
@@ -393,14 +420,14 @@ class ImportCrobatOutput(luigi.Task):
 
                 ip_addr_int = int(netaddr.IPAddress(ip_addr))
                 #print(domains)
-                port_obj = {'scan_id': self.scan_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
+                port_obj = {'scan_id': scan_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
 
                 # Add to list
                 port_arr.append(port_obj)
 
             if len(port_arr) > 0:
                 # Import the ports to the manager
-                ret_val = self.recon_manager.import_ports(port_arr)
+                ret_val = recon_manager.import_ports(port_arr)
 
                 print("[+] Imported domains to manager.")
 

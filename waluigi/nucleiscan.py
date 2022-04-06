@@ -18,118 +18,178 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 
 
 class NucleiScope(luigi.ExternalTask):
-    scan_id = luigi.Parameter()
-    token = luigi.Parameter(default=None)
-    manager_url = luigi.Parameter(default=None)
-    recon_manager = luigi.Parameter(default=None)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
+    scan_input = luigi.Parameter()
 
     def output(self):
 
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nuclei-inputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nuclei-inputs-" + scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
         # Convert date to str
-        nuclei_inputs_file = dir_path + os.path.sep + "nuclei_inputs_" + self.scan_id
+        nuclei_inputs_file = dir_path + os.path.sep + "nuclei_inputs_" + scan_id
         if os.path.isfile(nuclei_inputs_file):
             return luigi.LocalTarget(nuclei_inputs_file)
 
-        hosts = self.recon_manager.get_hosts(self.scan_id)
-        print("[+] Retrieved %d hosts from database" % len(hosts))
 
         # Created a larger endpoint set so things don't get scanned twice if they have the same domain
         total_endpoint_set = set()
 
-        if hosts:
+        selected_port_list = scan_input_obj.scheduled_scan.ports
+        if len(selected_port_list) > 0:
 
-            # path to each input file
             nuclei_inputs_f = open(nuclei_inputs_file, 'w')
-            for host in hosts:
+            for port_entry in selected_port_list:
 
-                ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
-                for port_obj in host.ports:
+                #Add IP
+                ip_addr = port_entry.host.ipv4_addr
+                ip_str = str(netaddr.IPAddress(ip_addr))
 
-                    port_str = str(port_obj.port)
-                    #Skip port 5985 - WinRS
-                    #if port_str == 5985 and port_obj.service_inst and port_obj.service_inst.name == 'wsman':
-                    #    continue
+                #scan_instance = {"port_id" : port_entry.id, "ipv4_addr" : ip_str, "port" : port_entry.port, "secure" : port_entry.secure, "domain_list" : list(port_entry.host.domains) }
+                #scan_arr.append(scan_instance)
 
-                    http_found = False
-                    ws_man_found = False
-                    if port_obj.components:
-                        for component in port_obj.components:
-                            if 'http' in component.component_name:
-                                http_found = True
-                            elif 'wsman' in component.component_name:
-                                ws_man_found = True
 
-                    # Skip if not already detected as http based
-                    if http_found == False or ws_man_found==True:
-                        continue
+                port_str = str(port_entry.port)
+                #Skip port 5985 - WinRS
+                http_found = False
+                ws_man_found = False
+                if port_entry.components:
+                    for component in port_entry.components:
+                        if 'http' in component.component_name:
+                            http_found = True
+                        elif 'wsman' in component.component_name:
+                            ws_man_found = True
 
-                    # if port_obj.service_inst is None or 'http' not in str(port_obj.service_inst.name):
-                    #     #print("[*] NMAP Results are empty so skipping.")
-                    #     continue
+                # Skip if not already detected as http based
+                if http_found == False or ws_man_found==True:
+                    continue
 
-                        # Setup inputs
-                    prefix = ''
-                    #if port_obj.service_inst and 'http' in port_obj.service_inst.name:
-                    #    prefix = 'http://'
-                    if http_found:
-                        prefix = 'http://'
+                # Setup inputs
+                prefix = ''
+                if http_found:
+                    prefix = 'http://'
 
-                    if port_obj.secure == 1:
-                        prefix = 'https://'
+                if port_entry.secure== 1:
+                    prefix = 'https://'
 
-                    endpoint_set = set()
-                    port_id = str(port_obj.id)
+                endpoint_set = set()
+                port_id = str(port_entry.id)
 
-                    endpoint = prefix + ip_addr + ":" + port_str
+                endpoint = prefix + ip_str + ":" + port_str
+                if endpoint not in total_endpoint_set:
+                    endpoint_set.add(endpoint)
+                    total_endpoint_set.add(endpoint)
+
+                # Add endpoint per domain
+                for domain in port_entry.host.domains[:10]:
+
+                    # Remove any wildcards
+                    domain_str = domain.lstrip("*.")
+
+                    endpoint = prefix + domain_str + ":" + port_str
                     # print("[*] Endpoint: %s" % endpoint)
-
                     if endpoint not in total_endpoint_set:
                         endpoint_set.add(endpoint)
                         total_endpoint_set.add(endpoint)
 
-                    # Add endpoint per domain
-                    for domain in host.domains[:10]:
+                # Write to nuclei input file if endpoints exist
+                if len(endpoint_set) > 0:
+                    nuclei_list_file = dir_path + os.path.sep + "nuc_in_" + port_id
 
-                        # Remove any wildcards
-                        domain_str = domain.name.lstrip("*.")
+                    f = open(nuclei_list_file, 'w')
+                    for endpoint in endpoint_set:
+                        f.write(endpoint + '\n')
+                    f.close()
 
-                        endpoint = prefix + domain_str + ":" + port_str
+                    nuclei_inputs_f.write(nuclei_list_file + '\n')
+
+        else:
+
+            #hosts = self.recon_manager.get_hosts(self.scan_id)
+            # Get hosts
+            hosts = scan_input_obj.hosts
+            print("[+] Retrieved %d hosts from database" % len(hosts))
+
+            if hosts:
+
+                # path to each input file
+                nuclei_inputs_f = open(nuclei_inputs_file, 'w')
+                for host in hosts:
+
+                    ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
+                    for port_obj in host.ports:
+
+                        port_str = str(port_obj.port)
+                        #Skip port 5985 - WinRS
+                        http_found = False
+                        ws_man_found = False
+                        if port_obj.components:
+                            for component in port_obj.components:
+                                if 'http' in component.component_name:
+                                    http_found = True
+                                elif 'wsman' in component.component_name:
+                                    ws_man_found = True
+
+                        # Skip if not already detected as http based
+                        if http_found == False or ws_man_found==True:
+                            continue
+
+                        # Setup inputs
+                        prefix = ''
+                        if http_found:
+                            prefix = 'http://'
+
+                        if port_obj.secure == 1:
+                            prefix = 'https://'
+
+                        endpoint_set = set()
+                        port_id = str(port_obj.id)
+
+                        endpoint = prefix + ip_addr + ":" + port_str
                         # print("[*] Endpoint: %s" % endpoint)
+
                         if endpoint not in total_endpoint_set:
                             endpoint_set.add(endpoint)
                             total_endpoint_set.add(endpoint)
 
-                    # Write to nuclei input file if endpoints exist
-                    if len(endpoint_set) > 0:
-                        nuclei_list_file = dir_path + os.path.sep + "nuc_in_" + date_str + "_" + port_id
+                        # Add endpoint per domain
+                        for domain in host.domains[:10]:
 
-                        f = open(nuclei_list_file, 'w')
-                        for endpoint in endpoint_set:
-                            f.write(endpoint + '\n')
-                        f.close()
+                            # Remove any wildcards
+                            domain_str = domain.name.lstrip("*.")
 
-                        nuclei_inputs_f.write(nuclei_list_file + '\n')
+                            endpoint = prefix + domain_str + ":" + port_str
+                            # print("[*] Endpoint: %s" % endpoint)
+                            if endpoint not in total_endpoint_set:
+                                endpoint_set.add(endpoint)
+                                total_endpoint_set.add(endpoint)
 
-            nuclei_inputs_f.close()
+                        # Write to nuclei input file if endpoints exist
+                        if len(endpoint_set) > 0:
+                            nuclei_list_file = dir_path + os.path.sep + "nuc_in_" + port_id
 
-            print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
+                            f = open(nuclei_list_file, 'w')
+                            for endpoint in endpoint_set:
+                                f.write(endpoint + '\n')
+                            f.close()
 
-            # Path to scan outputs log
-            scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
+                            nuclei_inputs_f.write(nuclei_list_file + '\n')
 
-            return luigi.LocalTarget(nuclei_inputs_file)
+                nuclei_inputs_f.close()
+
+        print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
+
+        # Path to scan outputs log
+        #scan_utils.add_file_to_cleanup(scan_id, dir_path)
+
+        return luigi.LocalTarget(nuclei_inputs_file)
 
 
 @inherits(NucleiScope)
@@ -139,17 +199,23 @@ class NucleiScan(luigi.Task):
 
     def requires(self):
         # Requires the target scope
-        return NucleiScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return NucleiScope(scan_input=self.scan_input)
 
     def output(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         template_path = self.template_path.replace(":", "-")
 
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nuclei-outputs-" + template_path + "-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nuclei-outputs-" + template_path + "-" + scan_id
         return luigi.LocalTarget(dir_path)
 
     def run(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         # Read nuclei input files
         nuclei_input_file = self.input()
@@ -185,7 +251,7 @@ class NucleiScan(luigi.Task):
         for ip_path in input_file_paths:
             in_file = ip_path.strip()
             filename = os.path.basename(in_file)
-            port_id = filename.split("_")[3]
+            port_id = filename.split("_")[2]
 
             # Nmap command args
             nuclei_output_file = dir_path + os.path.sep + "nuclei_out_" + port_id
@@ -211,27 +277,26 @@ class NucleiScan(luigi.Task):
                 executor.submit(subprocess.run, command_args, shell=use_shell)
 
         # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
+        #scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
 
 @inherits(NucleiScan)
 class ParseNucleiOutput(luigi.Task):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
 
     def requires(self):
         # Requires NucleiScan
-        return NucleiScan(scan_id=self.scan_id, template_path=self.template_path, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager)
+        return NucleiScan(scan_input=self.scan_input, template_path=self.template_path)
 
     def output(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         template_path = self.template_path.replace(":", "-")
 
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nuclei-outputs-" + template_path + "-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nuclei-outputs-" + template_path + "-" + scan_id
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
@@ -242,9 +307,12 @@ class ParseNucleiOutput(luigi.Task):
 
     def run(self):
 
+        scan_input_obj = self.scan_input
+        recon_manager = scan_input_obj.scan_thread.recon_manager
+
         nuclei_output_file = self.input()
         glob_check = '%s%snuclei_out_*' % (nuclei_output_file.path, os.path.sep)
-        # print("Glob: %s" % glob_check)
+
         port_arr = []
         for nuclei_file in glob.glob(glob_check):
 
@@ -275,7 +343,7 @@ class ParseNucleiOutput(luigi.Task):
         # Import the nuclei scans
         if len(port_arr) > 0:
             # Import the ports to the manager
-            ret_val = self.recon_manager.import_ports(port_arr)
+            ret_val = recon_manager.import_ports(port_arr)
 
             print("[+] Imported nuclei scans to manager.")
 

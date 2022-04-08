@@ -27,35 +27,6 @@ requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
 
 
-# Function to return a hash of the input IPs, ports, and script args to determine uniqueness of the scan
-def hash_nmap_inputs(nmap_scan_list):
-
-    hash_alg=hashlib.sha1
-    hashobj = hash_alg()
-
-    for nmap_scan_entry in nmap_scan_list:
-
-        port_list = nmap_scan_entry['port_list']
-        port_list.sort()        
-        port_comma_list = ','.join(port_list).encode()
-        hashobj.update(port_comma_list)
-
-        ip_list = nmap_scan_entry['ip_list']
-        ip_list.sort()        
-        ip_comma_list = ','.join(ip_list).encode()
-        hashobj.update(ip_comma_list)
-
-        if 'script-args' in nmap_scan_entry:
-            script_args = nmap_scan_entry['script-args']
-            script_args_cpy = script_args.copy()
-            script_args_cpy.sort()        
-            script_args_list = ','.join(script_args_cpy).encode()
-            hashobj.update(script_args_list)
-
-    image_hash = hashobj.digest()
-    image_hash_str = binascii.hexlify(image_hash).decode()
-    return image_hash_str
-
 class ScanInput():
 
     def __init__(self, scheduled_scan_thread, scheduled_scan):
@@ -65,6 +36,9 @@ class ScanInput():
         self.scan_target = None
         self.shodan_key = None
         self.hosts = None
+        self.nmap_scan_arr = None
+        self.nmap_scan_hash = None
+        self.scan_modules = None
 
         # Create a scan id if it does not exist
         if self.scheduled_scan.scan_id is None:
@@ -82,6 +56,312 @@ class ScanInput():
         # Get the shodan key
         #print("[*] Retrieving Shodan data")
         self.shodan_key = self.scan_thread.recon_manager.get_shodan_key()
+
+
+    # Function to return a hash of the input IPs, ports, and script args to determine uniqueness of the scan
+    def hash_nmap_inputs(self, nmap_scan_list):
+
+        hash_alg=hashlib.sha1
+        hashobj = hash_alg()
+
+        for nmap_scan_entry in nmap_scan_list:
+
+            port_list = nmap_scan_entry['port_list']
+            port_list.sort()        
+            port_comma_list = ','.join(port_list).encode()
+            hashobj.update(port_comma_list)
+
+            ip_list = nmap_scan_entry['ip_list']
+            ip_list.sort()        
+            ip_comma_list = ','.join(ip_list).encode()
+            hashobj.update(ip_comma_list)
+
+            if 'script-args' in nmap_scan_entry:
+                script_args = nmap_scan_entry['script-args']
+                script_args_cpy = script_args.copy()
+                script_args_cpy.sort()        
+                script_args_list = ','.join(script_args_cpy).encode()
+                hashobj.update(script_args_list)
+
+        image_hash = hashobj.digest()
+        image_hash_str = binascii.hexlify(image_hash).decode()
+        self.nmap_scan_hash = image_hash_str
+
+
+    def set_module_scan_arr(self):
+
+        nmap_scan_arr = []
+        module_list = self.scan_modules
+        if module_list and len(module_list) > 0:
+
+            #Loop through targets
+            modules = list(module_list)
+            #print(modules)
+            counter = 0
+            for module in modules:
+
+                scan_inst = {}
+                port_list = []
+
+                module_id = module['id']
+                script_args = module['args']
+                # Split on space as the script args are stored as strings not arrays
+                script_args_arr = script_args.split(" ")
+                target_list = module['targets']
+
+                # Write IPs to file
+                ip_list = []
+                for target in target_list:
+                    port_str = str(target['port'])
+                    port_list.append(port_str)
+
+                    target_ip = target['ipv4_addr']
+                    ip_str = str(netaddr.IPAddress(target_ip))
+                    if len(ip_str) > 0:
+                        ip_list.append(ip_str)
+ 
+                # Create scan instance
+                scan_inst['module_id'] = module_id
+                scan_inst['ip_list'] = ip_list
+                scan_inst['port_list'] = port_list
+                scan_inst['script-args'] = script_args_arr
+
+                # Add the scan instance
+                nmap_scan_arr.append(scan_inst)
+                counter += 1
+
+        # Hash the scan input
+        if len(nmap_scan_arr) > 0:
+            self.hash_nmap_inputs(nmap_scan_arr)
+
+        # Set the output
+        self.nmap_scan_arr =  nmap_scan_arr
+
+
+    def set_nmap_scan_arr(self, script_args, skip_load_balance_ports):
+
+        nmap_scan_arr = []
+        port_target_map = {}
+
+        # Get selected ports
+        selected_port_list = self.scheduled_scan.ports
+        if len(selected_port_list) > 0:
+
+            for port_entry in selected_port_list:
+
+                #Add IP
+                target_ip = port_entry.host.ipv4_addr
+
+                port_dict = {'ip_set':set(), 'script-args' : script_args}
+                port = str(port_entry.port)
+
+                if port in port_target_map.keys():
+                    port_dict = port_target_map[port]
+                else:
+                    port_target_map[port] = port_dict
+
+                # Add the IP
+                cur_set = port_dict['ip_set']
+                cur_set.add(target_ip)
+
+        else:
+
+            #port_arr = self.recon_manager.get_port_map(scan_id)
+            port_arr = self.port_map_to_port_list()
+            print("[+] Retrieved %d ports from database" % len(port_arr))
+
+            hosts = self.hosts
+            #hosts = self.recon_manager.get_hosts(scan_id)
+            print("[+] Retrieved %d hosts from database" % len(hosts))
+
+            #print(script_args)
+            if hosts and len(hosts) > 0:
+
+                for host in hosts:
+
+                    domains = host.domains
+
+                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
+                    port_list = []
+
+                    # Get the ports
+                    if len(host.ports) > 0:
+
+                        for port in host.ports:
+                            port_str = str(port.port)    
+
+                            # Skip any possible load balanced ports that haven't already been marked as http from pre scan
+                            if skip_load_balance_ports:
+                                if port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443':
+                                    #print(port)
+                                    http_found = False
+                                    if port.components:
+                                        for component in port.components:
+                                            if 'http' in component.component_name:
+                                                http_found = True
+                                                break
+
+                                    # Skip if not already detected as http based
+                                    if http_found == False:
+                                        continue
+
+                            port_list.append(port_str)
+
+                    elif len(port_arr) > 0:
+                        port_list.extend(port_arr)
+                    else:
+                        print("[-] No ports to scan for host")
+                        continue
+
+                    # Iterate over ports and create dict of {'ip_set': set(), 'script-args':'args'}
+                    for port in port_list:
+
+                        port_dict = {'ip_set':set(), 'script-args' : script_args}
+                        port = str(port)
+
+                        if port in port_target_map.keys():
+                            port_dict = port_target_map[port]
+                        else:
+                            port_target_map[port] = port_dict
+
+                        # Add the IP
+                        cur_set = port_dict['ip_set']
+                        cur_set.add(target_ip)
+
+                        # Add the domains
+                        for domain in domains:
+                            domain_name = domain.name
+                            if len(domain_name) > 0:
+                                domain_name = domain_name.replace("*.","")
+                                cur_set.add(domain_name)
+
+            else:
+
+                if scan_sched_obj and scan_sched_obj.masscan_scan_flag == 1:
+                    print("[*] Masscan already executed and no ports were detected. Aborting")
+                    return nmap_scan_arr
+
+                
+                # If no hosts exist then get the target subnets
+                # Get subnets
+                subnet_set = set()
+                target_obj = self.scan_target
+                subnets = target_obj.subnets
+
+                for subnet in subnets:
+                    ip = subnet.subnet
+                    subnet_inst = ip + "/" + str(subnet.mask)
+                    subnet_set.add(subnet_inst)
+
+                subnets = list(subnet_set)
+
+                #subnets = self.recon_manager.get_subnets(scan_id)
+                print("[+] Retrieved %d subnets from database" % len(subnets))
+                for subnet in subnets:
+
+                    for port in port_arr:
+                        port_dict = {'ip_set':set(), 'script-args' : script_args}
+                        port = str(port)
+
+                        if port in port_target_map.keys():
+                            port_dict = port_target_map[port]
+                        else:
+                            port_target_map[port] = port_dict
+
+                        # Add the IP
+                        cur_set = port_dict['ip_set']
+                        cur_set.add(subnet)
+
+
+            target_obj = self.scan_target
+            # Add URLs
+            urls = []
+            for url in target_obj.urls:
+                urls.append(url.url)
+
+            #urls = self.recon_manager.get_urls(scan_id)
+            print("[+] Retrieved %d urls from database" % len(urls))
+            for url in urls:
+
+                # Add the url to the list for the port
+                u = urlparse(url)
+                
+                if len(u.netloc) == 0:
+                    # Remove any wildcards
+                    url = url.replace("*.","")
+                    for port_str in port_arr:
+
+                        port_dict = {'ip_set':set(), 'script-args' : script_args}
+
+                        # Get list if it exists
+                        if port_str in port_target_map.keys():
+                            port_dict = port_target_map[port_str]
+                        else:
+                            port_target_map[port_str] = port_dict
+
+                        cur_set = port_dict['ip_set']
+                        cur_set.add(url)
+
+                    #Proceed to next url    
+                    continue
+
+                secure = 0
+                if u.scheme == 'https':
+                    secure = 1
+
+                port_str = '80'
+                if u.port is None:
+                    domain = u.netloc
+                    if secure:
+                        port_str = '443'
+                else:
+                    port_str = str(u.port)
+                    domain = u.netloc.split(":")[0]
+
+
+                port_dict = {'ip_set':set(), 'script-args' : script_args}
+
+                # Get list if it exists
+                if port_str in port_target_map.keys():
+                    port_dict = port_target_map[port_str]
+                else:
+                    port_target_map[port_str] = port_dict
+
+                # Add the entry
+                cur_set = port_dict['ip_set']
+                cur_set.add(domain)
+
+        # Create nmap scan array            
+        if len(port_target_map) > 0:
+
+            #print(port_target_map)
+            # Create scan instance of format {'port_list':[], 'ip_list':[], 'script-args':[]}
+            for port in port_target_map.keys():
+
+                scan_inst = {}
+
+                # Get port dict
+                port_dict = port_target_map[port]
+
+                # Get targets
+                targets = port_dict['ip_set']
+                script_args = port_dict['script-args']
+
+                scan_inst['ip_list'] = list(targets)
+                scan_inst['port_list'] = [str(port)]
+                scan_inst['script-args'] = script_args
+
+                # Add the scan instance
+                nmap_scan_arr.append(scan_inst)
+
+
+        # Hash the scan input
+        if len(nmap_scan_arr) > 0:
+            self.hash_nmap_inputs(nmap_scan_arr)
+
+        # Set the output
+        self.nmap_scan_arr =  nmap_scan_arr
+
 
     #Convert port bitmap into port list
     def port_map_to_port_list(self):
@@ -102,10 +382,14 @@ class ScanInput():
         return port_list
 
 
-    def refresh(self):
+    def refresh(self, modules=False):
 
         # Refresh hosts,ports,components
         self.hosts = self.scan_thread.recon_manager.get_hosts(self.scan_id)
+
+        if modules:
+            self.scan_modules = self.scan_thread.recon_manager.get_modules(self.scan_id)
+
         return
 
 
@@ -217,231 +501,14 @@ class ScheduledScanThread(threading.Thread):
                 self.connection_manager.free_connection_lock(lock_val)
 
         return ret_val
-
-
-    def get_nmap_scan_arr(self, scan_id, scan_sched_obj, module_list, script_args_arr, skip_load_balance_ports):
-
-        nmap_scan_arr = []
-        if module_list is None or len(module_list) == 0:
-
-            port_arr = self.recon_manager.get_port_map(scan_id)
-            print("[+] Retrieved %d ports from database" % len(port_arr))
-
-            hosts = self.recon_manager.get_hosts(scan_id)
-            print("[+] Retrieved %d hosts from database" % len(hosts))
-
-            script_args = script_args_arr
-            #print(script_args)
-            port_target_map = {}
-            if hosts and len(hosts) > 0:
-
-                for host in hosts:
-
-                    domains = host.domains
-
-                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
-                    port_list = []
-
-                    # Get the ports
-                    if len(host.ports) > 0:
-
-                        for port in host.ports:
-                            port_str = str(port.port)    
-
-                            # Skip any possible load balanced ports that haven't already been marked as http from pre scan
-                            if skip_load_balance_ports:
-                                if port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443':
-                                    #print(port)
-                                    http_found = False
-                                    if port.components:
-                                        for component in port.components:
-                                            if 'http' in component.component_name:
-                                                http_found = True
-                                                break
-
-                                    # Skip if not already detected as http based
-                                    if http_found == False:
-                                        continue
-
-                            port_list.append(port_str)
-
-                    elif len(port_arr) > 0:
-                        port_list.extend(port_arr)
-                    else:
-                        print("[-] No ports to scan for host")
-                        continue
-
-                    # Iterate over ports and create dict of {'ip_set': set(), 'script-args':'args'}
-                    for port in port_list:
-
-                        port_dict = {'ip_set':set(), 'script-args' : script_args}
-                        port = str(port)
-
-                        if port in port_target_map.keys():
-                            port_dict = port_target_map[port]
-                        else:
-                            port_target_map[port] = port_dict
-
-                        # Add the IP
-                        cur_set = port_dict['ip_set']
-                        cur_set.add(target_ip)
-
-                        # Add the domains
-                        for domain in domains:
-                            domain_name = domain.name
-                            if len(domain_name) > 0:
-                                domain_name = domain_name.replace("*.","")
-                                cur_set.add(domain_name)
-
-            else:
-
-                if scan_sched_obj and scan_sched_obj.masscan_scan_flag == 1:
-                    print("[*] Masscan already executed and no ports were detected. Aborting")
-                    return nmap_scan_arr
-
-                
-                # If no hosts exist then get the target subnets
-                subnets = self.recon_manager.get_subnets(scan_id)
-                print("[+] Retrieved %d subnets from database" % len(subnets))
-                for subnet in subnets:
-
-                    for port in port_arr:
-                        port_dict = {'ip_set':set(), 'script-args' : script_args}
-                        port = str(port)
-
-                        if port in port_target_map.keys():
-                            port_dict = port_target_map[port]
-                        else:
-                            port_target_map[port] = port_dict
-
-                        # Add the IP
-                        cur_set = port_dict['ip_set']
-                        cur_set.add(subnet)
-
-            urls = self.recon_manager.get_urls(scan_id)
-            print("[+] Retrieved %d urls from database" % len(urls))
-            if urls:
-
-                for url in urls:
-
-                    # Add the url to the list for the port
-                    u = urlparse(url)
-                    
-                    if len(u.netloc) == 0:
-                        # Remove any wildcards
-                        url = url.replace("*.","")
-                        for port_str in port_arr:
-
-                            port_dict = {'ip_set':set(), 'script-args' : script_args}
-
-                            # Get list if it exists
-                            if port_str in port_target_map.keys():
-                                port_dict = port_target_map[port_str]
-                            else:
-                                port_target_map[port_str] = port_dict
-
-                            cur_set = port_dict['ip_set']
-                            cur_set.add(url)
-
-                        #Proceed to next url    
-                        continue
-
-                    secure = 0
-                    if u.scheme == 'https':
-                        secure = 1
-
-                    port_str = '80'
-                    if u.port is None:
-                        domain = u.netloc
-                        if secure:
-                            port_str = '443'
-                    else:
-                        port_str = str(u.port)
-                        domain = u.netloc.split(":")[0]
-
-
-                    port_dict = {'ip_set':set(), 'script-args' : script_args}
-
-                    # Get list if it exists
-                    if port_str in port_target_map.keys():
-                        port_dict = port_target_map[port_str]
-                    else:
-                        port_target_map[port_str] = port_dict
-
-                    # Add the entry
-                    cur_set = port_dict['ip_set']
-                    cur_set.add(domain)
-
-            # Create nmap scan array            
-            if len(port_target_map) > 0:
-
-                #print(port_target_map)
-                # Create scan instance of format {'port_list':[], 'ip_list':[], 'script-args':[]}
-                for port in port_target_map.keys():
-
-                    scan_inst = {}
-
-                    # Get port dict
-                    port_dict = port_target_map[port]
-
-                    # Get targets
-                    targets = port_dict['ip_set']
-                    script_args = port_dict['script-args']
-
-                    scan_inst['ip_list'] = list(targets)
-                    scan_inst['port_list'] = [str(port)]
-                    scan_inst['script-args'] = script_args
-
-                    # Add the scan instance
-                    nmap_scan_arr.append(scan_inst)
-
-        else:
-
-            #Loop through targets
-            modules = list(module_list)
-            #print(modules)
-            counter = 0
-            for module in modules:
-
-                scan_inst = {}
-                port_list = []
-
-                module_id = module['id']
-                script_args = module['args']
-                # Split on space as the script args are stored as strings not arrays
-                script_args_arr = script_args.split(" ")
-                target_list = module['targets']
-
-                # Write IPs to file
-                ip_list = []
-                for target in target_list:
-                    port_str = str(target['port'])
-                    port_list.append(port_str)
-
-                    target_ip = target['ipv4_addr']
-                    ip_str = str(netaddr.IPAddress(target_ip))
-                    if len(ip_str) > 0:
-                        ip_list.append(ip_str)
- 
-                # Create scan instance
-                scan_inst['module_id'] = module_id
-                scan_inst['ip_list'] = ip_list
-                scan_inst['port_list'] = port_list
-                scan_inst['script-args'] = script_args_arr
-
-                # Add the scan instance
-                nmap_scan_arr.append(scan_inst)
-                counter += 1
-
-        return nmap_scan_arr
     
 
-    def nmap_scan(self, scan_id, scan_sched_obj=None, module_list=None, script_args=None, skip_load_balance_ports=False):
+    def nmap_scan(self, scan_input_obj, module_scan=False, script_args=None, skip_load_balance_ports=False):
 
         ret_val = True
 
         # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_id):
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
 
         if self.connection_manager:
@@ -454,18 +521,21 @@ class ScheduledScanThread(threading.Thread):
             # Sleep to ensure routing is setup
             time.sleep(3)
 
+
+        # Refresh scan data (Get updated ports and hosts)
+        scan_input_obj.refresh(module_scan)
+
+        if module_scan:
+            # Set the input args for nmap
+            scan_input_obj.set_module_scan_arr()
+        else:
+            # Set the input args for nmap
+            scan_input_obj.set_nmap_scan_arr(script_args, skip_load_balance_ports)
+
         # Create the nmap script array
         try:
-            nmap_scan_arr = self.get_nmap_scan_arr(scan_id, scan_sched_obj, module_list, script_args, skip_load_balance_ports)
-            if len(nmap_scan_arr) == 0:
-                return ret_val
 
-            #print(nmap_scan_arr)
-            # Get a hash of the inputs
-            input_hash = hash_nmap_inputs(nmap_scan_arr)
-            #print(input_hash)
-
-            ret = scan_pipeline.nmap_scope(scan_id, self.recon_manager, nmap_scan_arr, input_hash)
+            ret = scan_pipeline.nmap_scope(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 return False
@@ -490,7 +560,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Execute nmap
-            ret = scan_pipeline.nmap_scan(scan_id, self.recon_manager)
+            ret = scan_pipeline.nmap_scan(scan_input_obj)
             if not ret:
                 print("[-] Nmap Failed")
                 ret_val = False
@@ -515,7 +585,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Import nmap results
-            ret = scan_pipeline.parse_nmap(scan_id, self.recon_manager)
+            ret = scan_pipeline.parse_nmap(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -543,96 +613,15 @@ class ScheduledScanThread(threading.Thread):
                 print(port_num)
 
 
-        # Check if scan is cancelled
-        # if self.is_scan_cancelled(scan_id):
-        #     return ret_val
-
-        # if self.connection_manager:
-        #     # Connect to extender
-        #     lock_val = self.connection_manager.connect_to_extender()
-        #     if not lock_val:
-        #         print("[-] Failed connecting to extender")
-        #         return False
-
-        #     # Sleep to ensure routing is setup
-        #     time.sleep(3)
-
-        # # Create the dirsearch scan input obj
-        # try:
-        #     #print(nmap_scan_arr)
-        #     # Get a hash of the inputs
-        #     input_hash = hash_dirsearch_inputs(nmap_scan_arr)
-        #     #print(input_hash)
-
-        #     ret = scan_pipeline.dirsearch_scope(scan_id, self.recon_manager, scan_obj, input_hash)
-        #     if not ret:
-        #         print("[-] Failed")
-        #         return False
-        # finally:
-        #     if self.connection_manager:
-        #         # Free the lock
-        #         self.connection_manager.free_connection_lock(lock_val)
-
-        # if self.connection_manager:
-        #     # Connect to synack target
-        #     con = self.connection_manager.connect_to_target()
-        #     if not con:
-        #         print("[-] Failed connecting to target")
-        #         return False
-
-        #     # Obtain the lock before we start a scan
-        #     lock_val = self.connection_manager.get_connection_lock()
-
-        #     # Sleep to ensure routing is setup
-        #     time.sleep(3)
-
-        # try:
-
-        #     # Execute dirsearch
-        #     ret = scan_pipeline.dirsearch_scan(scan_id, self.recon_manager)
-        #     if not ret:
-        #         print("[-] Dirsearch Failed")
-        #         ret_val = False
-
-        # finally:
-        #     if self.connection_manager:
-        #         # Release the lock after scan
-        #         self.connection_manager.free_connection_lock(lock_val)
-        #     if not ret_val:
-        #         return ret_val
-
-        # if self.connection_manager:
-        #     # Connect to extender for import
-        #     lock_val = self.connection_manager.connect_to_extender()
-        #     if not lock_val:
-        #         print("[-] Failed connecting to extender")
-        #         return False
-
-        #     # Sleep to ensure routing is setup
-        #     time.sleep(3)
-
-        # try:
-
-        #     # Import results
-        #     ret = scan_pipeline.parse_dirsearch(scan_id, self.recon_manager)
-        #     if not ret:
-        #         print("[-] Failed")
-        #         ret_val = False
-
-        # finally:
-        #     if self.connection_manager:
-        #         # Free the lock
-        #         self.connection_manager.free_connection_lock(lock_val)
-
         return ret_val
 
 
-    def module_scan(self, scan_id, scan_sched_obj):
+    def module_scan(self, scan_input_obj):
 
         ret_val = True
 
         # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_id):
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
             return
 
         if self.connection_manager:
@@ -648,7 +637,8 @@ class ScheduledScanThread(threading.Thread):
 
         # Get modules for this scan
         try:
-            modules = self.recon_manager.get_modules(scan_id)
+            modules = scan_input_obj.scan_modules
+            #modules = self.recon_manager.get_modules(scan_input_obj.scan_id)
 
         finally:
             # Release lock
@@ -675,7 +665,7 @@ class ScheduledScanThread(threading.Thread):
             if tool_name == 'nmap':
 
                 # Execute nmap
-                ret = self.nmap_scan(scan_id, module_list=module_list)
+                ret = self.nmap_scan(scan_input_obj, module_list=module_list)
                 if not ret:
                     print("[-] Nmap Module Scan Failed")
                     return
@@ -982,14 +972,14 @@ class ScheduledScanThread(threading.Thread):
             version_args = ["-sV","-n"]
 
             # Execute nmap
-            ret = self.nmap_scan(scan_id, sched_scan_obj, script_args=ssl_http_scripts)
+            ret = self.nmap_scan(scan_input_obj, script_args=ssl_http_scripts)
             if not ret:
                 print("[-] Nmap Intial Scan Failed")
                 return
 
             skip_load_balance_ports = self.recon_manager.is_load_balanced()
             # Execute nmap
-            ret = self.nmap_scan(scan_id, sched_scan_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
+            ret = self.nmap_scan(scan_input_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Service Scan Failed")
                 return
@@ -1249,10 +1239,10 @@ class ReconManager:
         target_obj = None
         r = requests.get('%s/api/target/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
         if r.status_code == 404:
-            return subnets
+            return target_obj
         if r.status_code != 200:
             print("[-] Unknown Error")
-            return subnets
+            return target_obj
 
         content = r.json()
         data = self._decrypt_json(content)

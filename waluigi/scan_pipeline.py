@@ -33,22 +33,22 @@ def parse_masscan(scan_input):
     return True
 
 
-def nmap_scope(scan_id, recon_manager, nmap_scan_arr, scan_hash):
-    luigi_run_result = luigi.build([nmapscan.NmapScope(scan_id=scan_id, recon_manager=recon_manager, nmap_scan_arr=nmap_scan_arr, scan_hash=scan_hash)], local_scheduler=True, detailed_summary=True)
+def nmap_scope(scan_input):
+    luigi_run_result = luigi.build([nmapscan.NmapScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def nmap_scan(scan_id, recon_manager ):
-    luigi_run_result = luigi.build([nmapscan.NmapScan(scan_id=scan_id, recon_manager=recon_manager )], local_scheduler=True, detailed_summary=True)
+def nmap_scan(scan_input ):
+    luigi_run_result = luigi.build([nmapscan.NmapScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def parse_nmap(scan_id, recon_manager ):
-    luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_id=scan_id, recon_manager=recon_manager)], local_scheduler=True, detailed_summary=True)
+def parse_nmap(scan_input):
+    luigi_run_result = luigi.build([nmapscan.ParseNmapOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

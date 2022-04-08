@@ -67,10 +67,10 @@ class MassScanScope(luigi.ExternalTask):
                 ip = subnet.subnet
                 subnet_inst = ip + "/" + str(subnet.mask)
                 subnet_set.add(subnet_inst)
+            subnets = list(subnet_set)
 
             # Get port map and convert it
             port_list = scan_input_obj.port_map_to_port_list()
-            subnets = list(subnet_set)
 
         print("[+] Retrieved %d subnets from database" % len(subnets))
         if len(subnets) > 0:

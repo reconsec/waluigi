@@ -56,7 +56,6 @@ class PyshotScope(luigi.ExternalTask):
 
         else:
 
-            #hosts = self.recon_manager.get_hosts(self.scan_id)
             # Get hosts
             hosts = scan_input_obj.hosts
             print("[+] Retrieved %d hosts from database" % len(hosts))

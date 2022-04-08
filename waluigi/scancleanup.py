@@ -19,19 +19,20 @@ class ScanCleanup(luigi.ExternalTask):
         # Path to cleanup file
         if self.scan_id:
             all_inputs_file = scan_utils.get_cleanup_file_path(self.scan_id)
-
+            print(all_inputs_file)
             # Delete all the files defined in the cleanup file
             if os.path.isfile(all_inputs_file):
                 with open(all_inputs_file, "r") as rf:
                     lines = rf.readlines()
                     for line in lines:
                         # Remove temp dir
-                        #print(line)
-                        try:
-                             shutil.rmtree(line.strip())
-                        except Exception as e:
-                             print("[-] Error deleting output directory: %s" % str(e))
-                             pass
+                        file_path = line.strip()
+                        if len(file_path) >0 and os.path.exists(file_path):
+                            try:
+                                 shutil.rmtree(file_path)
+                            except Exception as e:
+                                 print("[-] Error deleting output directory: %s" % str(e))
+                                 pass
 
                 # Delete the file
                 os.remove(all_inputs_file)

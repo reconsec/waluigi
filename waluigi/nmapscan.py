@@ -24,24 +24,14 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 
 class NmapScope(luigi.ExternalTask):
 
-    scan_id = luigi.Parameter()
-    token = luigi.OptionalParameter(default=None)
-    manager_url = luigi.OptionalParameter(default=None)
-    recon_manager = luigi.OptionalParameter(default=None)
-    nmap_scan_arr = luigi.OptionalParameter(default=None)
-    scan_hash = luigi.Parameter(default=None)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
+    scan_input = luigi.Parameter()
    
     def output(self):
 
         # Get a hash of the inputs
-        scan_hash = self.scan_hash
-        scan_id = self.scan_id
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+        scan_hash = scan_input_obj.nmap_scan_hash
 
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
@@ -56,15 +46,14 @@ class NmapScope(luigi.ExternalTask):
         if os.path.isfile(nmap_inputs_file):
             return luigi.LocalTarget(nmap_inputs_file)
 
-        # Get the script inputs from the database
-        nmap_scan_arr = list(self.nmap_scan_arr)
+        nmap_scan_arr = scan_input_obj.nmap_scan_arr
 
         # Create dict object with hash
         nmap_scan = {'nmap_scan_id': scan_hash, 'nmap_scan_list': nmap_scan_arr}
 
         # Write the output
         nmap_inputs_f = open(nmap_inputs_file, 'w')
-        if len(nmap_scan_arr) > 0:
+        if nmap_scan_arr and len(nmap_scan_arr) > 0:
             nmap_scan_input = json.dumps(nmap_scan)
             nmap_inputs_f.write(nmap_scan_input)
         else:
@@ -84,9 +73,12 @@ class NmapScan(luigi.Task):
 
     def requires(self):
         # Requires the target scope
-        return NmapScope(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager, scan_hash=self.scan_hash)
+        return NmapScope(scan_input=self.scan_input)
 
     def output(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         # Read input file
         nmap_input_file = self.input()                
@@ -103,7 +95,7 @@ class NmapScan(luigi.Task):
             nmap_scan_id = nmap_scan_obj['nmap_scan_id']
 
             cwd = os.getcwd()
-            dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
+            dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
             meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ nmap_scan_id +".meta"
         else:
             # Remove just in case it was an earlier error
@@ -113,6 +105,9 @@ class NmapScan(luigi.Task):
         return luigi.LocalTarget(meta_file_path)
 
     def run(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         # Read input file
         nmap_input_file = self.input()                
@@ -222,7 +217,7 @@ class NmapScan(luigi.Task):
             executor.map(subprocess.run, commands)
 
         # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(self.scan_id, dir_path)
+        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
 
 def remove_dups_from_dict(dict_array):
@@ -243,16 +238,14 @@ def remove_dups_from_dict(dict_array):
 @inherits(NmapScan)
 class ParseNmapOutput(luigi.Task):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.recon_manager is None and (self.token and self.manager_url):
-            self.recon_manager = recon_manager.get_recon_manager(token=self.token, manager_url=self.manager_url)
-
     def requires(self):
         # Requires MassScan Task to be run prior
-        return NmapScan(scan_id=self.scan_id, token=self.token, manager_url=self.manager_url, recon_manager=self.recon_manager, scan_hash=self.scan_hash)
+        return NmapScan(scan_input=self.scan_input)
 
     def output(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
 
         nmap_input_file = self.input()                
         #print("[*] Input file: %s" % nmap_input_file.path)
@@ -266,12 +259,16 @@ class ParseNmapOutput(luigi.Task):
         nmap_scan_id = nmap_scan_obj['nmap_scan_id']
 
         cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-outputs-" + self.scan_id
+        dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
         out_file = dir_path + os.path.sep + "nmap_import_" + nmap_scan_id +"_complete"
 
         return luigi.LocalTarget(out_file)
 
     def run(self):
+
+        scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
+        recon_manager = scan_input_obj.scan_thread.recon_manager
 
         meta_file = self.input().path
         if os.path.exists(meta_file):
@@ -315,7 +312,7 @@ class ParseNmapOutput(luigi.Task):
                         port_id = port[1] + "." + port_str
 
                         # Greate basic port object
-                        port_obj = { 'scan_id' : self.scan_id,
+                        port_obj = { 'scan_id' : scan_id,
                                      'port' : port_str,
                                      'ipv4_addr' : ip_addr_int }
 
@@ -391,7 +388,7 @@ class ParseNmapOutput(luigi.Task):
                     #print(port_arr)
 
                     # Import the ports to the manager
-                    ret_val = self.recon_manager.import_ports(port_arr)
+                    ret_val = recon_manager.import_ports(port_arr)
 
                     # Write to output file
                     f = open(self.output().path, 'w')

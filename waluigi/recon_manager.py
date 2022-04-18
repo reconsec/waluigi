@@ -104,8 +104,8 @@ class ScanInput():
 
                 for port_entry in selected_port_list:
                     target_ip = port_entry.host.ipv4_addr
-                    ip_str = str(netaddr.IPAddress(target_ip))
-                    port_str = str(port_entry.port)
+                    ip_str = str(netaddr.IPAddress(target_ip)).strip()
+                    port_str = str(port_entry.port).strip()
                     selected_port_set.add(ip_str + ":" + port_str)
 
 
@@ -130,23 +130,23 @@ class ScanInput():
                     # Write IPs to file
                     ip_list = []
                     for target in target_list:
-                        port_str = str(target['port'])
-                        port_list.append(port_str)
-
+                        port_str = str(target['port']).strip()
                         target_ip = target['ipv4_addr']
-                        ip_str = str(netaddr.IPAddress(target_ip))
+                        ip_str = str(netaddr.IPAddress(target_ip)).strip()
                         if len(ip_str) > 0:
 
                             # If selected ports has been set, then make sure it's in the list
-                            targert_tuple = ip_str + ":" + port_str
-                            if len(selected_port_set) > 0 and targert_tuple not in selected_port_set:
+                            target_tuple = ip_str + ":" + port_str
+                            if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
                                 continue
 
+                            #print("[*] Adding tuple: %s" % target_tuple)
                             ip_list.append(ip_str)
+                            port_list.append(port_str)
 
                     # Add entry
                     if len(ip_list) > 0:
-     
+
                         # Create scan instance
                         scan_inst['module_id'] = module_id
                         scan_inst['ip_list'] = ip_list

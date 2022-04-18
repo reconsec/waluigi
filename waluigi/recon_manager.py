@@ -668,7 +668,7 @@ class ScheduledScanThread(threading.Thread):
             if tool_name == 'nmap':
 
                 # Execute nmap
-                ret = self.nmap_scan(scan_input_obj, module_list=module_list)
+                ret = self.nmap_scan(scan_input_obj, module_scan=True)
                 if not ret:
                     print("[-] Nmap Module Scan Failed")
                     return

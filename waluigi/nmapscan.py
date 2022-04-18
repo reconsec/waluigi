@@ -88,7 +88,7 @@ class NmapScan(luigi.Task):
 
         # Read input file
         nmap_input_file = self.input()                
-        print("[*] Input file: %s" % nmap_input_file.path)
+        #print("[*] Input file: %s" % nmap_input_file.path)
 
         f = nmap_input_file.open()
         json_input = f.read()
@@ -368,8 +368,7 @@ class ParseNmapOutput(luigi.Task):
                                             #print(domains)
                                     elif 'http' in script_id:
                                         # Set to http if nmap detected http in a script
-                                        if 'name' in svc_dict:
-                                            svc_dict['name'] = 'http'
+                                        svc_dict['name'] = 'http'
 
                                 # Add the output of the script results we care about
                                 script_dict = {'results' : script_res}

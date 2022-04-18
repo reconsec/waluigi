@@ -119,7 +119,7 @@ class ScanInput():
                 port_list = []
 
                 module_tool = module['tool']
-                if tool_name == module_tool
+                if tool_name == module_tool:
 
                     module_id = module['id']
                     script_args = module['args']
@@ -143,16 +143,19 @@ class ScanInput():
                                 continue
 
                             ip_list.append(ip_str)
-     
-                    # Create scan instance
-                    scan_inst['module_id'] = module_id
-                    scan_inst['ip_list'] = ip_list
-                    scan_inst['port_list'] = port_list
-                    scan_inst['script-args'] = script_args_arr
 
-                    # Add the scan instance
-                    nmap_scan_arr.append(scan_inst)
-                    counter += 1
+                    # Add entry
+                    if len(ip_list) > 0:
+     
+                        # Create scan instance
+                        scan_inst['module_id'] = module_id
+                        scan_inst['ip_list'] = ip_list
+                        scan_inst['port_list'] = port_list
+                        scan_inst['script-args'] = script_args_arr
+
+                        # Add the scan instance
+                        nmap_scan_arr.append(scan_inst)
+                        counter += 1
 
         # Hash the scan input
         if len(nmap_scan_arr) > 0:

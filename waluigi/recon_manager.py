@@ -90,11 +90,24 @@ class ScanInput():
         self.nmap_scan_hash = image_hash_str
 
 
-    def set_module_scan_arr(self):
+    def set_module_scan_arr(self, tool_name):
 
         nmap_scan_arr = []
         module_list = self.scan_modules
         if module_list and len(module_list) > 0:
+
+
+            # Get selected ports
+            selected_port_set = set()
+            selected_port_list = self.scheduled_scan.ports
+            if len(selected_port_list) > 0:
+
+                for port_entry in selected_port_list:
+                    target_ip = port_entry.host.ipv4_addr
+                    ip_str = str(netaddr.IPAddress(target_ip))
+                    port_str = str(port_entry.port)
+                    selected_port_set.add(ip_str + ":" + port_str)
+
 
             #Loop through targets
             modules = list(module_list)
@@ -105,32 +118,41 @@ class ScanInput():
                 scan_inst = {}
                 port_list = []
 
-                module_id = module['id']
-                script_args = module['args']
-                # Split on space as the script args are stored as strings not arrays
-                script_args_arr = script_args.split(" ")
-                target_list = module['targets']
+                module_tool = module['tool']
+                if tool_name == module_tool
 
-                # Write IPs to file
-                ip_list = []
-                for target in target_list:
-                    port_str = str(target['port'])
-                    port_list.append(port_str)
+                    module_id = module['id']
+                    script_args = module['args']
+                    # Split on space as the script args are stored as strings not arrays
+                    script_args_arr = script_args.split(" ")
+                    target_list = module['targets']
 
-                    target_ip = target['ipv4_addr']
-                    ip_str = str(netaddr.IPAddress(target_ip))
-                    if len(ip_str) > 0:
-                        ip_list.append(ip_str)
- 
-                # Create scan instance
-                scan_inst['module_id'] = module_id
-                scan_inst['ip_list'] = ip_list
-                scan_inst['port_list'] = port_list
-                scan_inst['script-args'] = script_args_arr
+                    # Write IPs to file
+                    ip_list = []
+                    for target in target_list:
+                        port_str = str(target['port'])
+                        port_list.append(port_str)
 
-                # Add the scan instance
-                nmap_scan_arr.append(scan_inst)
-                counter += 1
+                        target_ip = target['ipv4_addr']
+                        ip_str = str(netaddr.IPAddress(target_ip))
+                        if len(ip_str) > 0:
+
+                            # If selected ports has been set, then make sure it's in the list
+                            targert_tuple = ip_str + ":" + port_str
+                            if len(selected_port_set) > 0 and targert_tuple not in selected_port_set:
+                                continue
+
+                            ip_list.append(ip_str)
+     
+                    # Create scan instance
+                    scan_inst['module_id'] = module_id
+                    scan_inst['ip_list'] = ip_list
+                    scan_inst['port_list'] = port_list
+                    scan_inst['script-args'] = script_args_arr
+
+                    # Add the scan instance
+                    nmap_scan_arr.append(scan_inst)
+                    counter += 1
 
         # Hash the scan input
         if len(nmap_scan_arr) > 0:
@@ -524,7 +546,7 @@ class ScheduledScanThread(threading.Thread):
 
         if module_scan:
             # Set the input args for nmap
-            scan_input_obj.set_module_scan_arr()
+            scan_input_obj.set_module_scan_arr('nmap')
         else:
             # Refresh to get latest scan results (NOT necessary for modules)
             scan_input_obj.refresh()
@@ -641,7 +663,6 @@ class ScheduledScanThread(threading.Thread):
             scan_input_obj.refresh(modules=True)
 
             modules = scan_input_obj.scan_modules
-            #modules = self.recon_manager.get_modules(scan_input_obj.scan_id)
 
         finally:
             # Release lock
@@ -650,21 +671,14 @@ class ScheduledScanThread(threading.Thread):
                 self.connection_manager.free_connection_lock(lock_val)
 
 
-        args_list = []
-        tool_module_dict = {}
+        tool_set = set()
         for module in modules:
             tool_name = module['tool']
-            module_list = []
-            if tool_name in tool_module_dict:
-                module_list = tool_module_dict[tool_name]
-            else:
-                tool_module_dict[tool_name] = module_list
-
-            module_list.append(module)
+            tool_set.add(tool_name)
 
         # Iterate over tool list
-        for tool_name in tool_module_dict:
-            module_list = tool_module_dict[tool_name]
+        for tool_name in tool_set:
+
             if tool_name == 'nmap':
 
                 # Execute nmap

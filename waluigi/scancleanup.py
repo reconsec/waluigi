@@ -19,7 +19,7 @@ class ScanCleanup(luigi.ExternalTask):
         # Path to cleanup file
         if self.scan_id:
             all_inputs_file = scan_utils.get_cleanup_file_path(self.scan_id)
-            print(all_inputs_file)
+            #print(all_inputs_file)
             # Delete all the files defined in the cleanup file
             if os.path.isfile(all_inputs_file):
                 with open(all_inputs_file, "r") as rf:

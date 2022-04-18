@@ -522,10 +522,6 @@ class ScheduledScanThread(threading.Thread):
             # Sleep to ensure routing is setup
             time.sleep(3)
 
-
-        # Refresh scan data (Get updated ports and hosts)
-        scan_input_obj.refresh(module_scan)
-
         if module_scan:
             # Set the input args for nmap
             scan_input_obj.set_module_scan_arr()
@@ -638,6 +634,10 @@ class ScheduledScanThread(threading.Thread):
 
         # Get modules for this scan
         try:
+
+            # Refresh scan data (Get updated ports and hosts)
+            scan_input_obj.refresh(module_scan)
+            
             modules = scan_input_obj.scan_modules
             #modules = self.recon_manager.get_modules(scan_input_obj.scan_id)
 

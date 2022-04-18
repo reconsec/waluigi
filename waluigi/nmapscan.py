@@ -31,8 +31,7 @@ class NmapScope(luigi.ExternalTask):
         # Get a hash of the inputs
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        scan_hash = scan_input_obj.nmap_scan_hash
-
+        
         # Create input directory if it doesn't exist
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nmap-inputs-" + scan_id
@@ -41,28 +40,35 @@ class NmapScope(luigi.ExternalTask):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        # Nmap scan input file path
+        scan_hash = ''
+        if scan_input_obj.nmap_scan_hash:
+            scan_hash = scan_input_obj.nmap_scan_hash
+
         nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + scan_hash
         if os.path.isfile(nmap_inputs_file):
             return luigi.LocalTarget(nmap_inputs_file)
 
-        nmap_scan_arr = scan_input_obj.nmap_scan_arr
-
-        # Create dict object with hash
-        nmap_scan = {'nmap_scan_id': scan_hash, 'nmap_scan_list': nmap_scan_arr}
-
-        # Write the output
+        # Open the input file
         nmap_inputs_f = open(nmap_inputs_file, 'w')
+
+        nmap_scan_arr = scan_input_obj.nmap_scan_arr
         if nmap_scan_arr and len(nmap_scan_arr) > 0:
+
+            # Create dict object with hash
+            nmap_scan = {'nmap_scan_id': scan_hash, 'nmap_scan_list': nmap_scan_arr}
+
+            # Write the output
             nmap_scan_input = json.dumps(nmap_scan)
             nmap_inputs_f.write(nmap_scan_input)
+
+            # Add file to output file to be removed at cleanup
+            scan_utils.add_file_to_cleanup(scan_id, dir_path)
+
         else:
             print("[-] Nmap scan array is empted.")
 
+        # Close the file
         nmap_inputs_f.close()
-
-        # Add file to output file to be removed at cleanup
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(nmap_inputs_file)
 

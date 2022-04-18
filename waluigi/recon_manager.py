@@ -242,9 +242,8 @@ class ScanInput():
             else:
 
                 if self.scheduled_scan.masscan_scan_flag == 1:
-                    print("[*] Masscan already executed and no ports were detected. Aborting")
-                    return nmap_scan_arr
-
+                    print("[*] Masscan already executed and no ports were detected.")
+                    return
                 
                 # If no hosts exist then get the target subnets
                 # Get subnets

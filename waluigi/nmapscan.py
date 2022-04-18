@@ -82,7 +82,7 @@ class NmapScan(luigi.Task):
 
         # Read input file
         nmap_input_file = self.input()                
-        print("[*] Input file: %s" % nmap_input_file.path)
+        #print("[*] Input file: %s" % nmap_input_file.path)
 
         f = nmap_input_file.open()
         json_input = f.read()

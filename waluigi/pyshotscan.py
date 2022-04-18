@@ -199,7 +199,7 @@ class PyshotScan(luigi.Task):
                 output = thread_obj.get()
                 if len(output) > 0:
                     print(output)
-                    raise RuntimeError("[-] Input file is empty")
+                    #raise RuntimeError("[-] Input file is empty")
 
             # Path to scan outputs log
             scan_utils.add_file_to_cleanup(scan_id, dir_path)

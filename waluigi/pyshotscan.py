@@ -101,16 +101,18 @@ class PyshotScope(luigi.ExternalTask):
                         scan_arr.append(scan_instance)
 
         # open input file
+        pyshot_inputs_f = open(pyshot_inputs_file, 'w')
         if len(scan_arr) > 0:
-            pyshot_inputs_f = open(pyshot_inputs_file, 'w')
             # Dump array to JSON
             pyshot_scan_input = json.dumps(scan_arr)
             # Write to output file
             pyshot_inputs_f.write(pyshot_scan_input)
-            pyshot_inputs_f.close()
+            
 
-            # Path to scan outputs log
-            scan_utils.add_file_to_cleanup(scan_id, dir_path)
+        pyshot_inputs_f.close()
+
+        # Path to scan outputs log
+        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(pyshot_inputs_file)
 

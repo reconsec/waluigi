@@ -175,12 +175,12 @@ class ScanInput():
             print("[+] Retrieved %d ports from database" % len(port_arr))
 
             hosts = self.hosts
-            #hosts = self.recon_manager.get_hosts(scan_id)
-            print("[+] Retrieved %d hosts from database" % len(hosts))
 
             #print(script_args)
             if hosts and len(hosts) > 0:
 
+
+                print("[+] Retrieved %d hosts from database" % len(hosts))
                 for host in hosts:
 
                     domains = host.domains
@@ -637,7 +637,7 @@ class ScheduledScanThread(threading.Thread):
 
             # Refresh scan data (Get updated ports and hosts)
             scan_input_obj.refresh(module_scan)
-            
+
             modules = scan_input_obj.scan_modules
             #modules = self.recon_manager.get_modules(scan_input_obj.scan_id)
 

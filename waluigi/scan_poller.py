@@ -56,7 +56,7 @@ def main(args):
 
         except Exception as e: 
             if "refused" in str(e):
-                print("[*] Connection done. Retrying in 30 seconds")
+                print("[*] Connection refused. Retrying in 30 seconds")
                 time.sleep(30) # Stop scan scheduler thread
                 continue
             else:

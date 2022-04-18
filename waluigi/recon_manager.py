@@ -52,6 +52,8 @@ class ScanInput():
 
         # Get the initial subnets and urls for this target
         self.scan_target = self.scan_thread.recon_manager.get_target(self.scan_id)
+        if self.scan_target is None:
+            raise RuntimeError("[-] No scan target returned for scan.")
 
         # Get the shodan key
         #print("[*] Retrieving Shodan data")
@@ -143,6 +145,8 @@ class ScanInput():
         nmap_scan_arr = []
         port_target_map = {}
 
+        target_obj = self.scan_target
+
         # Get selected ports
         selected_port_list = self.scheduled_scan.ports
         if len(selected_port_list) > 0:
@@ -171,12 +175,12 @@ class ScanInput():
             print("[+] Retrieved %d ports from database" % len(port_arr))
 
             hosts = self.hosts
-            #hosts = self.recon_manager.get_hosts(scan_id)
-            print("[+] Retrieved %d hosts from database" % len(hosts))
 
             #print(script_args)
             if hosts and len(hosts) > 0:
 
+
+                print("[+] Retrieved %d hosts from database" % len(hosts))
                 for host in hosts:
 
                     domains = host.domains
@@ -237,43 +241,40 @@ class ScanInput():
 
             else:
 
-                if scan_sched_obj and scan_sched_obj.masscan_scan_flag == 1:
-                    print("[*] Masscan already executed and no ports were detected. Aborting")
-                    return nmap_scan_arr
-
+                if self.scheduled_scan.masscan_scan_flag == 1:
+                    print("[*] Masscan already executed and no ports were detected.")
+                    return
                 
                 # If no hosts exist then get the target subnets
                 # Get subnets
-                subnet_set = set()
-                target_obj = self.scan_target
-                subnets = target_obj.subnets
+                subnet_set = set()             
+                if target_obj:
+                    subnets = target_obj.subnets
 
-                for subnet in subnets:
-                    ip = subnet.subnet
-                    subnet_inst = ip + "/" + str(subnet.mask)
-                    subnet_set.add(subnet_inst)
+                    for subnet in subnets:
+                        ip = subnet.subnet
+                        subnet_inst = ip + "/" + str(subnet.mask)
+                        subnet_set.add(subnet_inst)
 
-                subnets = list(subnet_set)
+                    subnets = list(subnet_set)
 
-                #subnets = self.recon_manager.get_subnets(scan_id)
-                print("[+] Retrieved %d subnets from database" % len(subnets))
-                for subnet in subnets:
+                    #subnets = self.recon_manager.get_subnets(scan_id)
+                    print("[+] Retrieved %d subnets from database" % len(subnets))
+                    for subnet in subnets:
 
-                    for port in port_arr:
-                        port_dict = {'ip_set':set(), 'script-args' : script_args}
-                        port = str(port)
+                        for port in port_arr:
+                            port_dict = {'ip_set':set(), 'script-args' : script_args}
+                            port = str(port)
 
-                        if port in port_target_map.keys():
-                            port_dict = port_target_map[port]
-                        else:
-                            port_target_map[port] = port_dict
+                            if port in port_target_map.keys():
+                                port_dict = port_target_map[port]
+                            else:
+                                port_target_map[port] = port_dict
 
-                        # Add the IP
-                        cur_set = port_dict['ip_set']
-                        cur_set.add(subnet)
+                            # Add the IP
+                            cur_set = port_dict['ip_set']
+                            cur_set.add(subnet)
 
-
-            target_obj = self.scan_target
             # Add URLs
             urls = []
             for url in target_obj.urls:
@@ -521,14 +522,12 @@ class ScheduledScanThread(threading.Thread):
             # Sleep to ensure routing is setup
             time.sleep(3)
 
-
-        # Refresh scan data (Get updated ports and hosts)
-        scan_input_obj.refresh(module_scan)
-
         if module_scan:
             # Set the input args for nmap
             scan_input_obj.set_module_scan_arr()
         else:
+            # Refresh to get latest scan results (NOT necessary for modules)
+            scan_input_obj.refresh()
             # Set the input args for nmap
             scan_input_obj.set_nmap_scan_arr(script_args, skip_load_balance_ports)
 
@@ -637,6 +636,10 @@ class ScheduledScanThread(threading.Thread):
 
         # Get modules for this scan
         try:
+
+            # Refresh scan data (Get updated ports and hosts)
+            scan_input_obj.refresh(modules=True)
+
             modules = scan_input_obj.scan_modules
             #modules = self.recon_manager.get_modules(scan_input_obj.scan_id)
 
@@ -665,7 +668,7 @@ class ScheduledScanThread(threading.Thread):
             if tool_name == 'nmap':
 
                 # Execute nmap
-                ret = self.nmap_scan(scan_input_obj, module_list=module_list)
+                ret = self.nmap_scan(scan_input_obj, module_scan=True)
                 if not ret:
                     print("[-] Nmap Module Scan Failed")
                     return
@@ -1000,7 +1003,7 @@ class ScheduledScanThread(threading.Thread):
 
         if sched_scan_obj.module_scan_flag == 1:
             # Execute module scan
-            ret = self.module_scan(scan_id, sched_scan_obj)
+            ret = self.module_scan(scan_input_obj)
             if not ret:
                 print("[-] Module Scan Failed")
                 return

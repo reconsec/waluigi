@@ -526,6 +526,8 @@ class ScheduledScanThread(threading.Thread):
             # Set the input args for nmap
             scan_input_obj.set_module_scan_arr()
         else:
+            # Refresh to get latest scan results (NOT necessary for modules)
+            scan_input_obj.refresh()
             # Set the input args for nmap
             scan_input_obj.set_nmap_scan_arr(script_args, skip_load_balance_ports)
 

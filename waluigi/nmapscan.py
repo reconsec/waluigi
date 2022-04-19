@@ -402,10 +402,10 @@ class ParseNmapOutput(luigi.Task):
                     # Import the ports to the manager
                     ret_val = recon_manager.import_ports(port_arr)
 
-                    # Write to output file
-                    f = open(self.output().path, 'w')
-                    f.write("complete")
-                    f.close()
+        # Write to output file
+        f = open(self.output().path, 'w')
+        f.write("complete")
+        f.close()
 
-            print("[+] Updated ports database with Nmap results.")
+        print("[+] Updated ports database with Nmap results.")
 

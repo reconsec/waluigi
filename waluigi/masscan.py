@@ -149,6 +149,8 @@ class MasscanScan(luigi.Task):
         data = f.readlines()
         f.close()
 
+        masscan_output_file_path = self.output().path
+
         if len(data) > 0:
             conf_file_path = data[0].strip()
             ips_file_path = data[1].strip()
@@ -163,7 +165,7 @@ class MasscanScan(luigi.Task):
                 "--rate",
                 "1000",
                 "-oX",
-                self.output().path,
+                masscan_output_file_path,
                 "-c",
                 conf_file_path,
                 "-iL",
@@ -174,6 +176,11 @@ class MasscanScan(luigi.Task):
 
             # Execute process
             subprocess.run(command)
+        else:
+            f_output = open(masscan_output_file_path, 'w')
+            # Close output file
+            f_output.close()
+
 
         # Add the file to the cleanup file
         output_dir = os.path.dirname(self.output().path)
@@ -250,9 +257,9 @@ class ParseMasscanOutput(luigi.Task):
             # Import the ports to the manager
             ret_val = recon_manager.import_ports(port_arr)
 
-            # Write to output file
-            f = open(self.output().path, 'w')
-            f.write("complete")
-            f.close()
+        # Write to output file
+        f = open(self.output().path, 'w')
+        f.write("complete")
+        f.close()
 
 

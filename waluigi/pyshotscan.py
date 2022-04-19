@@ -280,10 +280,10 @@ class ParsePyshotOutput(luigi.Task):
 
             print("[+] Imported %d screenshots to manager." % (count))
 
-            # Write to output file
-            f = open(self.output().path, 'w')
-            f.write("complete")
-            f.close()
+        # Write to output file
+        f = open(self.output().path, 'w')
+        f.write("complete")
+        f.close()
 
 
 

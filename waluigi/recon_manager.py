@@ -130,6 +130,7 @@ class ScanInput():
 
                     # Write IPs to file
                     ip_list = set()
+                    print(target_list)
                     for target in target_list:
                         port_str = str(target['port']).strip()
                         target_ip = target['ipv4_addr']
@@ -138,11 +139,10 @@ class ScanInput():
 
                             # If selected ports has been set, then make sure it's in the list
                             target_tuple = ip_str + ":" + port_str
-                            print('[*] Target: %s' % ip_str)
                             if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
                                 continue
 
-                            #print("[*] Adding tuple: %s" % target_tuple)
+                            print("[*] Adding tuple: %s" % target_tuple)
                             ip_list.add(ip_str)
                             port_list.add(port_str)
 

@@ -314,6 +314,12 @@ class ParseNmapOutput(luigi.Task):
                     # Loop through ports
                     for port in host.get_open_ports():
 
+                        domain_set = set()     
+                        # Get hostnames
+                        hostnames = host.hostnames
+                        for hostname in hostnames:
+                            domain_set.add(hostname)
+
                         port_str = str(port[0])
                         port_id = port[1] + "." + port_str
 
@@ -331,7 +337,7 @@ class ParseNmapOutput(luigi.Task):
 
                             # Set the service dictionary
                             svc_dict = svc.service_dict
-                            if 'name' in svc_dict and 'http' in svc_dict['name']:
+                            if 'name' in svc.service_dict and 'http' in svc.service_dict['name']:
                                 svc_dict['name'] = ''
 
                             script_res_arr = svc.scripts_results
@@ -350,7 +356,7 @@ class ParseNmapOutput(luigi.Task):
                                         port_obj['secure'] = 1
                                         output = script['output']
                                         lines = output.split("\n")
-                                        domains = []
+
                                         for line in lines:
 
                                             if "Subject Alternative Name:" in line:
@@ -360,11 +366,8 @@ class ParseNmapOutput(luigi.Task):
                                                 for dns_entry in line_arr:
                                                     if "DNS" in dns_entry:
                                                         dns_stripped = dns_entry.replace("DNS:","").strip()
-                                                        domain_id = None
-                                                        domains.append(dns_stripped)
+                                                        domain_set.add(dns_stripped)
 
-                                        if len(domains) > 0:
-                                            port_obj['domains'] = domains
                                             #print(domains)
                                     elif 'http' in script_id:
                                         # Set to http if nmap detected http in a script
@@ -385,6 +388,10 @@ class ParseNmapOutput(luigi.Task):
                             port_obj['service'] = svc_dict
                                         
 
+                        # Add domains
+                        if len(domain_set) > 0:
+                            port_obj['domains'] = list(domain_set)
+
                         # Add to list
                         port_arr.append(port_obj)
 
@@ -395,10 +402,10 @@ class ParseNmapOutput(luigi.Task):
                     # Import the ports to the manager
                     ret_val = recon_manager.import_ports(port_arr)
 
-                    # Write to output file
-                    f = open(self.output().path, 'w')
-                    f.write("complete")
-                    f.close()
+        # Write to output file
+        f = open(self.output().path, 'w')
+        f.write("complete")
+        f.close()
 
-            print("[+] Updated ports database with Nmap results.")
+        print("[+] Updated ports database with Nmap results.")
 

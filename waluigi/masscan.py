@@ -72,13 +72,15 @@ class MassScanScope(luigi.ExternalTask):
             # Get port map and convert it
             port_list = scan_input_obj.port_map_to_port_list()
 
+
+        # Create output file
+        f_inputs = open(masscan_inputs_file, 'w')
         print("[+] Retrieved %d subnets from database" % len(subnets))
         if len(subnets) > 0:
 
             print("[+] Retrieved %d ports from database" % len(port_list))
 
             # Create output file
-            f_inputs = open(masscan_inputs_file, 'w')
             if len(port_list) > 0:
                 
                 masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
@@ -105,13 +107,13 @@ class MassScanScope(luigi.ExternalTask):
                 f_inputs.write(masscan_config_file + '\n')
                 f_inputs.write(masscan_ip_file + '\n')
 
-            # Close output file
-            f_inputs.close()
+        # Close output file
+        f_inputs.close()
 
-            # Add the file to the cleanup file
-            scan_utils.add_file_to_cleanup(scan_id, dir_path)
+        # Add the file to the cleanup file
+        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
-            return luigi.LocalTarget(masscan_inputs_file)
+        return luigi.LocalTarget(masscan_inputs_file)
 
 @inherits(MassScanScope)
 class MasscanScan(luigi.Task):
@@ -147,7 +149,9 @@ class MasscanScan(luigi.Task):
         data = f.readlines()
         f.close()
 
-        if data:
+        masscan_output_file_path = self.output().path
+
+        if len(data) > 0:
             conf_file_path = data[0].strip()
             ips_file_path = data[1].strip()
 
@@ -161,7 +165,7 @@ class MasscanScan(luigi.Task):
                 "--rate",
                 "1000",
                 "-oX",
-                self.output().path,
+                masscan_output_file_path,
                 "-c",
                 conf_file_path,
                 "-iL",
@@ -172,6 +176,11 @@ class MasscanScan(luigi.Task):
 
             # Execute process
             subprocess.run(command)
+        else:
+            f_output = open(masscan_output_file_path, 'w')
+            # Close output file
+            f_output.close()
+
 
         # Add the file to the cleanup file
         output_dir = os.path.dirname(self.output().path)
@@ -248,9 +257,9 @@ class ParseMasscanOutput(luigi.Task):
             # Import the ports to the manager
             ret_val = recon_manager.import_ports(port_arr)
 
-            # Write to output file
-            f = open(self.output().path, 'w')
-            f.write("complete")
-            f.close()
+        # Write to output file
+        f = open(self.output().path, 'w')
+        f.write("complete")
+        f.close()
 
 

@@ -426,6 +426,7 @@ class ImportCrobatOutput(luigi.Task):
                 port_arr.append(port_obj)
 
             if len(port_arr) > 0:
+                #print(port_arr)
                 # Import the ports to the manager
                 ret_val = recon_manager.import_ports(port_arr)
 

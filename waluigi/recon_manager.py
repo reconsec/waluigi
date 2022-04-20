@@ -116,7 +116,7 @@ class ScanInput():
             for module in modules:
 
                 scan_inst = {}
-                port_list = []
+                port_list = set()
 
                 module_tool = module['tool']
                 if tool_name == module_tool:
@@ -128,29 +128,30 @@ class ScanInput():
                     target_list = module['targets']
 
                     # Write IPs to file
-                    ip_list = []
+                    ip_list = set()
                     for target in target_list:
                         port_str = str(target['port']).strip()
                         target_ip = target['ipv4_addr']
                         ip_str = str(netaddr.IPAddress(target_ip)).strip()
                         if len(ip_str) > 0:
 
+                            print('[*] Target: %s' % ip_str)
                             # If selected ports has been set, then make sure it's in the list
                             target_tuple = ip_str + ":" + port_str
                             if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
                                 continue
 
                             #print("[*] Adding tuple: %s" % target_tuple)
-                            ip_list.append(ip_str)
-                            port_list.append(port_str)
+                            ip_list.add(ip_str)
+                            port_list.add(port_str)
 
                     # Add entry
                     if len(ip_list) > 0:
 
                         # Create scan instance
                         scan_inst['module_id'] = module_id
-                        scan_inst['ip_list'] = ip_list
-                        scan_inst['port_list'] = port_list
+                        scan_inst['ip_list'] = list(ip_list)
+                        scan_inst['port_list'] = list(port_list)
                         scan_inst['script-args'] = script_args_arr
 
                         # Add the scan instance

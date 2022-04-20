@@ -110,6 +110,7 @@ class ScanInput():
 
 
             #Loop through targets
+            print(selected_port_set)
             modules = list(module_list)
             #print(modules)
             counter = 0
@@ -135,9 +136,9 @@ class ScanInput():
                         ip_str = str(netaddr.IPAddress(target_ip)).strip()
                         if len(ip_str) > 0:
 
-                            print('[*] Target: %s' % ip_str)
                             # If selected ports has been set, then make sure it's in the list
                             target_tuple = ip_str + ":" + port_str
+                            print('[*] Target: %s' % ip_str)
                             if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
                                 continue
 

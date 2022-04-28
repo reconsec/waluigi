@@ -236,15 +236,17 @@ class ScanInput():
                     # If masscan was part of the scan, then use results from it to feed NMAP
                     if masscan_selected and len(host.ports) > 0:
 
+                        print(port_arr)
                         for port in host.ports:
 
+                            dns_resolv = False
+                            port_int = port.port
+
                             # Skip the port if its not in the current scan
-                            if port not in port_arr:
+                            if port.port not in port_arr:
                                 continue
 
-                            dns_resolv = False
-                            port_str = str(port.port)
-
+                            port_str = str(port_int)
                             # Skip any possible load balanced ports that haven't already been marked as http from pre scan
                             if skip_load_balance_ports:
 
@@ -267,7 +269,7 @@ class ScanInput():
                             if port_str in port_target_map.keys():
                                 port_obj = port_target_map[port_str]
                             else:
-                                port_obj = PortScan(int(port.port))
+                                port_obj = PortScan(int(port_int))
                                 port_target_map[port_str] = port_obj
 
                             # Add IP

@@ -198,7 +198,7 @@ class NmapScan(luigi.Task):
                 command.extend(command_arr)
 
                 # Should do DNS lookup (HTTP assets)
-                resolve_dns = = nmap_scan_arr['resolve_dns']
+                resolve_dns = nmap_scan_arr['resolve_dns']
                 if resolve_dns == False:
                     command.append("-n")
 

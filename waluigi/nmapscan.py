@@ -106,7 +106,7 @@ class NmapScan(luigi.Task):
         else:
             # Remove just in case it was an earlier error
             os.remove(nmap_input_file.path)
-            raise RuntimeError("[-] Input file is empty")
+            #raise RuntimeError("[-] Input file is empty")
 
         return luigi.LocalTarget(meta_file_path)
 

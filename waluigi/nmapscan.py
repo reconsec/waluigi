@@ -219,15 +219,15 @@ class NmapScan(luigi.Task):
                 commands.append(command)
                 counter += 1
 
+            # Run threaded
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                executor.map(subprocess.run, commands)
+
         # Write out meta data file
         f = open(meta_file_path, 'w')
         if nmap_scan_data:
             f.write(json.dumps(nmap_scan_data))
         f.close()
-
-        # Run threaded
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            executor.map(subprocess.run, commands)
 
         # Path to scan outputs log
         scan_utils.add_file_to_cleanup(scan_id, dir_path)

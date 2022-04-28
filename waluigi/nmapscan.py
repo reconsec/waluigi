@@ -291,125 +291,126 @@ class ParseNmapOutput(luigi.Task):
             json_input = f.read()
             f.close()
 
-            #load input file 
-            nmap_scan_obj = json.loads(json_input)
-            nmap_json_arr = nmap_scan_obj['nmap_scan_list']
+            #load input file
+            if len(json_input) > 0:
+                nmap_scan_obj = json.loads(json_input)
+                nmap_json_arr = nmap_scan_obj['nmap_scan_list']
 
-            for nmap_scan_entry in nmap_json_arr:
+                for nmap_scan_entry in nmap_json_arr:
 
-                # For each file
-                nmap_out = nmap_scan_entry['output_file']                
-                nmap_report = None
-                try:
-                    nmap_report = NmapParser.parse_fromfile(nmap_out)
-                except Exception as e:
-                    print("[-] Failed parsing nmap output: %s" % nmap_out)
-                    print(traceback.format_exc())
-                    
+                    # For each file
+                    nmap_out = nmap_scan_entry['output_file']                
+                    nmap_report = None
                     try:
-                        shutil.rmtree(nmap_output_file.path)
+                        nmap_report = NmapParser.parse_fromfile(nmap_out)
                     except Exception as e:
-                        pass
+                        print("[-] Failed parsing nmap output: %s" % nmap_out)
+                        print(traceback.format_exc())
+                        
+                        try:
+                            shutil.rmtree(nmap_output_file.path)
+                        except Exception as e:
+                            pass
 
-                    raise
+                        raise
 
-                # Loop through hosts
-                port_arr = []
-                for host in nmap_report.hosts:
+                    # Loop through hosts
+                    port_arr = []
+                    for host in nmap_report.hosts:
 
-                    host_ip = host.id
-                    ip_addr_int = int(netaddr.IPAddress(host_ip))
+                        host_ip = host.id
+                        ip_addr_int = int(netaddr.IPAddress(host_ip))
 
-                    # Loop through ports
-                    for port in host.get_open_ports():
+                        # Loop through ports
+                        for port in host.get_open_ports():
 
-                        domain_set = set()     
-                        # Get hostnames
-                        hostnames = host.hostnames
-                        for hostname in hostnames:
-                            domain_set.add(hostname)
+                            domain_set = set()     
+                            # Get hostnames
+                            hostnames = host.hostnames
+                            for hostname in hostnames:
+                                domain_set.add(hostname)
 
-                        port_str = str(port[0])
-                        port_id = port[1] + "." + port_str
+                            port_str = str(port[0])
+                            port_id = port[1] + "." + port_str
 
-                        # Greate basic port object
-                        port_obj = { 'scan_id' : scan_id,
-                                     'port' : port_str,
-                                     'ipv4_addr' : ip_addr_int }
+                            # Greate basic port object
+                            port_obj = { 'scan_id' : scan_id,
+                                         'port' : port_str,
+                                         'ipv4_addr' : ip_addr_int }
 
-                        # Get service details if present
-                        svc = host.get_service_byid(port_id)
-                        if svc:
+                            # Get service details if present
+                            svc = host.get_service_byid(port_id)
+                            if svc:
 
-                            if svc.banner and len(svc.banner) > 0:                          
-                                port_obj['banner'] = svc.banner
+                                if svc.banner and len(svc.banner) > 0:                          
+                                    port_obj['banner'] = svc.banner
 
-                            # Set the service dictionary
-                            svc_dict = svc.service_dict
-                            if 'name' in svc.service_dict and 'http' in svc.service_dict['name']:
-                                svc_dict['name'] = ''
+                                # Set the service dictionary
+                                svc_dict = svc.service_dict
+                                if 'name' in svc.service_dict and 'http' in svc.service_dict['name']:
+                                    svc_dict['name'] = ''
 
-                            script_res_arr = svc.scripts_results
-                            if len(script_res_arr) > 0:
+                                script_res_arr = svc.scripts_results
+                                if len(script_res_arr) > 0:
 
-                                # Remove dups
-                                script_res = remove_dups_from_dict(script_res_arr)
+                                    # Remove dups
+                                    script_res = remove_dups_from_dict(script_res_arr)
 
-                                # Add domains in certificate to port if SSL
-                                for script in script_res:
+                                    # Add domains in certificate to port if SSL
+                                    for script in script_res:
 
-                                    script_id = script['id']
-                                    port_int = int(port_str)
-                                    if script_id == 'ssl-cert':
+                                        script_id = script['id']
+                                        port_int = int(port_str)
+                                        if script_id == 'ssl-cert':
 
-                                        port_obj['secure'] = 1
-                                        output = script['output']
-                                        lines = output.split("\n")
+                                            port_obj['secure'] = 1
+                                            output = script['output']
+                                            lines = output.split("\n")
 
-                                        for line in lines:
+                                            for line in lines:
 
-                                            if "Subject Alternative Name:" in line:
+                                                if "Subject Alternative Name:" in line:
 
-                                                line = line.replace("Subject Alternative Name:","")
-                                                line_arr = line.split(",")
-                                                for dns_entry in line_arr:
-                                                    if "DNS" in dns_entry:
-                                                        dns_stripped = dns_entry.replace("DNS:","").strip()
-                                                        domain_set.add(dns_stripped)
+                                                    line = line.replace("Subject Alternative Name:","")
+                                                    line_arr = line.split(",")
+                                                    for dns_entry in line_arr:
+                                                        if "DNS" in dns_entry:
+                                                            dns_stripped = dns_entry.replace("DNS:","").strip()
+                                                            domain_set.add(dns_stripped)
 
-                                            #print(domains)
-                                    elif 'http' in script_id:
-                                        # Set to http if nmap detected http in a script
-                                        svc_dict['name'] = 'http'
+                                                #print(domains)
+                                        elif 'http' in script_id:
+                                            # Set to http if nmap detected http in a script
+                                            svc_dict['name'] = 'http'
 
-                                # Add the output of the script results we care about
-                                script_dict = {'results' : script_res}
+                                    # Add the output of the script results we care about
+                                    script_dict = {'results' : script_res}
 
-                                # Add module id if it exists
-                                if 'module_id' in nmap_scan_entry:
-                                    module_id = nmap_scan_entry['module_id']
-                                    script_dict['module_id'] = module_id
+                                    # Add module id if it exists
+                                    if 'module_id' in nmap_scan_entry:
+                                        module_id = nmap_scan_entry['module_id']
+                                        script_dict['module_id'] = module_id
 
-                                port_obj['nmap_script_dict'] = script_dict
+                                    port_obj['nmap_script_dict'] = script_dict
 
 
-                            # Set the service dictionary
-                            port_obj['service'] = svc_dict
-                                        
+                                # Set the service dictionary
+                                port_obj['service'] = svc_dict
+                                            
 
-                        # Add domains
-                        if len(domain_set) > 0:
-                            port_obj['domains'] = list(domain_set)
+                            # Add domains
+                            if len(domain_set) > 0:
+                                port_obj['domains'] = list(domain_set)
 
-                        # Add to list
-                        port_arr.append(port_obj)
+                            # Add to list
+                            port_arr.append(port_obj)
 
-                # Add the IP list
-                if len(port_arr) > 0:
-                    #print(port_arr)
+                    # Add the IP list
+                    if len(port_arr) > 0:
+                        #print(port_arr)
 
-                    # Import the ports to the manager
-                    ret_val = recon_manager.import_ports(port_arr)
+                        # Import the ports to the manager
+                        ret_val = recon_manager.import_ports(port_arr)
 
         # Write to output file
         f = open(self.output().path, 'w')

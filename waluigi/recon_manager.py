@@ -410,7 +410,7 @@ class ScanInput():
         # Create nmap scan array            
         if len(port_target_map) > 0:
 
-            print(port_target_map)
+            #print(port_target_map)
             # Create scan instance of format {'port_list':[], 'ip_list':[], 'script-args':[]}
             for port in port_target_map.keys():
 

@@ -267,9 +267,11 @@ class ParseNmapOutput(luigi.Task):
         json_input = f.read()
         f.close()
 
-        #load input file 
-        nmap_scan_obj = json.loads(json_input)
-        nmap_scan_id = nmap_scan_obj['nmap_scan_id']
+        #load input file
+        nmap_scan_id = ''
+        if len(json_input) > 0:
+            nmap_scan_obj = json.loads(json_input)
+            nmap_scan_id = nmap_scan_obj['nmap_scan_id']
 
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id

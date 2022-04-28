@@ -27,6 +27,16 @@ requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
 
 
+class PortScan():
+
+    def __init__(self, port):
+        self.port = port
+        self.target_set = set()
+        self.script_args = None
+        self.resolve_dns = False
+
+
+
 class ScanInput():
 
     def __init__(self, scheduled_scan_thread, scheduled_scan):
@@ -80,10 +90,11 @@ class ScanInput():
 
             if 'script-args' in nmap_scan_entry:
                 script_args = nmap_scan_entry['script-args']
-                script_args_cpy = script_args.copy()
-                script_args_cpy.sort()        
-                script_args_list = ','.join(script_args_cpy).encode()
-                hashobj.update(script_args_list)
+                if script_args:
+                    script_args_cpy = script_args.copy()
+                    script_args_cpy.sort()        
+                    script_args_list = ','.join(script_args_cpy).encode()
+                    hashobj.update(script_args_list)
 
         image_hash = hashobj.digest()
         image_hash_str = binascii.hexlify(image_hash).decode()
@@ -170,9 +181,20 @@ class ScanInput():
     def set_nmap_scan_arr(self, script_args, skip_load_balance_ports):
 
         nmap_scan_arr = []
+
+        # Dict of ports to port objects
         port_target_map = {}
 
+        # Set scan target
         target_obj = self.scan_target
+
+        # URL set
+        target_url_set = set()
+        for url in target_obj.urls:
+            target_url_set.add(url.url)
+
+        # Was masscan also selected
+        masscan_selected = self.scheduled_scan.masscan_scan_flag == 1
 
         # Get selected ports
         selected_port_list = self.scheduled_scan.ports
@@ -180,100 +202,120 @@ class ScanInput():
 
             for port_entry in selected_port_list:
 
-                #Add IP
-                target_ip = port_entry.host.ipv4_addr
+                # Convert to string
+                port_str = str(port_entry.port)
 
-                port_dict = {'ip_set':set(), 'script-args' : script_args}
-                port = str(port_entry.port)
-
-                if port in port_target_map.keys():
-                    port_dict = port_target_map[port]
+                if port_str in port_target_map.keys():
+                    port_obj = port_target_map[port_str]
                 else:
-                    port_target_map[port] = port_dict
+                    port_obj = PortScan(int(port_entry.port))
+                    port_target_map[port_str] = port_obj
 
-                # Add the IP
-                cur_set = port_dict['ip_set']
-                cur_set.add(target_ip)
+                # Add IP
+                target_ip = port_entry.host.ipv4_addr
+                port_obj.target_set.add(target_ip)
+
+                # Set script arguments
+                port_obj.script_args = script_args
 
         else:
 
-            #port_arr = self.recon_manager.get_port_map(scan_id)
             port_arr = self.port_map_to_port_list()
             print("[+] Retrieved %d ports from database" % len(port_arr))
 
+            # Iterate over hosts
             hosts = self.hosts
-
-            #print(script_args)
             if hosts and len(hosts) > 0:
-
 
                 print("[+] Retrieved %d hosts from database" % len(hosts))
                 for host in hosts:
 
+                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
                     domains = host.domains
 
-                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
-                    port_list = []
-
-                    # Get the ports
-                    if len(host.ports) > 0:
+                    # If masscan was part of the scan, then use results from it to feed NMAP
+                    if masscan_selected and len(host.ports) > 0:
 
                         for port in host.ports:
-                            port_str = str(port.port)    
+
+                            # Skip the port if its not in the current scan
+                            if port not in port_arr:
+                                continue
+
+                            dns_resolv = False
+                            port_str = str(port.port)
 
                             # Skip any possible load balanced ports that haven't already been marked as http from pre scan
                             if skip_load_balance_ports:
-                                if port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443':
-                                    #print(port)
-                                    http_found = False
-                                    if port.components:
-                                        for component in port.components:
-                                            if 'http' in component.component_name:
-                                                http_found = True
-                                                break
 
-                                    # Skip if not already detected as http based
-                                    if http_found == False:
-                                        continue
+                                #Check for port that have already been marked as http based
+                                http_found = False
+                                if port.components:
+                                    for component in port.components:
+                                        if 'http' in component.component_name:
+                                            http_found = True
+                                            break
 
-                            port_list.append(port_str)
+                                # Skip if not already detected as http based
+                                if (port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443') and http_found == False:
+                                    continue
 
-                    elif len(port_arr) > 0:
-                        port_list.extend(port_arr)
-                    else:
-                        print("[-] No ports to scan for host")
-                        continue
+                                if http_found:
+                                    dns_resolv = True
 
-                    # Iterate over ports and create dict of {'ip_set': set(), 'script-args':'args'}
-                    for port in port_list:
+                            # Get the port object
+                            if port_str in port_target_map.keys():
+                                port_obj = port_target_map[port_str]
+                            else:
+                                port_obj = PortScan(int(port.port))
+                                port_target_map[port_str] = port_obj
 
-                        port_dict = {'ip_set':set(), 'script-args' : script_args}
-                        port = str(port)
+                            # Add IP
+                            port_obj.target_set.add(target_ip)
+                            port_obj.script_args = script_args
 
-                        if port in port_target_map.keys():
-                            port_dict = port_target_map[port]
-                        else:
-                            port_target_map[port] = port_dict
+                            # Set DNS resolve
+                            port_obj.resolve_dns = dns_resolv
 
-                        # Add the IP
-                        cur_set = port_dict['ip_set']
-                        cur_set.add(target_ip)
+                            # Add the domains
+                            for domain in domains:
+                                domain_name = domain.name
+                                if len(domain_name) > 0:
+                                    domain_name = domain_name.replace("*.","")
+                                    port_obj.target_set.add(domain_name)
 
-                        # Add the domains
-                        for domain in domains:
-                            domain_name = domain.name
-                            if len(domain_name) > 0:
-                                domain_name = domain_name.replace("*.","")
-                                cur_set.add(domain_name)
+                    if masscan_selected == False and len(port_arr) > 0:
+
+                        for port in port_arr:
+
+                            port_str = str(port)
+
+                            # Get the port object
+                            if port_str in port_target_map.keys():
+                                port_obj = port_target_map[port_str]
+                            else:
+                                port_obj = PortScan(port)
+                                port_target_map[port_str] = port_obj
+
+                            # Add Target IP
+                            port_obj.target_set.add(target_ip)
+                            port_obj.script_args = script_args
+
+                            # Add the domains
+                            for domain in domains:
+                                domain_name = domain.name
+                                if len(domain_name) > 0:
+                                    domain_name = domain_name.replace("*.","")
+                                    port_obj.target_set.add(domain_name)
+
 
             else:
 
-                if self.scheduled_scan.masscan_scan_flag == 1:
-                    print("[*] Masscan already executed and no ports were detected.")
+                if masscan_selected:
+                    print("[-] Masscan already executed and no ports were detected. May need to set scan interface for masscan")
                     return
                 
                 # If no hosts exist then get the target subnets
-                # Get subnets
                 subnet_set = set()             
                 if target_obj:
                     subnets = target_obj.subnets
@@ -284,51 +326,56 @@ class ScanInput():
                         subnet_set.add(subnet_inst)
 
                     subnets = list(subnet_set)
-
-                    #subnets = self.recon_manager.get_subnets(scan_id)
                     print("[+] Retrieved %d subnets from database" % len(subnets))
                     for subnet in subnets:
 
                         for port in port_arr:
-                            port_dict = {'ip_set':set(), 'script-args' : script_args}
-                            port = str(port)
+                            port_str = str(port)
 
-                            if port in port_target_map.keys():
-                                port_dict = port_target_map[port]
+                            # Get the port object
+                            if port_str in port_target_map.keys():
+                                port_obj = port_target_map[port_str]
                             else:
-                                port_target_map[port] = port_dict
+                                port_obj = PortScan(int(port))
+                                port_target_map[port_str] = port_obj
 
                             # Add the IP
-                            cur_set = port_dict['ip_set']
-                            cur_set.add(subnet)
+                            port_obj.target_set.add(subnet)
+                            port_obj.script_args = script_args
 
-            # Add URLs
-            urls = []
-            for url in target_obj.urls:
-                urls.append(url.url)
 
-            #urls = self.recon_manager.get_urls(scan_id)
-            print("[+] Retrieved %d urls from database" % len(urls))
-            for url in urls:
+            # Add any target urls to the scan
+            print("[+] Retrieved %d urls from database" % len(target_url_set))
+            for url in target_url_set:
 
                 # Add the url to the list for the port
-                u = urlparse(url)
+                try:
+                    u = urlparse(url)
+                except Exception as e:
+                    print(traceback.format_exc())
+                    continue
+
                 
+                # If there is no protocol specified then scan all ports selected
                 if len(u.netloc) == 0:
+
                     # Remove any wildcards
                     url = url.replace("*.","")
-                    for port_str in port_arr:
+                    for port in port_arr:
 
-                        port_dict = {'ip_set':set(), 'script-args' : script_args}
+                        port_str = str(port)
 
-                        # Get list if it exists
+                        # Get the port object
                         if port_str in port_target_map.keys():
-                            port_dict = port_target_map[port_str]
+                            port_obj = port_target_map[port_str]
                         else:
-                            port_target_map[port_str] = port_dict
+                            port_obj = PortScan(int(port))
+                            port_target_map[port_str] = port_obj
 
-                        cur_set = port_dict['ip_set']
-                        cur_set.add(url)
+                        # Add the IP
+                        port_obj.target_set.add(url)
+                        port_obj.script_args = script_args
+                        port_obj.resolve_dns = True
 
                     #Proceed to next url    
                     continue
@@ -346,38 +393,39 @@ class ScanInput():
                     port_str = str(u.port)
                     domain = u.netloc.split(":")[0]
 
-
-                port_dict = {'ip_set':set(), 'script-args' : script_args}
-
-                # Get list if it exists
+                # Get the port object
                 if port_str in port_target_map.keys():
-                    port_dict = port_target_map[port_str]
+                    port_obj = port_target_map[port_str]
                 else:
-                    port_target_map[port_str] = port_dict
+                    port_obj = PortScan(int(u.port))
+                    port_target_map[port] = port_obj
 
-                # Add the entry
-                cur_set = port_dict['ip_set']
-                cur_set.add(domain)
+                # Add the domain
+                port_obj.target_set.add(domain)
+                port_obj.resolve_dns = True
+
 
         # Create nmap scan array            
         if len(port_target_map) > 0:
 
-            #print(port_target_map)
+            print(port_target_map)
             # Create scan instance of format {'port_list':[], 'ip_list':[], 'script-args':[]}
             for port in port_target_map.keys():
 
                 scan_inst = {}
 
                 # Get port dict
-                port_dict = port_target_map[port]
+                port_obj = port_target_map[port]
 
                 # Get targets
-                targets = port_dict['ip_set']
-                script_args = port_dict['script-args']
-
+                targets = port_obj.target_set
+                script_args = port_obj.script_args
+                resolve_dns_flag = port_obj.resolve_dns
+                
                 scan_inst['ip_list'] = list(targets)
                 scan_inst['port_list'] = [str(port)]
                 scan_inst['script-args'] = script_args
+                scan_inst['resolve_dns'] = resolve_dns_flag
 
                 # Add the scan instance
                 nmap_scan_arr.append(scan_inst)
@@ -388,6 +436,7 @@ class ScanInput():
             self.hash_nmap_inputs(nmap_scan_arr)
 
         # Set the output
+        #print(nmap_scan_arr)
         self.nmap_scan_arr =  nmap_scan_arr
 
 

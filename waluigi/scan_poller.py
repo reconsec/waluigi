@@ -34,7 +34,10 @@ def main(args):
             # interactive console
             while exit_loop == False:
                 print("Enter a command")
-                print(">", end="")
+                # Only works in Python3
+                print(">", end = '')
+                # For Python 2.7 - notice the space between print
+                # print (">", end = '')
                 command = input()
                 if command == "q":
                     exit_loop = True

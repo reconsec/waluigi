@@ -95,18 +95,17 @@ class NmapScan(luigi.Task):
         f.close()
 
         #load input file
-        meta_file_path = ''
+        nmap_scan_id = ''
         if len(json_input) > 0:
             nmap_scan_obj = json.loads(json_input)
             nmap_scan_id = nmap_scan_obj['nmap_scan_id']
-
-            cwd = os.getcwd()
-            dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
-            meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ nmap_scan_id +".meta"
         else:
             # Remove just in case it was an earlier error
             os.remove(nmap_input_file.path)
-            #raise RuntimeError("[-] Input file is empty")
+
+        cwd = os.getcwd()
+        dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
+        meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ nmap_scan_id +".meta"
 
         return luigi.LocalTarget(meta_file_path)
 
@@ -123,12 +122,6 @@ class NmapScan(luigi.Task):
         json_input = f.read()
         f.close()
 
-        #load input file 
-        nmap_scan_obj = json.loads(json_input)
-        nmap_scan_id = nmap_scan_obj['nmap_scan_id']
-        input_nmap_scan_list = nmap_scan_obj['nmap_scan_list']
-
-
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
@@ -136,86 +129,100 @@ class NmapScan(luigi.Task):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        commands = []
-        counter = 0
+        #load input file
+        nmap_scan_data = None
+        if len(json_input) > 0:
+            nmap_scan_obj = json.loads(json_input)
+            nmap_scan_id = nmap_scan_obj['nmap_scan_id']
+            input_nmap_scan_list = nmap_scan_obj['nmap_scan_list']
 
-        # Output structure for scan jobs
-        nmap_scan_list = []
-        nmap_scan_data = {'nmap_scan_id':nmap_scan_id, 'nmap_scan_list': nmap_scan_list}
+            commands = []
+            counter = 0
 
-        for nmap_scan_arr in input_nmap_scan_list:
+            # Output structure for scan jobs
+            nmap_scan_list = []
+            nmap_scan_data = {'nmap_scan_id':nmap_scan_id, 'nmap_scan_list': nmap_scan_list}
 
-            nmap_scan_inst = {}
-            script_args = None
-            port_list = nmap_scan_arr['port_list']
-            port_comma_list = ','.join(port_list)
-            ip_list_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, nmap_scan_id)
+            for nmap_scan_arr in input_nmap_scan_list:
 
-            # Write IPs to a file
-            ip_list = nmap_scan_arr['ip_list']
-            if len(ip_list) == 0:
-                continue
+                nmap_scan_inst = {}
+                script_args = None
+                port_list = nmap_scan_arr['port_list']
+                port_comma_list = ','.join(port_list)
+                ip_list_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, nmap_scan_id)
 
-            f = open(ip_list_path, 'w')
-            for ip in ip_list:                
-                f.write(ip + "\n")
-            f.close()
+                # Write IPs to a file
+                ip_list = nmap_scan_arr['ip_list']
+                if len(ip_list) == 0:
+                    continue
 
-            if 'script-args' in nmap_scan_arr:
-                script_args = nmap_scan_arr['script-args']
+                f = open(ip_list_path, 'w')
+                for ip in ip_list:                
+                    f.write(ip + "\n")
+                f.close()
 
-            # Nmap command args
-            nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (counter, nmap_scan_id)
+                if 'script-args' in nmap_scan_arr:
+                    script_args = nmap_scan_arr['script-args']
 
-            # Add sudo if on linux based system
-            command = []
-            if os.name != 'nt':
-                command.append("sudo")
+                # Nmap command args
+                nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (counter, nmap_scan_id)
 
-            command_arr = [
-                "nmap",
-                "-v",
-                "-Pn",
-                "--open",
-                "--host-timeout",
-                "30m",
-                "--script-timeout",
-                "2m",
-                "--script-args",
-                'http.useragent="%s"' % custom_user_agent,
-                "-sT",
-                "-p",
-                port_comma_list,
-                "-oX",
-                nmap_output_xml_file,
-                "-iL",
-                ip_list_path
+                # Add sudo if on linux based system
+                command = []
+                if os.name != 'nt':
+                    command.append("sudo")
 
-            ]
-            
-            # Add base arguments
-            command.extend(command_arr)
+                command_arr = [
+                    "nmap",
+                    "-v",
+                    "-Pn",
+                    "--open",
+                    "--host-timeout",
+                    "30m",
+                    "--script-timeout",
+                    "2m",
+                    "--script-args",
+                    'http.useragent="%s"' % custom_user_agent,
+                    "-sT",
+                    "-p",
+                    port_comma_list,
+                    "-oX",
+                    nmap_output_xml_file,
+                    "-iL",
+                    ip_list_path
 
-            # Add script args
-            if script_args and len(script_args) > 0:
-                command.extend(script_args)
+                ]
 
-            # Add to meta data
-            nmap_scan_inst['nmap_command'] = command
-            nmap_scan_inst['output_file'] = nmap_output_xml_file
-            # Add module id if it exists
-            if 'module_id' in nmap_scan_arr:
-                nmap_scan_inst['module_id'] = nmap_scan_arr['module_id']
+                
+                # Add base arguments
+                command.extend(command_arr)
 
-            nmap_scan_list.append(nmap_scan_inst)
+                # Should do DNS lookup (HTTP assets)
+                resolve_dns = = nmap_scan_arr['resolve_dns']
+                if resolve_dns == False:
+                    command.append("-n")
 
-            #print(command)
-            commands.append(command)
-            counter += 1
+                # Add script args
+                if script_args and len(script_args) > 0:
+                    command.extend(script_args)
+
+                # Add to meta data
+                nmap_scan_inst['nmap_command'] = command
+                nmap_scan_inst['output_file'] = nmap_output_xml_file
+                # Add module id if it exists
+                if 'module_id' in nmap_scan_arr:
+                    nmap_scan_inst['module_id'] = nmap_scan_arr['module_id']
+
+                nmap_scan_list.append(nmap_scan_inst)
+
+                #print(command)
+                commands.append(command)
+                counter += 1
 
         # Write out meta data file
         f = open(meta_file_path, 'w')
-        f.write(json.dumps(nmap_scan_data))
+        if nmap_scan_data:
+            f.write(json.dumps(nmap_scan_data))
         f.close()
 
         # Run threaded

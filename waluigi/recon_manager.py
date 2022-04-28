@@ -18,6 +18,7 @@ import string
 import random
 import hashlib
 import netaddr
+import netifaces
 
 # User Agent
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -121,7 +122,7 @@ class ScanInput():
 
 
             #Loop through targets
-            print(selected_port_set)
+            #print(selected_port_set)
             modules = list(module_list)
             #print(modules)
             counter = 0
@@ -141,7 +142,7 @@ class ScanInput():
 
                     # Write IPs to file
                     ip_list = set()
-                    print(target_list)
+                    #print(target_list)
                     for target in target_list:
                         port_str = str(target['port']).strip()
                         target_ip = target['ipv4_addr']
@@ -236,7 +237,7 @@ class ScanInput():
                     # If masscan was part of the scan, then use results from it to feed NMAP
                     if masscan_selected and len(host.ports) > 0:
 
-                        print(port_arr)
+                        #print(port_arr)
                         for port in host.ports:
 
                             dns_resolv = False
@@ -1177,12 +1178,68 @@ class ReconManager:
         self.headers = {'User-Agent': custom_user_agent, 'Authorization': 'Bearer ' + self.token}
         self.session_key = self._get_session_key()
 
+        # Get network interfaces
+        self.network_ifaces = self.get_network_interfaces()
+        #print(self.network_ifaces)
+        if len(self.network_ifaces) > 0:
+            # Send interface list to server
+            try:
+                self.update_collector_status(self.network_ifaces)
+            except Exception as e:
+                print(e)
+                pass
+
     def set_debug(self, debug):
         self.debug = debug
 
     def dbg_print(self, output):
         if self.debug:
             print(output)
+
+    def get_network_interfaces(self):
+
+        interface_dict = {}
+        ifaces = netifaces.interfaces()
+        for if_name in ifaces:
+            loop_back = False
+            addrs = netifaces.ifaddresses(if_name)
+
+            # Get the IP address
+            if netifaces.AF_INET in addrs:
+
+                ipv4_addr_arr = addrs[netifaces.AF_INET]
+                for ipv4_obj in ipv4_addr_arr:
+
+                    ip_str = ipv4_obj['addr']
+                    netmask = ipv4_obj['netmask']
+
+                    if ip_str == "127.0.0.1":
+                        loop_back = True
+
+                    # Only get the first one
+                    break
+            else:
+                # If there's no IP address we don't care
+                continue
+
+            # Skip if it's loopback
+            if loop_back:
+                continue
+
+            if netifaces.AF_LINK in addrs:
+
+                hardware_addr_arr = addrs[netifaces.AF_LINK]
+                for hardware_addr_obj in hardware_addr_arr:
+                    mac_addr_str = hardware_addr_obj['addr']
+
+                    # Only get the first one
+                    break
+
+            interface_dict[if_name] = {'ipv4_addr' : ip_str, 'netmask' : netmask, 'mac_address' : mac_addr_str}
+
+        return interface_dict
+
+
 
     # Stub to be overwritten in case anything needs to be done by a specific connection manager
     # in regards to the target specified
@@ -1477,21 +1534,22 @@ class ReconManager:
 
         return port_obj_arr
 
-    # def get_ports(self, scan_id):
+    def update_collector_status(self, network_ifaces ):
 
-    #     port_arr = []
-    #     r = requests.get('%s/api/ports/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
-    #     if r.status_code == 404:
-    #         return port_arr
-    #     elif r.status_code != 200:
-    #         print("[-] Unknown Error")
-    #         return port_arr
+        # Import the data to the manager
+        json_data = json.dumps(network_ifaces).encode()
+        cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
+        packet = cipher_aes.nonce + tag + ciphertext
+        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
-    #     content = r.json()
-    #     data = self._decrypt_json(content)
-    #     port_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        b64_val = base64.b64encode(packet).decode()
+        r = requests.post('%s/api/collector/interfaces/' % (self.manager_url), headers=self.headers, json={"data": b64_val}, verify=False)
+        if r.status_code != 200:
+            raise RuntimeError("[-] Error updating collector interfaces.")
 
-    #     return port_obj_arr
+        return True
 
     def update_scan_status(self, scan_id, status):
 

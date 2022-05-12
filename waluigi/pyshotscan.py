@@ -57,6 +57,7 @@ class PyshotScope(luigi.ExternalTask):
         else:
 
             # Get hosts
+            port_arr = scan_input_obj.port_map_to_port_list()
             hosts = scan_input_obj.hosts
             print("[+] Retrieved %d hosts from database" % len(hosts))
             if hosts and len(hosts) > 0:
@@ -83,8 +84,13 @@ class PyshotScope(luigi.ExternalTask):
 
                         # Write each port id and IP pair to a file
                         port_id = str(port_obj.id)
-                        port = str(port_obj.port)
+                        port_str = str(port_obj.port)
                         secure = str(port_obj.secure)
+
+
+                        # Ensure we are only scanning ports that have selected
+                        if len(port_arr) > 0 and port_str not in port_arr:
+                            continue
 
                         # Loop through domains
                         domains = set()
@@ -97,7 +103,7 @@ class PyshotScope(luigi.ExternalTask):
                                 domains.add(domain_str)
 
 
-                        scan_instance = {"port_id" : port_id, "ipv4_addr" : ip_str, "port" : port, "secure" : secure, "domain_list" : list(domains) }
+                        scan_instance = {"port_id" : port_id, "ipv4_addr" : ip_str, "port" : port_str, "secure" : secure, "domain_list" : list(domains) }
                         scan_arr.append(scan_instance)
 
         # open input file

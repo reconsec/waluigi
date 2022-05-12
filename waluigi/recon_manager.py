@@ -248,6 +248,11 @@ class ScanInput():
                                 continue
 
                             port_str = str(port_int)
+
+                            # Ensure we are only scanning ports that have selected
+                            if len(port_arr) > 0 and port_str not in port_arr:
+                                continue
+
                             # Skip any possible load balanced ports that haven't already been marked as http from pre scan
                             if skip_load_balance_ports:
 

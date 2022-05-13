@@ -462,7 +462,8 @@ class ScanInput():
                 for j in range(8):
                     mask = 1 << j
                     if current_byte & mask:
-                        port_list.append(j + (i*8))
+                        port_str = str(j + (i*8))
+                        port_list.append(port_str)
 
         return port_list
 

@@ -235,18 +235,13 @@ class ScanInput():
                     domains = host.domains
 
                     # If masscan was part of the scan, then use results from it to feed NMAP
-                    if masscan_selected and len(host.ports) > 0:
+                    if (masscan_selected or self.scheduled_scan.rescan == 1) and len(host.ports) > 0:
 
                         #print(port_arr)
                         for port in host.ports:
 
                             dns_resolv = False
                             port_int = port.port
-
-                            # Skip the port if its not in the current scan
-                            if port.port not in port_arr:
-                                continue
-
                             port_str = str(port_int)
 
                             # Ensure we are only scanning ports that have selected
@@ -1048,7 +1043,7 @@ class ScheduledScanThread(threading.Thread):
         if sched_scan_obj.nmap_scan_flag == 1:
 
 
-            ssl_http_scripts = ["--script", "ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
+            ssl_http_scripts = ["--script", "+ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
             version_args = ["-sV","-n"]
 
             # Execute nmap

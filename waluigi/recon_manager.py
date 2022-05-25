@@ -1604,14 +1604,10 @@ class ReconManager:
 
         return True
 
-    def import_screenshot(self, port_id, url, image_data, image_hash):
+    def import_screenshot(self, data_dict):
 
         # Import the data to the manager
-        b64_image = base64.b64encode(image_data).decode()
-        obj_data = [{'port_id': int(port_id),
-                     'url': url,
-                     'hash': str(image_hash),
-                     'data': b64_image}]
+        obj_data = [data_dict]
 
         #print(b64_image)
         json_data = json.dumps(obj_data).encode()

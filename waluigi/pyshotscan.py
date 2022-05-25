@@ -9,6 +9,7 @@ import luigi
 import multiprocessing
 import traceback
 import hashlib
+import base64
 
 from datetime import date
 from luigi.util import inherits
@@ -257,21 +258,10 @@ class ParsePyshotOutput(luigi.Task):
                 filename = screenshot_meta['file']
                 if exists(filename):
                     url = screenshot_meta['url']
+                    path = screenshot_meta['path']
                     port_id = screenshot_meta['port_id']
-                    host_hdr = screenshot_meta['host_header']
 
-                    # If the host header made the difference then replace it in the url
-                    if host_hdr and len(host_hdr) > 0:
-                        u = urlparse(url)
-                        host = u.netloc
-                        port = ''
-                        if ":" in host:
-                            host_arr = host.split(":")
-                            port = ":" + host_arr[1]
-
-                        res = ParseResult(scheme=u.scheme, netloc=host_hdr + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
-                        url = res.geturl()
-
+                    # Hash the image
                     image_data = b""
                     hash_alg=hashlib.sha1
                     with open(filename, "rb") as rf:
@@ -281,7 +271,33 @@ class ParsePyshotOutput(luigi.Task):
                         image_hash = hashobj.digest()
                         image_hash_str = binascii.hexlify(image_hash).decode()
 
-                    ret_val = recon_manager.import_screenshot(port_id, url, image_data, image_hash_str)
+
+                    b64_image = base64.b64encode(image_data).decode()
+                    obj_data = { 'port_id': int(port_id),
+                                 'url': url,
+                                 'path': path,
+                                 'hash': str(image_hash_str),
+                                 'data': b64_image}
+
+
+                    if 'domain' in screenshot_meta:
+                        domain = screenshot_meta['domain']
+                        u = urlparse(url)
+                        host = u.netloc
+                        port = ''
+                        if ":" in host:
+                            host_arr = host.split(":")
+                            port = ":" + host_arr[1]
+
+                        res = ParseResult(scheme=u.scheme, netloc=domain + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
+                        url = res.geturl()
+
+                        # Update the url and set domain
+                        obj_data['domain'] = domain
+                        obj_data['url'] = url
+
+
+                    ret_val = recon_manager.import_screenshot(obj_data)
                     count += 1
 
             print("[+] Imported %d screenshots to manager." % (count))

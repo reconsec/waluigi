@@ -325,10 +325,7 @@ class ParseNmapOutput(luigi.Task):
                         for port in host.get_open_ports():
 
                             domain_set = set()     
-                            # Get hostnames
-                            hostnames = host.hostnames
-                            for hostname in hostnames:
-                                domain_set.add(hostname)
+
 
                             port_str = str(port[0])
                             port_id = port[1] + "." + port_str
@@ -337,6 +334,14 @@ class ParseNmapOutput(luigi.Task):
                             port_obj = { 'scan_id' : scan_id,
                                          'port' : port_str,
                                          'ipv4_addr' : ip_addr_int }
+
+                            # Get hostnames
+                            hostnames = host.hostnames
+                            for hostname in hostnames:
+                                hostname_str = hostname['name']
+                                domain_set.add(hostname_str)
+                                if hostname['type'] == 'user':
+                                    port_obj['hostname'] = hostname_str
 
                             # Get service details if present
                             svc = host.get_service_byid(port_id)

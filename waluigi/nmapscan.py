@@ -40,9 +40,10 @@ class NmapScope(luigi.ExternalTask):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        scan_hash = ''
-        if scan_input_obj.nmap_scan_hash:
-            scan_hash = scan_input_obj.nmap_scan_hash
+        #scan_hash = ''
+        #if scan_input_obj.nmap_scan_hash:
+        #    scan_hash = scan_input_obj.nmap_scan_hash
+        scan_hash = str(scan_input_obj.current_step)
 
         nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + scan_hash
         if os.path.isfile(nmap_inputs_file):

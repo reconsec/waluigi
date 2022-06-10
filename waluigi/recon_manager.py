@@ -50,6 +50,8 @@ class ScanInput():
         self.nmap_scan_arr = None
         self.nmap_scan_hash = None
         self.scan_modules = None
+        self.current_step = 0
+        self.current_tool_id = None
 
         # Create a scan id if it does not exist
         if self.scheduled_scan.scan_id is None:
@@ -172,8 +174,8 @@ class ScanInput():
                         counter += 1
 
         # Hash the scan input
-        if len(nmap_scan_arr) > 0:
-            self.hash_nmap_inputs(nmap_scan_arr)
+        #if len(nmap_scan_arr) > 0:
+        #    self.hash_nmap_inputs(nmap_scan_arr)
 
         # Set the output
         self.nmap_scan_arr =  nmap_scan_arr
@@ -435,8 +437,8 @@ class ScanInput():
 
 
         # Hash the scan input
-        if len(nmap_scan_arr) > 0:
-            self.hash_nmap_inputs(nmap_scan_arr)
+        #if len(nmap_scan_arr) > 0:
+        #    self.hash_nmap_inputs(nmap_scan_arr)
 
         # Set the output
         #print(nmap_scan_arr)
@@ -533,7 +535,7 @@ class ScheduledScanThread(threading.Thread):
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return     
+            return ret_val  
 
         # Connect to synack target
         if self.connection_manager:
@@ -701,7 +703,7 @@ class ScheduledScanThread(threading.Thread):
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return
+            return ret_val
 
         if self.connection_manager:
 
@@ -756,7 +758,7 @@ class ScheduledScanThread(threading.Thread):
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return
+            return ret_val
 
         if self.connection_manager:
 
@@ -792,7 +794,7 @@ class ScheduledScanThread(threading.Thread):
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return
+            return ret_val
 
         if self.connection_manager:
 
@@ -819,13 +821,83 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
 
 
+    def http_scan(self, scan_input_obj):
+
+        ret_val = True
+
+        # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
+            return ret_val
+
+        # Refresh scan data (Get updated ports and hosts)
+        scan_input_obj.refresh()
+
+        if self.connection_manager:
+            # Connect to synack target
+            con = self.connection_manager.connect_to_target()
+            if not con:
+                print("[-] Failed connecting to target")
+                return False
+
+            # Obtain the lock before we start a scan
+            lock_val = self.connection_manager.get_connection_lock()
+
+            # Sleep to ensure routing is setup
+            time.sleep(2)
+
+        try:
+            # Execute pyshot
+            ret = scan_pipeline.http_scan(scan_input_obj)
+            if not ret:
+                print("[-] HTTP Probe Failed")
+                ret_val = False
+
+        finally:
+            if self.connection_manager:
+                # Release the lock after scan
+                self.connection_manager.free_connection_lock(lock_val)
+            if not ret_val:
+                return ret_val
+
+        if self.connection_manager:
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = self.recon_manager.tool_map['http-probe']
+
+            # Import http probe results
+            ret = scan_pipeline.http_import(scan_input_obj)
+            if not ret:
+                print("[-] Failed")
+                ret_val = False
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
+
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
+
+        return ret_val
+
+
     def pyshot_scan(self, scan_input_obj):
 
         ret_val = True
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return
+            return ret_val
 
         # Refresh scan data (Get updated ports and hosts)
         scan_input_obj.refresh()
@@ -893,7 +965,7 @@ class ScheduledScanThread(threading.Thread):
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return
+            return ret_val
 
         # Refresh scan data (Get updated ports and hosts)
         scan_input_obj.refresh()
@@ -976,28 +1048,6 @@ class ScheduledScanThread(threading.Thread):
         # Create scan object
         self.recon_manager.dbg_print(sched_scan_obj)
         scan_input_obj = ScanInput(self, sched_scan_obj)
-        # if sched_scan_obj.scan_id is None:
-        #     scan_obj = self.recon_manager.get_scheduled_scan(sched_scan_obj.id)
-        #     if not scan_obj:
-        #          print("[-] No scan object returned for scheduled scan.")
-        #          return
-
-        # Print the schedule object
-        #self.recon_manager.dbg_print(scan_obj)
-
-        #scan_id = str(scan_obj.scan_id)
-        #print("[*] Scan ID: %s" % scan_id)
-
-        #scan_target = self.recon_manager.get_target(scan_id)
-        #self.recon_manager.dbg_print(scan_target)
-        # print("[+] Retrieved %d subnets from database" % len(subnets))
-
-        # Consolidate to get a target that returns urls and subnets
-        # subnets = self.recon_manager.get_subnets(scan_id)
-        # print("[+] Retrieved %d subnets from database" % len(subnets))
-
-        # urls = self.recon_manager.get_urls(scan_id)
-        # print("[+] Retrieved %d urls from database" % len(urls))
 
         # Set connection target in connection manager to this target 
         target_id = scan_input_obj.scheduled_scan.target_id
@@ -1011,13 +1061,10 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] DNS Resolution Failed")
                 return
 
-        if sched_scan_obj.masscan_scan_flag == 1:
+            # Increment step
+            scan_input_obj.current_step += 1
 
-            # Get target scope and urls to see what to kick off first
-            #subnets = self.recon_manager.get_subnets(scan_id)
-            # Possible check for ports too before scanning in rescan cases
-            #if subnets and len(subnets) > 0:
-                # print(subnets)
+        if sched_scan_obj.masscan_scan_flag == 1:
 
             # Execute masscan
             ret = self.mass_scan(scan_input_obj)
@@ -1028,6 +1075,8 @@ class ScheduledScanThread(threading.Thread):
                 # TODO - Get URLs
             #    print("[*] No subnets retrieved. Skipping masscan.")
 
+            # Increment step
+            scan_input_obj.current_step += 1
 
         if sched_scan_obj.shodan_scan_flag == 1:
             # Execute shodan
@@ -1036,9 +1085,18 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] Shodan Failed")
                 return
 
+            # Increment step
+            scan_input_obj.current_step += 1
 
-        # hosts = self.recon_manager.get_hosts(scan_id)
-        # print("[+] Retrieved %d hosts from database" % len(hosts))
+        if sched_scan_obj.http_scan_flag == 1:
+            # Execute http probe
+            ret = self.http_scan(scan_input_obj)
+            if not ret:
+                print("[-] HTTP Probe Failed")
+                return
+
+            # Increment step
+            scan_input_obj.current_step += 1
 
         if sched_scan_obj.nmap_scan_flag == 1:
 
@@ -1052,12 +1110,18 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] Nmap Intial Scan Failed")
                 return
 
+            # Increment step
+            scan_input_obj.current_step += 1
+
             skip_load_balance_ports = self.recon_manager.is_load_balanced()
             # Execute nmap
             ret = self.nmap_scan(scan_input_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Service Scan Failed")
                 return
+
+            # Increment step
+            scan_input_obj.current_step += 1
 
         if sched_scan_obj.pyshot_scan_flag == 1:
             # Execute pyshot
@@ -1066,12 +1130,18 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] Pyshot Failed")
                 return
 
+            # Increment step
+            scan_input_obj.current_step += 1
+
         if sched_scan_obj.nuclei_scan_flag == 1:
             # Execute nuclei
             ret = self.nuclei_scan(scan_input_obj)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 return
+
+            # Increment step
+            scan_input_obj.current_step += 1
 
         if sched_scan_obj.module_scan_flag == 1:
             # Execute module scan
@@ -1080,12 +1150,18 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] Module Scan Failed")
                 return
 
+            # Increment step
+            scan_input_obj.current_step += 1
+
         if sched_scan_obj.dirsearch_scan_flag == 1:
             # Execute dirsearch
             ret = self.dirsearch_scan(scan_id, sched_scan_obj)
             if not ret:
                 print("[-] Dirsearch Scan Failed")
                 return
+
+            # Increment step
+            scan_input_obj.current_step += 1
 
         # Cleanup files
         ret = scan_pipeline.scan_cleanup(scan_input_obj.scan_id)
@@ -1178,6 +1254,7 @@ class ReconManager:
         self.manager_url = manager_url
         self.headers = {'User-Agent': custom_user_agent, 'Authorization': 'Bearer ' + self.token}
         self.session_key = self._get_session_key()
+        self.tool_map = {}
 
         # Get network interfaces
         self.network_ifaces = self.get_network_interfaces()
@@ -1187,8 +1264,17 @@ class ReconManager:
             try:
                 self.update_collector_status(self.network_ifaces)
             except Exception as e:
-                print(e)
+                print(traceback.format_exc())
                 pass
+
+        # Get tool ids from server
+        try:
+            collection_tools = self.get_tools()
+            for tool in collection_tools:
+                self.tool_map[tool.name] = tool.id
+        except Exception as e:
+            print(traceback.format_exc())
+            pass
 
     def set_debug(self, debug):
         self.debug = debug
@@ -1535,6 +1621,22 @@ class ReconManager:
 
         return port_obj_arr
 
+    def get_tools(self):
+
+        port_arr = []
+        r = requests.get('%s/api/tools' % (self.manager_url), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return port_arr
+        elif r.status_code != 200:
+            print("[-] Unknown Error")
+            return port_arr
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        tool_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+
+        return tool_obj_arr
+
     def update_collector_status(self, network_ifaces ):
 
         # Import the data to the manager
@@ -1582,6 +1684,23 @@ class ReconManager:
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/ports' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
+        if r.status_code != 200:
+            raise RuntimeError("[-] Error importing ports to manager server.")
+
+        return True
+
+    def import_ports_ext(self, scan_results_dict):
+
+        # Import the data to the manager
+        json_data = json.dumps(scan_results_dict).encode()
+        cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
+        packet = cipher_aes.nonce + tag + ciphertext
+        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+
+        b64_val = base64.b64encode(packet).decode()
+        r = requests.post('%s/api/ports/ext' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error importing ports to manager server.")
 

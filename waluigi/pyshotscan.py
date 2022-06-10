@@ -51,8 +51,9 @@ class PyshotScope(luigi.ExternalTask):
                 #Add IP
                 ip_addr = port_entry.host.ipv4_addr
                 ip_str = str(netaddr.IPAddress(ip_addr))
+                port_str = str(port_entry.port)
 
-                scan_instance = {"port_id" : port_entry.id, "ipv4_addr" : ip_str, "port" : port_entry.port, "secure" : port_entry.secure, "domain_list" : list(port_entry.host.domains) }
+                scan_instance = {"port_id" : port_entry.id, "ipv4_addr" : ip_str, "port" : port_str, "secure" : port_entry.secure, "domain_list" : list(port_entry.host.domains) }
                 scan_arr.append(scan_instance)
 
         else:

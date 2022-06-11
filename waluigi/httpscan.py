@@ -297,8 +297,7 @@ class ImportHttpOutput(luigi.Task):
 
                 for endpoint in endpoint_list:
                     # Decode binary
-                    endpoint = endpoint.decode()
-                    print(endpoint)
+                    #print(endpoint)
 
                     u = urlparse(endpoint)
                     host = u.netloc

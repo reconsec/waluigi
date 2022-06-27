@@ -19,6 +19,7 @@ import random
 import hashlib
 import netaddr
 import netifaces
+import enum
 
 # User Agent
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -26,6 +27,20 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 # Set to bypass errors if the target site has SSL issues
 requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
+
+class ScanStatus(enum.Enum):
+    CREATED = 1
+    RUNNING = 2
+    COMPLETED = 3
+    CANCELLED = 4
+    ERROR = 5
+
+    def __str__(self):
+        if (self == ScanStatus.CREATED):     return "CREATED"
+        elif (self == ScanStatus.RUNNING):    return "RUNNING"
+        elif (self == ScanStatus.COMPLETED):   return "COMPLETED"
+        elif (self == ScanStatus.CANCELLED):   return "CANCELLED"
+        elif (self == ScanStatus.ERROR):   return "ERROR"
 
 
 class PortScan():
@@ -519,7 +534,7 @@ class ScheduledScanThread(threading.Thread):
         try:
             # Check if scan is cancelled
             scan = self.recon_manager.get_scan(scan_id)
-            if scan and scan.status == "CANCELLED":
+            if scan and scan.status == ScanStatus.CANCELLED.value:
                 print("[-] Scan cancelled. Returning.")
                 ret_val = True
         finally:
@@ -572,8 +587,12 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
         try:
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = self.recon_manager.tool_map['masscan']
+
             # Import masscan results
-            ret = scan_pipeline.parse_masscan(scan_input_obj)
+            ret = scan_pipeline.masscan_import(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -1105,7 +1124,8 @@ class ScheduledScanThread(threading.Thread):
             version_args = ["-sV","-n"]
 
             # Execute nmap
-            ret = self.nmap_scan(scan_input_obj, script_args=ssl_http_scripts)
+            skip_load_balance_ports = self.recon_manager.is_load_balanced()
+            ret = self.nmap_scan(scan_input_obj, script_args=ssl_http_scripts, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Intial Scan Failed")
                 return
@@ -1113,7 +1133,6 @@ class ScheduledScanThread(threading.Thread):
             # Increment step
             scan_input_obj.current_step += 1
 
-            skip_load_balance_ports = self.recon_manager.is_load_balanced()
             # Execute nmap
             ret = self.nmap_scan(scan_input_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
@@ -1181,7 +1200,7 @@ class ScheduledScanThread(threading.Thread):
             self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
 
             # Update scan status
-            self.recon_manager.update_scan_status(scan_input_obj.scan_id, "COMPLETED")
+            self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.COMPLETED.value)
 
         finally:
             if self.connection_manager:

@@ -27,7 +27,7 @@ def masscan_scan(scan_input):
     return True
 
 
-def parse_masscan(scan_input):
+def masscan_import(scan_input):
     luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False

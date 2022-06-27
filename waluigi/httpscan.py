@@ -166,12 +166,12 @@ class HttpScan(luigi.Task):
 
         output_file_path = self.output().path
         ret_endpoints = []
+        port_to_id_map = {}
 
         if len(http_scan_data) > 0:
             scan_arr = json.loads(http_scan_data)
 
             port_ip_dict = {}
-            port_to_id_map = {}
             process_arr = []
 
             for scan_inst in scan_arr:
@@ -324,7 +324,7 @@ class ImportHttpOutput(luigi.Task):
 
                 # Import the ports to the manager
                 tool_id = scan_input_obj.current_tool_id
-                scan_results = {'tool_id': tool_id, 'port_list': port_arr}
+                scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
                 ret_val = recon_manager.import_ports_ext(scan_results)
 
                 print("[+] Imported http scan to manager.")

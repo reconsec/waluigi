@@ -74,7 +74,9 @@ class MassScanScope(luigi.ExternalTask):
 
 
         # Create output file
-        f_inputs = open(masscan_inputs_file, 'w')
+        masscan_config_file = None
+        masscan_ip_file = None
+
         print("[+] Retrieved %d subnets from database" % len(subnets))
         if len(subnets) > 0:
 
@@ -103,12 +105,18 @@ class MassScanScope(luigi.ExternalTask):
                 f.write(port_line + '\n')
                 f.close()
 
-                # Write to output file
-                f_inputs.write(masscan_config_file + '\n')
-                f_inputs.write(masscan_ip_file + '\n')
 
-        # Close output file
-        f_inputs.close()
+        masscan_inputs = {'config_path' : masscan_config_file, 'input_path': masscan_ip_file}
+
+        # Create output file
+        masscan_inputs_f = open(masscan_inputs_file, 'w')
+        # Dump array to JSON
+        masscan_scan_input = json.dumps(masscan_inputs)
+        # Write to output file
+        masscan_inputs_f.write(masscan_scan_input)
+            
+
+        masscan_inputs_f.close()
 
         # Add the file to the cleanup file
         scan_utils.add_file_to_cleanup(scan_id, dir_path)
@@ -143,39 +151,50 @@ class MasscanScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Read masscan input files
-        masscan_input_file = self.input()
-        f = masscan_input_file.open()
-        data = f.readlines()
-        f.close()
-
         masscan_output_file_path = self.output().path
 
-        if len(data) > 0:
-            conf_file_path = data[0].strip()
-            ips_file_path = data[1].strip()
+        masscan_input_file = self.input()
+        f = masscan_input_file.open()
+        masscan_scan_data = f.read()
+        f.close()
 
-            command = []
-            if os.name != 'nt':
-                command.append("sudo")
 
-            command_arr = [
-                "masscan",
-                "--open",
-                "--rate",
-                "1000",
-                "-oX",
-                masscan_output_file_path,
-                "-c",
-                conf_file_path,
-                "-iL",
-                ips_file_path
-            ]
+        if len(masscan_scan_data) > 0:
+            scan_json = json.loads(masscan_scan_data)
 
-            command.extend(command_arr)
+            #print(scan_json)
+            conf_file_path = scan_json['config_path']
+            ips_file_path = scan_json['input_path']
 
-            # Execute process
-            subprocess.run(command)
+            if conf_file_path and ips_file_path:
+
+                command = []
+                if os.name != 'nt':
+                    command.append("sudo")
+
+                command_arr = [
+                    "masscan",
+                    "--open",
+                    "--rate",
+                    "1000",
+                    "-oX",
+                    masscan_output_file_path,
+                    "-c",
+                    conf_file_path,
+                    "-iL",
+                    ips_file_path
+                ]
+
+                command.extend(command_arr)
+
+                # Execute process
+                subprocess.run(command)
+
+            else:
+                f_output = open(masscan_output_file_path, 'w')
+                # Close output file
+                f_output.close()
+
         else:
             f_output = open(masscan_output_file_path, 'w')
             # Close output file
@@ -213,49 +232,56 @@ class ParseMasscanOutput(luigi.Task):
     def run(self):
         
         port_arr = []
-        masscan_output_file = self.input()
+        masscan_output_file = self.input().path
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
-        try:
-            # load masscan results from Masscan Task
-            tree = ET.parse(masscan_output_file.path)
-            root = tree.getroot()
+        if os.path.isfile(masscan_output_file) and os.path.getsize(masscan_output_file) > 0:
 
-            # Loop through hosts
-            port_arr = []
-            for host in root.iter('host'):
-                address = host.find('address')
-                addr = address.get('addr')
-                ipv4_addr_int = str(int(netaddr.IPAddress(addr)))
+            try:
+                # load masscan results from Masscan Task
+                tree = ET.parse(masscan_output_file)
+                root = tree.getroot()
 
-                ports_obj = host.find('ports')
-                ports = ports_obj.findall('port')
-                for port in ports:
+                # Loop through hosts
+                port_arr = []
+                for host in root.iter('host'):
+                    address = host.find('address')
+                    addr = address.get('addr')
+                    ipv4_addr_int = str(int(netaddr.IPAddress(addr)))
 
-                    port_id = port.get('portid')
-                    proto_str = port.get('protocol').strip()
-                    if proto_str == TCP:
-                        proto = 0
-                    else:
-                        proto = 1
+                    ports_obj = host.find('ports')
+                    ports = ports_obj.findall('port')
+                    for port in ports:
 
-                    port_obj = { 'scan_id' : scan_id,
-                                 'port' : port_id,
-                                 'proto' : proto,
-                                 'ipv4_addr' : ipv4_addr_int }
+                        port_id = port.get('portid')
+                        proto_str = port.get('protocol').strip()
+                        if proto_str == TCP:
+                            proto = 0
+                        else:
+                            proto = 1
 
-                    port_arr.append(port_obj)
+                        port_obj = { 'port' : port_id,
+                                     'proto' : proto,
+                                     'ipv4_addr' : ipv4_addr_int }
 
-        except Exception as e:
-            print('[-] Masscan results parsing error: %s' % str(e))
+                        port_arr.append(port_obj)
+
+            except Exception as e:
+                print('[-] Masscan results parsing error: %s' % str(e))
+                os.remove(masscan_output_file)
+                raise e
+        else:
+            print("[*] Masscan output file is empty. Ensure inputs were provided.")
 
         if len(port_arr) > 0:
 
             # Import the ports to the manager
-            ret_val = recon_manager.import_ports(port_arr)
+            tool_id = scan_input_obj.current_tool_id
+            scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
+            ret_val = recon_manager.import_ports_ext(scan_results)
 
         # Write to output file
         f = open(self.output().path, 'w')

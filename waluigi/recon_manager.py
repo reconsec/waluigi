@@ -1068,6 +1068,9 @@ class ScheduledScanThread(threading.Thread):
         self.recon_manager.dbg_print(sched_scan_obj)
         scan_input_obj = ScanInput(self, sched_scan_obj)
 
+        # Update scan status
+        self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.RUNNING.value)
+
         # Set connection target in connection manager to this target 
         target_id = scan_input_obj.scheduled_scan.target_id
         self.recon_manager.set_current_target(self.connection_manager, target_id)

@@ -534,7 +534,7 @@ class ScheduledScanThread(threading.Thread):
         try:
             # Check if scan is cancelled
             scan = self.recon_manager.get_scan(scan_id)
-            if scan and scan.status == ScanStatus.CANCELLED.value:
+            if scan and scan.status_int == ScanStatus.CANCELLED.value:
                 print("[-] Scan cancelled. Returning.")
                 ret_val = True
         finally:

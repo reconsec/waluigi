@@ -217,6 +217,8 @@ class NucleiScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
+        my_env = os.environ.copy()
+
         # Read nuclei input files
         nuclei_input_file = self.input()
         f = nuclei_input_file.open()
@@ -230,6 +232,7 @@ class NucleiScan(luigi.Task):
             nuclei_template_root = '%userprofile%'
             use_shell = True
         else:
+            my_env["HOME"] = "/opt"
             nuclei_template_root = '/opt'
 
         # Template
@@ -257,8 +260,8 @@ class NucleiScan(luigi.Task):
             nuclei_output_file = dir_path + os.path.sep + "nuclei_out_" + port_id
             command = [
                 "nuclei",
-                "-silent",
-                "-json",                
+                #"-silent",
+                "-json",
                 "-duc",
                 "-ni",
                 "-l",
@@ -268,13 +271,13 @@ class NucleiScan(luigi.Task):
                 "-t",
                 full_template_path
             ]
-            #print(command)
+            print(command)
             command_list.append(command)
 
         # Run threaded
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             for command_args in command_list:
-                executor.submit(subprocess.run, command_args, shell=use_shell)
+                executor.submit(subprocess.run, command_args, shell=use_shell, env=my_env)
 
         # Path to scan outputs log
         scan_utils.add_file_to_cleanup(scan_id, dir_path)

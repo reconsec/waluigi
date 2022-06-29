@@ -187,7 +187,7 @@ class NucleiScope(luigi.ExternalTask):
         print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
 
         # Path to scan outputs log
-        #scan_utils.add_file_to_cleanup(scan_id, dir_path)
+        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(nuclei_inputs_file)
 
@@ -277,7 +277,7 @@ class NucleiScan(luigi.Task):
                 executor.submit(subprocess.run, command_args, shell=use_shell)
 
         # Path to scan outputs log
-        #scan_utils.add_file_to_cleanup(scan_id, dir_path)
+        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
 
 @inherits(NucleiScan)

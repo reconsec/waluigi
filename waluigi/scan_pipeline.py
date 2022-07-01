@@ -4,7 +4,8 @@ import sys
 
 from waluigi import pyshotscan
 from waluigi import masscan
-from waluigi import httpscan
+from waluigi import httprobescan
+from waluigi import httpxscan
 from waluigi import nmapscan
 from waluigi import nucleiscan
 from waluigi import crobatdns
@@ -34,22 +35,42 @@ def masscan_import(scan_input):
     return True
 
 
-def http_scope(scan_input):
-    luigi_run_result = luigi.build([httpscan.HttpScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+def http_probe_scope(scan_input):
+    luigi_run_result = luigi.build([httprobescan.HttpScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def http_scan(scan_input):
-    luigi_run_result = luigi.build([httpscan.HttpScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+def http_probe_scan(scan_input):
+    luigi_run_result = luigi.build([httprobescan.HttpScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def http_import(scan_input):
-    luigi_run_result = luigi.build([httpscan.ImportHttpOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+def http_probe_import(scan_input):
+    luigi_run_result = luigi.build([httprobescan.ImportHttpOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+def httpx_scope(scan_input):
+    luigi_run_result = luigi.build([httpxscan.HttpXScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def httpx_scan(scan_input):
+    luigi_run_result = luigi.build([httpxscan.HttpXScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
+def httpx_import(scan_input):
+    luigi_run_result = luigi.build([httpxscan.ImportHttpXOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

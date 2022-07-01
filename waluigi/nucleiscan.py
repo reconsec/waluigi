@@ -260,7 +260,7 @@ class NucleiScan(luigi.Task):
             nuclei_output_file = dir_path + os.path.sep + "nuclei_out_" + port_id
             command = [
                 "nuclei",
-                #"-silent",
+                "-silent",
                 "-json",
                 "-duc",
                 "-ni",
@@ -336,12 +336,13 @@ class ParseNucleiOutput(luigi.Task):
                     nuclei_scan = json.loads(blob)
                     scan_arr.append(nuclei_scan)
 
-                    scan_output = json.dumps(scan_arr)
-                    # print(scan_output)
+            # Add the scan output to the array
+            #scan_output = json.dumps(scan_arr)
+            # print(scan_output)
 
-                    port_obj = {'port_id': int(port_id),
-                                'nuclei_script_results': scan_output}
-                    port_arr.append(port_obj)
+            port_obj = {'port_id': int(port_id),
+                        'nuclei_script_results': scan_arr}
+            port_arr.append(port_obj)
 
         # Import the nuclei scans
         if len(port_arr) > 0:

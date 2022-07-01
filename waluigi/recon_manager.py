@@ -840,7 +840,7 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
 
 
-    def http_scan(self, scan_input_obj):
+    def httpx_scan(self, scan_input_obj):
 
         ret_val = True
 
@@ -866,9 +866,9 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Execute pyshot
-            ret = scan_pipeline.http_scan(scan_input_obj)
+            ret = scan_pipeline.httpx_scan(scan_input_obj)
             if not ret:
-                print("[-] HTTP Probe Failed")
+                print("[-] HTTPX Scan Failed")
                 ret_val = False
 
         finally:
@@ -891,12 +891,12 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            scan_input_obj.current_tool_id = self.recon_manager.tool_map['http-probe']
+            scan_input_obj.current_tool_id = self.recon_manager.tool_map['httpx']
 
             # Import http probe results
-            ret = scan_pipeline.http_import(scan_input_obj)
+            ret = scan_pipeline.httpx_import(scan_input_obj)
             if not ret:
-                print("[-] Failed")
+                print("[-] HTTPX Scan Import Failed")
                 ret_val = False
 
             # Reset the tool id
@@ -908,6 +908,76 @@ class ScheduledScanThread(threading.Thread):
                 self.connection_manager.free_connection_lock(lock_val)
 
         return ret_val
+
+
+    # def http_probe_scan(self, scan_input_obj):
+
+    #     ret_val = True
+
+    #     # Check if scan is cancelled
+    #     if self.is_scan_cancelled(scan_input_obj.scan_id):
+    #         return ret_val
+
+    #     # Refresh scan data (Get updated ports and hosts)
+    #     scan_input_obj.refresh()
+
+    #     if self.connection_manager:
+    #         # Connect to synack target
+    #         con = self.connection_manager.connect_to_target()
+    #         if not con:
+    #             print("[-] Failed connecting to target")
+    #             return False
+
+    #         # Obtain the lock before we start a scan
+    #         lock_val = self.connection_manager.get_connection_lock()
+
+    #         # Sleep to ensure routing is setup
+    #         time.sleep(2)
+
+    #     try:
+    #         # Execute pyshot
+    #         ret = scan_pipeline.http_probe_scan(scan_input_obj)
+    #         if not ret:
+    #             print("[-] HTTP Probe Failed")
+    #             ret_val = False
+
+    #     finally:
+    #         if self.connection_manager:
+    #             # Release the lock after scan
+    #             self.connection_manager.free_connection_lock(lock_val)
+    #         if not ret_val:
+    #             return ret_val
+
+    #     if self.connection_manager:
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
+
+    #         # Sleep to ensure routing is setup
+    #         time.sleep(3)
+
+    #     try:
+
+    #         # Set the tool id
+    #         scan_input_obj.current_tool_id = self.recon_manager.tool_map['http-probe']
+
+    #         # Import http probe results
+    #         ret = scan_pipeline.http_probe_import(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Failed")
+    #             ret_val = False
+
+    #         # Reset the tool id
+    #         scan_input_obj.current_tool_id = None
+
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
+
+    #     return ret_val
 
 
     def pyshot_scan(self, scan_input_obj):
@@ -1062,14 +1132,9 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def process_scan_obj(self, sched_scan_obj):
 
-        # Create scan object
-        self.recon_manager.dbg_print(sched_scan_obj)
-        scan_input_obj = ScanInput(self, sched_scan_obj)
 
-        # Update scan status
-        self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.RUNNING.value)
+    def execute_scan_jobs(self, sched_scan_obj, scan_input_obj):
 
         # Set connection target in connection manager to this target 
         target_id = scan_input_obj.scheduled_scan.target_id
@@ -1081,7 +1146,7 @@ class ScheduledScanThread(threading.Thread):
             ret = self.dns_lookup(scan_input_obj)
             if not ret:
                 print("[-] DNS Resolution Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1092,7 +1157,7 @@ class ScheduledScanThread(threading.Thread):
             ret = self.mass_scan(scan_input_obj)
             if not ret:
                 print("[-] Masscan Failed")
-                return
+                return False
             #else:
                 # TODO - Get URLs
             #    print("[*] No subnets retrieved. Skipping masscan.")
@@ -1105,20 +1170,30 @@ class ScheduledScanThread(threading.Thread):
             ret = self.shodan_lookup(scan_input_obj)
             if not ret:
                 print("[-] Shodan Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
 
         if sched_scan_obj.http_scan_flag == 1:
             # Execute http probe
-            ret = self.http_scan(scan_input_obj)
+            ret = self.httpx_scan(scan_input_obj)
             if not ret:
-                print("[-] HTTP Probe Failed")
-                return
+                print("[-] HTTPX Scan Failed")
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
+
+        # if sched_scan_obj.http_scan_flag == 1:
+        #     # Execute http probe
+        #     ret = self.http_probe_scan(scan_input_obj)
+        #     if not ret:
+        #         print("[-] HTTP Probe Failed")
+        #         return
+
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
 
         if sched_scan_obj.nmap_scan_flag == 1:
 
@@ -1131,7 +1206,7 @@ class ScheduledScanThread(threading.Thread):
             ret = self.nmap_scan(scan_input_obj, script_args=ssl_http_scripts, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Intial Scan Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1140,7 +1215,7 @@ class ScheduledScanThread(threading.Thread):
             ret = self.nmap_scan(scan_input_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Service Scan Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1150,7 +1225,7 @@ class ScheduledScanThread(threading.Thread):
             ret = self.pyshot_scan(scan_input_obj)
             if not ret:
                 print("[-] Pyshot Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1160,7 +1235,7 @@ class ScheduledScanThread(threading.Thread):
             ret = self.nuclei_scan(scan_input_obj)
             if not ret:
                 print("[-] Nuclei Scan Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1170,7 +1245,7 @@ class ScheduledScanThread(threading.Thread):
             ret = self.module_scan(scan_input_obj)
             if not ret:
                 print("[-] Module Scan Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1180,14 +1255,32 @@ class ScheduledScanThread(threading.Thread):
             ret = self.dirsearch_scan(scan_id, sched_scan_obj)
             if not ret:
                 print("[-] Dirsearch Scan Failed")
-                return
+                return False
 
             # Increment step
             scan_input_obj.current_step += 1
 
+        
         # Cleanup files
         ret = scan_pipeline.scan_cleanup(scan_input_obj.scan_id)
 
+
+        return True
+
+
+    def process_scan_obj(self, sched_scan_obj):
+
+        # Create scan object
+        self.recon_manager.dbg_print(sched_scan_obj)
+        scan_input_obj = ScanInput(self, sched_scan_obj)
+
+        # Update scan status
+        self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.RUNNING.value)
+
+        # Execute scan jobs
+        ret_val = self.execute_scan_jobs(sched_scan_obj, scan_input_obj)
+
+        # Set status
         if self.connection_manager:
             # Connect to extender to remove scheduled scan and update scan status
             lock_val = self.connection_manager.connect_to_extender()
@@ -1199,16 +1292,25 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
         try:
-            # Remove scheduled scan
-            self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
 
+            scan_status = ScanStatus.ERROR.value
+            if ret_val == True:
+                # Remove scheduled scan
+                self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
+
+                # Update scan status
+                scan_status = ScanStatus.COMPLETED.value
+            
             # Update scan status
-            self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.COMPLETED.value)
+            self.recon_manager.update_scan_status(scan_input_obj.scan_id, scan_status)
 
         finally:
             if self.connection_manager:
                 # Free the lock
                 self.connection_manager.free_connection_lock(lock_val)
+
+       
+        return
 
     def run(self):
 
@@ -1239,6 +1341,7 @@ class ScheduledScanThread(threading.Thread):
                                 if sched_scan_obj_arr and len(sched_scan_obj_arr) > 0:
                                     sched_scan_obj = sched_scan_obj_arr[0]
                                     self.process_scan_obj(sched_scan_obj)
+                                    
 
                             else:
                                 print("[-] Connection lock is currently held. Retrying")

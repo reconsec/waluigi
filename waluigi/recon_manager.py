@@ -1089,10 +1089,10 @@ class ScheduledScanThread(threading.Thread):
                 ret_val = False
 
             # Execute nuclei
-            ret = scan_pipeline.nuclei_scan(scan_input_obj, cves_template_path)
-            if not ret:
-                print("[-] Nuclei Scan Failed")
-                ret_val = False
+            #ret = scan_pipeline.nuclei_scan(scan_input_obj, cves_template_path)
+            #if not ret:
+            #    print("[-] Nuclei Scan Failed")
+            #    ret_val = False
 
         finally:
             if self.connection_manager:
@@ -1119,10 +1119,10 @@ class ScheduledScanThread(threading.Thread):
                 ret_val = False
 
             # Import nuclei results
-            ret = scan_pipeline.parse_nuclei(scan_input_obj, cves_template_path)
-            if not ret:
-                print("[-] Failed")
-                ret_val = False
+            #ret = scan_pipeline.parse_nuclei(scan_input_obj, cves_template_path)
+            #if not ret:
+            #    print("[-] Failed")
+            #    ret_val = False
 
         finally:
             if self.connection_manager:

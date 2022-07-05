@@ -9,6 +9,7 @@ import glob
 import multiprocessing
 import traceback
 
+from enum import Enum
 from datetime import date
 from luigi.util import inherits
 from tqdm import tqdm
@@ -16,8 +17,71 @@ from multiprocessing.pool import ThreadPool
 from waluigi import recon_manager
 from waluigi import scan_utils
 from urllib.parse import urlparse
+from threading  import Thread
+from queue import Queue
 
 
+class ProcessStreamReader(Thread):
+
+    class StreamType(Enum):
+        STDOUT = 1
+        STDERR = 2
+
+    def __init__(self, pipe_type, pipe_stream):
+        Thread.__init__(self)
+        self.pipe_type = pipe_type
+        self.pipe_stream = pipe_stream
+        self.output_queue = Queue()
+        self._daemon = True
+        self.daemon = True
+
+    def queue(self, data):
+        self.output_queue.put(data)
+
+
+    def run(self):
+
+        pipe = self.pipe_stream
+        pipe_name = self.pipe_type
+
+        try:
+            with pipe:
+                for line in iter(pipe.readline, b''):
+                    self.queue(line)
+        except Exception as e:
+            print("[-] Exception")
+            pass
+        finally:
+            self.queue(None)
+
+    def get_output(self):
+
+        output_str = b''
+        for line in iter(self.output_queue.get, None):
+            output_str += line
+
+        return output_str
+
+def httpx_wrapper(cmd_args):
+
+    ret_value = True
+    p = subprocess.Popen(cmd_args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    q = Queue()
+
+    stdout_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDOUT, p.stdout)
+    stderr_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDERR, p.stderr)
+
+    stdout_reader.start()
+    stderr_reader.start()
+
+    exit_code = p.wait()
+    if exit_code != 0:
+        print("[*] Exit code: %s" % str(exit_code))
+        output_bytes = stderr_reader.get_output()
+        print("[-] Error: %s " % output_bytes.decode())
+        ret_value = False
+
+    return ret_value
 
 class HttpXScope(luigi.ExternalTask):
 
@@ -35,7 +99,7 @@ class HttpXScope(luigi.ExternalTask):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        # path to each input file
+        # path to input file
         http_inputs_file = dir_path + os.path.sep + "httpx" + scan_id
         if os.path.isfile(http_inputs_file):
             return luigi.LocalTarget(http_inputs_file) 
@@ -43,13 +107,14 @@ class HttpXScope(luigi.ExternalTask):
         # Get selected ports        
         scan_arr = []
         selected_port_list = scan_input_obj.scheduled_scan.ports
+        print(selected_port_list)
         if len(selected_port_list) > 0:
 
             for port_entry in selected_port_list:
 
                 #Add IP
                 ip_addr = port_entry.host.ipv4_addr
-                host_id = port_entry.host.id
+                host_id = port_entry.host_id
                 ip_str = str(netaddr.IPAddress(ip_addr))
                 port_str = str(port_entry.port)
 
@@ -96,15 +161,6 @@ class HttpXScope(luigi.ExternalTask):
         scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(http_inputs_file)
-
-
-def httpx_wrapper(cmd_args):
-
-    ret_msg = ""
-    p = subprocess.Popen(cmd_args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    p.wait()
-
-    return ret_msg
 
 
 @inherits(HttpXScope)
@@ -160,17 +216,17 @@ class HttpXScan(luigi.Task):
                 port_id = str(scan_inst['port_id'])
                 host_id = str(scan_inst['host_id'])
                 ip_addr = scan_inst['ipv4_addr']
-                port = str(scan_inst['port'])
+                port_str = str(scan_inst['port'])
 
                 # Add to port id map
-                port_to_id_map[ip_addr+":"+port] = { 'port_id' : port_id, 'host_id' : host_id }
+                port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id }
 
                 # Add to scan map
-                if port in port_ip_dict:
-                    ip_set = port_ip_dict[port]
+                if port_str in port_ip_dict:
+                    ip_set = port_ip_dict[port_str]
                 else:
                     ip_set = set()
-                    port_ip_dict[port] = ip_set
+                    port_ip_dict[port_str] = ip_set
 
                 # Add IP to list
                 ip_set.add(ip_addr)
@@ -197,7 +253,6 @@ class HttpXScan(luigi.Task):
 
                 command_arr = [
                     "httpx",
-                    "-silent",
                     "-json",
                     "-tls-probe",
                     "-td",

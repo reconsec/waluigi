@@ -40,12 +40,8 @@ class NmapScope(luigi.ExternalTask):
             os.mkdir(dir_path)
             os.chmod(dir_path, 0o777)
 
-        #scan_hash = ''
-        #if scan_input_obj.nmap_scan_hash:
-        #    scan_hash = scan_input_obj.nmap_scan_hash
-        scan_hash = str(scan_input_obj.current_step)
-
-        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + scan_hash
+        scan_step = str(scan_input_obj.current_step)
+        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + scan_step
         if os.path.isfile(nmap_inputs_file):
             return luigi.LocalTarget(nmap_inputs_file)
 
@@ -56,7 +52,7 @@ class NmapScope(luigi.ExternalTask):
         if nmap_scan_arr and len(nmap_scan_arr) > 0:
 
             # Create dict object with hash
-            nmap_scan = {'nmap_scan_id': scan_hash, 'nmap_scan_list': nmap_scan_arr}
+            nmap_scan = {'nmap_scan_list': nmap_scan_arr}
 
             # Write the output
             nmap_scan_input = json.dumps(nmap_scan)
@@ -86,27 +82,11 @@ class NmapScan(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-
-        # Read input file
-        nmap_input_file = self.input()                
-        #print("[*] Input file: %s" % nmap_input_file.path)
-
-        f = nmap_input_file.open()
-        json_input = f.read()
-        f.close()
-
-        #load input file
-        nmap_scan_id = ''
-        if len(json_input) > 0:
-            nmap_scan_obj = json.loads(json_input)
-            nmap_scan_id = nmap_scan_obj['nmap_scan_id']
-        else:
-            # Remove just in case it was an earlier error
-            os.remove(nmap_input_file.path)
+        scan_step = str(scan_input_obj.current_step)
 
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
-        meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ nmap_scan_id +".meta"
+        meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ scan_step +".meta"
 
         return luigi.LocalTarget(meta_file_path)
 
@@ -114,6 +94,7 @@ class NmapScan(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
+        scan_step = str(scan_input_obj.current_step)
 
         # Read input file
         nmap_input_file = self.input()                
@@ -134,7 +115,6 @@ class NmapScan(luigi.Task):
         nmap_scan_data = None
         if len(json_input) > 0:
             nmap_scan_obj = json.loads(json_input)
-            nmap_scan_id = nmap_scan_obj['nmap_scan_id']
             input_nmap_scan_list = nmap_scan_obj['nmap_scan_list']
 
             commands = []
@@ -142,7 +122,7 @@ class NmapScan(luigi.Task):
 
             # Output structure for scan jobs
             nmap_scan_list = []
-            nmap_scan_data = {'nmap_scan_id':nmap_scan_id, 'nmap_scan_list': nmap_scan_list}
+            nmap_scan_data = {'nmap_scan_list': nmap_scan_list}
 
             for nmap_scan_arr in input_nmap_scan_list:
 
@@ -150,7 +130,7 @@ class NmapScan(luigi.Task):
                 script_args = None
                 port_list = nmap_scan_arr['port_list']
                 port_comma_list = ','.join(port_list)
-                ip_list_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, nmap_scan_id)
+                ip_list_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, scan_step)
 
                 # Write IPs to a file
                 ip_list = nmap_scan_arr['ip_list']
@@ -166,7 +146,7 @@ class NmapScan(luigi.Task):
                     script_args = nmap_scan_arr['script-args']
 
                 # Nmap command args
-                nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (counter, nmap_scan_id)
+                nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (counter, scan_step)
 
                 # Add sudo if on linux based system
                 command = []
@@ -260,23 +240,11 @@ class ParseNmapOutput(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-
-        nmap_input_file = self.input()                
-        #print("[*] Input file: %s" % nmap_input_file.path)
-
-        f = nmap_input_file.open()
-        json_input = f.read()
-        f.close()
-
-        #load input file
-        nmap_scan_id = ''
-        if len(json_input) > 0:
-            nmap_scan_obj = json.loads(json_input)
-            nmap_scan_id = nmap_scan_obj['nmap_scan_id']
+        scan_step = str(scan_input_obj.current_step)
 
         cwd = os.getcwd()
         dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
-        out_file = dir_path + os.path.sep + "nmap_import_" + nmap_scan_id +"_complete"
+        out_file = dir_path + os.path.sep + "nmap_import_" + scan_step +"_complete"
 
         return luigi.LocalTarget(out_file)
 

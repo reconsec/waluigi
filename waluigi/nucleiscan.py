@@ -284,7 +284,7 @@ class NucleiScan(luigi.Task):
 
 
 @inherits(NucleiScan)
-class ParseNucleiOutput(luigi.Task):
+class ImportNucleiOutput(luigi.Task):
 
 
     def requires(self):
@@ -346,8 +346,15 @@ class ParseNucleiOutput(luigi.Task):
 
         # Import the nuclei scans
         if len(port_arr) > 0:
+
             # Import the ports to the manager
-            ret_val = recon_manager.import_ports(port_arr)
+            tool_id = scan_input_obj.current_tool_id
+            scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
+            #print(scan_results)
+            ret_val = recon_manager.import_ports_ext(scan_results)
+
+            # Import the ports to the manager
+            #ret_val = recon_manager.import_ports(port_arr)
 
             print("[+] Imported nuclei scans to manager.")
 
@@ -355,3 +362,5 @@ class ParseNucleiOutput(luigi.Task):
             f = open(self.output().path, 'w')
             f.write("complete")
             f.close()
+        else:
+            print("[-] No nuclei results to import")

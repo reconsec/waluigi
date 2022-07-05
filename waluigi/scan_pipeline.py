@@ -152,8 +152,8 @@ def nuclei_scan(scan_input, template_path):
     return True
 
 
-def parse_nuclei(scan_input, template_path):
-    luigi_run_result = luigi.build([nucleiscan.ParseNucleiOutput(scan_input=scan_input, template_path=template_path)], local_scheduler=True, detailed_summary=True)
+def nuclei_import(scan_input, template_path):
+    luigi_run_result = luigi.build([nucleiscan.ImportNucleiOutput(scan_input=scan_input, template_path=template_path)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

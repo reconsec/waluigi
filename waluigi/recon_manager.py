@@ -597,6 +597,9 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] Failed")
                 ret_val = False
 
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
+
         finally:
             if self.connection_manager:
                 # Free the lock
@@ -1112,11 +1115,17 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
         try:
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = self.recon_manager.tool_map['nuclei']
+
             # Import nuclei results
-            ret = scan_pipeline.parse_nuclei(scan_input_obj, fingerprint_template_path)
+            ret = scan_pipeline.nuclei_import(scan_input_obj, fingerprint_template_path)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
+
+            scan_input_obj.current_tool_id = None
 
             # Import nuclei results
             #ret = scan_pipeline.parse_nuclei(scan_input_obj, cves_template_path)

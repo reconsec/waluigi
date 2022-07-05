@@ -31,8 +31,8 @@ class ScanCleanup(luigi.ExternalTask):
                         file_path = line.strip()
                         if len(file_path) >0 and os.path.exists(file_path):
                             try:
-                                #i = 0
-                                shutil.rmtree(file_path)
+                                i = 0
+                                #shutil.rmtree(file_path)
                             except Exception as e:
                                  print("[-] Error deleting output directory: %s" % str(e))
                                  pass

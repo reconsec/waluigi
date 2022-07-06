@@ -273,8 +273,6 @@ class ScanInput():
 
             if hosts:
 
-                # path to each input file
-                nuclei_inputs_f = open(nuclei_inputs_file, 'w')
                 for host in hosts:
 
                     ip_addr = str(netaddr.IPAddress(host.ipv4_addr))

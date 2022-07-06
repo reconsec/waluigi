@@ -85,141 +85,143 @@ class NucleiScope(luigi.ExternalTask):
 
 
         # Created a larger endpoint set so things don't get scanned twice if they have the same domain
-        total_endpoint_set = set()
-        endpoint_port_obj_map = {}
+        #total_endpoint_set = set()
+        #endpoint_port_obj_map = {}
 
-        #scan_arr = []
-        selected_port_list = scan_input_obj.scheduled_scan.ports
-        if len(selected_port_list) > 0:
+        # selected_port_list = scan_input_obj.scheduled_scan.ports
+        # if len(selected_port_list) > 0:
 
-            for port_entry in selected_port_list:
+        #     for port_entry in selected_port_list:
 
-                #Add IP
-                ip_addr = port_entry.host.ipv4_addr
-                ip_str = str(netaddr.IPAddress(ip_addr))
+        #         #Add IP
+        #         ip_addr = port_entry.host.ipv4_addr
+        #         ip_str = str(netaddr.IPAddress(ip_addr))
 
 
-                port_str = str(port_entry.port)
-                #Skip port 5985 - WinRS
-                http_found = False
-                ws_man_found = False
-                if port_entry.components:
-                    for component in port_entry.components:
-                        if 'http' in component.component_name:
-                            http_found = True
-                        elif 'wsman' in component.component_name:
-                            ws_man_found = True
+        #         port_str = str(port_entry.port)
+        #         #Skip port 5985 - WinRS
+        #         http_found = False
+        #         ws_man_found = False
+        #         if port_entry.components:
+        #             for component in port_entry.components:
+        #                 if 'http' in component.component_name:
+        #                     http_found = True
+        #                 elif 'wsman' in component.component_name:
+        #                     ws_man_found = True
 
-                # Skip if not already detected as http based
-                if http_found == False or ws_man_found==True:
-                    continue
+        #         # Skip if not already detected as http based
+        #         if http_found == False or ws_man_found==True:
+        #             continue
 
-                # Setup inputs
-                prefix = ''
-                if http_found:
-                    prefix = 'http://'
+        #         # Setup inputs
+        #         prefix = ''
+        #         if http_found:
+        #             prefix = 'http://'
 
-                if port_entry.secure== 1:
-                    prefix = 'https://'
+        #         if port_entry.secure== 1:
+        #             prefix = 'https://'
 
-                #endpoint_set = set()
-                port_id = str(port_entry.id)
-                port_obj_instance = {"port_id" : port_entry.id}
+        #         #endpoint_set = set()
+        #         port_id = str(port_entry.id)
+        #         port_obj_instance = {"port_id" : port_entry.id}
 
-                endpoint = prefix + ip_str + ":" + port_str
-                if endpoint not in total_endpoint_set:
+        #         endpoint = prefix + ip_str + ":" + port_str
+        #         if endpoint not in total_endpoint_set:
 
-                    #endpoint_set.add(endpoint)
-                    endpoint_port_obj_map[endpoint] = port_obj_instance
-                    total_endpoint_set.add(endpoint)
+        #             #endpoint_set.add(endpoint)
+        #             endpoint_port_obj_map[endpoint] = port_obj_instance
+        #             total_endpoint_set.add(endpoint)
 
-                # Add endpoint per domain
-                for domain in port_entry.host.domains[:10]:
+        #         # Add endpoint per domain
+        #         for domain in port_entry.host.domains[:10]:
 
-                    # Remove any wildcards
-                    domain_str = domain.lstrip("*.")
+        #             # Remove any wildcards
+        #             domain_str = domain.lstrip("*.")
 
-                    endpoint = prefix + domain_str + ":" + port_str
-                    # print("[*] Endpoint: %s" % endpoint)
-                    if endpoint not in total_endpoint_set:
-                        #endpoint_set.add(endpoint)
+        #             endpoint = prefix + domain_str + ":" + port_str
+        #             # print("[*] Endpoint: %s" % endpoint)
+        #             if endpoint not in total_endpoint_set:
+        #                 #endpoint_set.add(endpoint)
 
-                        endpoint_port_obj_map[endpoint] = port_obj_instance
-                        total_endpoint_set.add(endpoint)
+        #                 endpoint_port_obj_map[endpoint] = port_obj_instance
+        #                 total_endpoint_set.add(endpoint)
 
-        else:
+        # else:
 
-            # Get hosts
-            hosts = scan_input_obj.hosts
-            print("[+] Retrieved %d hosts from database" % len(hosts))
+        #     # Get hosts
+        #     hosts = scan_input_obj.hosts
+        #     print("[+] Retrieved %d hosts from database" % len(hosts))
 
-            if hosts:
+        #     if hosts:
 
-                # path to each input file
-                nuclei_inputs_f = open(nuclei_inputs_file, 'w')
-                for host in hosts:
+        #         # path to each input file
+        #         nuclei_inputs_f = open(nuclei_inputs_file, 'w')
+        #         for host in hosts:
 
-                    ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
-                    for port_obj in host.ports:
+        #             ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
+        #             for port_obj in host.ports:
 
-                        port_str = str(port_obj.port)
-                        #Skip port 5985 - WinRS
-                        http_found = False
-                        ws_man_found = False
-                        if port_obj.components:
-                            for component in port_obj.components:
-                                if 'http' in component.component_name:
-                                    http_found = True
-                                elif 'wsman' in component.component_name:
-                                    ws_man_found = True
+        #                 port_str = str(port_obj.port)
+        #                 #Skip port 5985 - WinRS
+        #                 http_found = False
+        #                 ws_man_found = False
+        #                 if port_obj.components:
+        #                     for component in port_obj.components:
+        #                         if 'http' in component.component_name:
+        #                             http_found = True
+        #                         elif 'wsman' in component.component_name:
+        #                             ws_man_found = True
 
-                        # Skip if not already detected as http based
-                        if http_found == False or ws_man_found==True:
-                            continue
+        #                 # Skip if not already detected as http based
+        #                 if http_found == False or ws_man_found==True:
+        #                     continue
 
-                        # Setup inputs
-                        prefix = ''
-                        if http_found:
-                            prefix = 'http://'
+        #                 # Setup inputs
+        #                 prefix = ''
+        #                 if http_found:
+        #                     prefix = 'http://'
 
-                        if port_obj.secure == 1:
-                            prefix = 'https://'
+        #                 if port_obj.secure == 1:
+        #                     prefix = 'https://'
 
-                        #endpoint_set = set()
-                        port_id = str(port_obj.id)
+        #                 #endpoint_set = set()
+        #                 port_id = str(port_obj.id)
 
-                        endpoint = prefix + ip_addr + ":" + port_str
-                        port_obj_instance = {"port_id" : port_obj.id }
+        #                 endpoint = prefix + ip_addr + ":" + port_str
+        #                 port_obj_instance = {"port_id" : port_obj.id }
                         
-                        # print("[*] Endpoint: %s" % endpoint)
+        #                 # print("[*] Endpoint: %s" % endpoint)
 
-                        if endpoint not in total_endpoint_set:
-                            #endpoint_set.add(endpoint)
-                            endpoint_port_obj_map[endpoint] = port_obj_instance
-                            total_endpoint_set.add(endpoint)
+        #                 if endpoint not in total_endpoint_set:
+        #                     #endpoint_set.add(endpoint)
+        #                     endpoint_port_obj_map[endpoint] = port_obj_instance
+        #                     total_endpoint_set.add(endpoint)
 
-                        # Add endpoint per domain
-                        for domain in host.domains[:10]:
+        #                 # Add endpoint per domain
+        #                 for domain in host.domains[:10]:
 
-                            # Remove any wildcards
-                            domain_str = domain.name.lstrip("*.")
+        #                     # Remove any wildcards
+        #                     domain_str = domain.name.lstrip("*.")
 
-                            endpoint = prefix + domain_str + ":" + port_str
-                            # print("[*] Endpoint: %s" % endpoint)
-                            if endpoint not in total_endpoint_set:
-                                #endpoint_set.add(endpoint)
-                                endpoint_port_obj_map[endpoint] = port_obj_instance
-                                total_endpoint_set.add(endpoint)
+        #                     endpoint = prefix + domain_str + ":" + port_str
+        #                     # print("[*] Endpoint: %s" % endpoint)
+        #                     if endpoint not in total_endpoint_set:
+        #                         #endpoint_set.add(endpoint)
+        #                         endpoint_port_obj_map[endpoint] = port_obj_instance
+        #                         total_endpoint_set.add(endpoint)
                         
 
-        print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
+        # print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
+
+        scan_target_dict = scan_input_obj.scan_target_dict
+        scan_endpoint_list = scan_target_dict['scan_endpoint_list']
 
         # Create output file
         nuclei_inputs_f = open(nuclei_inputs_file, 'w')
-        if len(total_endpoint_set) > 0:
+        if len(scan_endpoint_list) > 0:
             # Dump array to JSON
-            nuclei_scan_obj = {'endpoint_port_obj_map': endpoint_port_obj_map, 'scan_endpoint_list' : list(total_endpoint_set) }
-            nuclei_scan_input = json.dumps(nuclei_scan_obj)
+            #nuclei_scan_obj = {'endpoint_port_obj_map': endpoint_port_obj_map, 'scan_endpoint_list' : list(total_endpoint_set) }
+            nuclei_scan_input = json.dumps(scan_target_dict)
             # Write to output file
             nuclei_inputs_f.write(nuclei_scan_input)
 
@@ -235,7 +237,7 @@ class NucleiScope(luigi.ExternalTask):
 @inherits(NucleiScope)
 class NucleiScan(luigi.Task):
 
-    template_path = luigi.Parameter()
+    #template_path = luigi.Parameter()
 
     def requires(self):
         # Requires the target scope
@@ -274,14 +276,22 @@ class NucleiScan(luigi.Task):
             my_env["HOME"] = "/opt"
             nuclei_template_root = '/opt'
 
-        # Template
-        template_path = self.template_path.replace(":", os.path.sep)
+        # Get templates
+        scan_target_dict = scan_input_obj.scan_target_dict
+        template_path_list = scan_target_dict['template_path_list']
 
-        nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
-        full_template_path = nuclei_template_path + os.path.sep + template_path
-        if os.path.exists(full_template_path) == False:
-            print("[-] Nuclei template path '%s' does not exist" % full_template_path)
-            raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), full_template_path)
+        template_arr = []
+        for template_path in template_path_list:
+            template_path = template_path.replace("/", os.path.sep)
+
+            nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
+            full_template_path = nuclei_template_path + os.path.sep + template_path
+            if os.path.exists(full_template_path) == False:
+                print("[-] Nuclei template path '%s' does not exist" % full_template_path)
+                raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), full_template_path)
+
+            template_arr.append("-t")
+            template_arr.append(full_template_path)
 
 
         # Get output file path
@@ -326,9 +336,13 @@ class NucleiScan(luigi.Task):
                         nuclei_scan_input_file_path,
                         "-o",
                         nuclei_output_file,
-                        "-t",
-                        full_template_path
+                        #"-t",
+                        #full_template_path
                     ]
+
+                    # Add templates
+                    command.extend(template_arr)
+
                     #print(command)
 
                 nuclei_process_wrapper(command, use_shell=use_shell)
@@ -350,7 +364,7 @@ class ImportNucleiOutput(luigi.Task):
 
     def requires(self):
         # Requires NucleiScan
-        return NucleiScan(scan_input=self.scan_input, template_path=self.template_path)
+        return NucleiScan(scan_input=self.scan_input)
 
     def output(self):
 

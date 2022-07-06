@@ -62,7 +62,7 @@ class ScanInput():
         self.scan_target = None
         self.shodan_key = None
         self.hosts = None
-        self.nmap_scan_arr = None
+        self.scan_target_dict = None
         self.nmap_scan_hash = None
         self.scan_modules = None
         self.current_step = 0
@@ -121,79 +121,219 @@ class ScanInput():
 
     def set_module_scan_arr(self, tool_name):
 
-        nmap_scan_arr = []
+        
         module_list = self.scan_modules
         if module_list and len(module_list) > 0:
 
+            if tool_name == 'nmap':
 
-            # Get selected ports
-            selected_port_set = set()
-            selected_port_list = self.scheduled_scan.ports
-            if len(selected_port_list) > 0:
+                nmap_scan_arr = []
 
-                for port_entry in selected_port_list:
-                    target_ip = port_entry.host.ipv4_addr
-                    ip_str = str(netaddr.IPAddress(target_ip)).strip()
-                    port_str = str(port_entry.port).strip()
-                    selected_port_set.add(ip_str + ":" + port_str)
+                # Get selected ports
+                selected_port_set = set()
+                selected_port_list = self.scheduled_scan.ports
+                if len(selected_port_list) > 0:
 
-
-            #Loop through targets
-            #print(selected_port_set)
-            modules = list(module_list)
-            #print(modules)
-            counter = 0
-            for module in modules:
-
-                scan_inst = {}
-                port_list = set()
-
-                module_tool = module['tool']
-                if tool_name == module_tool:
-
-                    module_id = module['id']
-                    script_args = module['args']
-                    # Split on space as the script args are stored as strings not arrays
-                    script_args_arr = script_args.split(" ")
-                    target_list = module['targets']
-
-                    # Write IPs to file
-                    ip_list = set()
-                    #print(target_list)
-                    for target in target_list:
-                        port_str = str(target['port']).strip()
-                        target_ip = target['ipv4_addr']
+                    for port_entry in selected_port_list:
+                        target_ip = port_entry.host.ipv4_addr
                         ip_str = str(netaddr.IPAddress(target_ip)).strip()
-                        if len(ip_str) > 0:
+                        port_str = str(port_entry.port).strip()
+                        selected_port_set.add(ip_str + ":" + port_str)
 
-                            # If selected ports has been set, then make sure it's in the list
-                            target_tuple = ip_str + ":" + port_str
-                            if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
-                                continue
 
-                            print("[*] Adding tuple: %s" % target_tuple)
-                            ip_list.add(ip_str)
-                            port_list.add(port_str)
+                #Loop through targets
+                #print(selected_port_set)
+                modules = list(module_list)
+                #print(modules)
+                counter = 0
+                for module in modules:
 
-                    # Add entry
-                    if len(ip_list) > 0:
+                    scan_inst = {}
+                    port_list = set()
 
-                        # Create scan instance
-                        scan_inst['module_id'] = module_id
-                        scan_inst['ip_list'] = list(ip_list)
-                        scan_inst['port_list'] = list(port_list)
-                        scan_inst['script-args'] = script_args_arr
+                    module_tool = module['tool']
+                    if tool_name == module_tool:
 
-                        # Add the scan instance
-                        nmap_scan_arr.append(scan_inst)
-                        counter += 1
+                        module_id = module['id']
+                        script_args = module['args']
+                        # Split on space as the script args are stored as strings not arrays
+                        script_args_arr = script_args.split(" ")
+                        target_list = module['targets']
 
-        # Hash the scan input
-        #if len(nmap_scan_arr) > 0:
-        #    self.hash_nmap_inputs(nmap_scan_arr)
+                        # Write IPs to file
+                        ip_list = set()
+                        #print(target_list)
+                        for target in target_list:
+                            port_str = str(target['port']).strip()
+                            target_ip = target['ipv4_addr']
+                            ip_str = str(netaddr.IPAddress(target_ip)).strip()
+                            if len(ip_str) > 0:
 
-        # Set the output
-        self.nmap_scan_arr =  nmap_scan_arr
+                                # If selected ports has been set, then make sure it's in the list
+                                target_tuple = ip_str + ":" + port_str
+                                if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
+                                    continue
+
+                                print("[*] Adding tuple: %s" % target_tuple)
+                                ip_list.add(ip_str)
+                                port_list.add(port_str)
+
+                        # Add entry
+                        if len(ip_list) > 0:
+
+                            # Create scan instance
+                            scan_inst['module_id'] = module_id
+                            scan_inst['ip_list'] = list(ip_list)
+                            scan_inst['port_list'] = list(port_list)
+                            scan_inst['script-args'] = script_args_arr
+
+                            # Add the scan instance
+                            nmap_scan_arr.append(scan_inst)
+                            counter += 1
+
+                # Set the output
+                self.scan_target_dict =  {'scan_list': nmap_scan_arr }
+
+
+            elif tool_name == 'nuclei':
+
+
+                # Set the output
+                self.scan_target_dict =  {'scan_list': nuclei_scan_arr }
+
+
+    def set_nuclei_scan_arr(self, template_path_list):
+
+        total_endpoint_set = set()
+        endpoint_port_obj_map = {}
+
+        selected_port_list = self.scheduled_scan.ports
+        if len(selected_port_list) > 0:
+
+            for port_entry in selected_port_list:
+
+                #Add IP
+                ip_addr = port_entry.host.ipv4_addr
+                ip_str = str(netaddr.IPAddress(ip_addr))
+
+
+                port_str = str(port_entry.port)
+                #Skip port 5985 - WinRS
+                http_found = False
+                ws_man_found = False
+                if port_entry.components:
+                    for component in port_entry.components:
+                        if 'http' in component.component_name:
+                            http_found = True
+                        elif 'wsman' in component.component_name:
+                            ws_man_found = True
+
+                # Skip if not already detected as http based
+                if http_found == False or ws_man_found==True:
+                    continue
+
+                # Setup inputs
+                prefix = ''
+                if http_found:
+                    prefix = 'http://'
+
+                if port_entry.secure== 1:
+                    prefix = 'https://'
+
+                #endpoint_set = set()
+                port_id = str(port_entry.id)
+                port_obj_instance = {"port_id" : port_entry.id}
+
+                endpoint = prefix + ip_str + ":" + port_str
+                if endpoint not in total_endpoint_set:
+
+                    #endpoint_set.add(endpoint)
+                    endpoint_port_obj_map[endpoint] = port_obj_instance
+                    total_endpoint_set.add(endpoint)
+
+                # Add endpoint per domain
+                for domain in port_entry.host.domains[:10]:
+
+                    # Remove any wildcards
+                    domain_str = domain.lstrip("*.")
+
+                    endpoint = prefix + domain_str + ":" + port_str
+                    # print("[*] Endpoint: %s" % endpoint)
+                    if endpoint not in total_endpoint_set:
+                        #endpoint_set.add(endpoint)
+
+                        endpoint_port_obj_map[endpoint] = port_obj_instance
+                        total_endpoint_set.add(endpoint)
+
+        else:
+
+            # Get hosts
+            hosts = self.hosts
+            print("[+] Retrieved %d hosts from database" % len(hosts))
+
+            if hosts:
+
+                # path to each input file
+                nuclei_inputs_f = open(nuclei_inputs_file, 'w')
+                for host in hosts:
+
+                    ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
+                    for port_obj in host.ports:
+
+                        port_str = str(port_obj.port)
+                        #Skip port 5985 - WinRS
+                        http_found = False
+                        ws_man_found = False
+                        if port_obj.components:
+                            for component in port_obj.components:
+                                if 'http' in component.component_name:
+                                    http_found = True
+                                elif 'wsman' in component.component_name:
+                                    ws_man_found = True
+
+                        # Skip if not already detected as http based
+                        if http_found == False or ws_man_found==True:
+                            continue
+
+                        # Setup inputs
+                        prefix = ''
+                        if http_found:
+                            prefix = 'http://'
+
+                        if port_obj.secure == 1:
+                            prefix = 'https://'
+
+                        #endpoint_set = set()
+                        port_id = str(port_obj.id)
+
+                        endpoint = prefix + ip_addr + ":" + port_str
+                        port_obj_instance = {"port_id" : port_obj.id }
+                        
+                        # print("[*] Endpoint: %s" % endpoint)
+
+                        if endpoint not in total_endpoint_set:
+                            #endpoint_set.add(endpoint)
+                            endpoint_port_obj_map[endpoint] = port_obj_instance
+                            total_endpoint_set.add(endpoint)
+
+                        # Add endpoint per domain
+                        for domain in host.domains[:10]:
+
+                            # Remove any wildcards
+                            domain_str = domain.name.lstrip("*.")
+
+                            endpoint = prefix + domain_str + ":" + port_str
+                            # print("[*] Endpoint: %s" % endpoint)
+                            if endpoint not in total_endpoint_set:
+                                #endpoint_set.add(endpoint)
+                                endpoint_port_obj_map[endpoint] = port_obj_instance
+                                total_endpoint_set.add(endpoint)
+
+
+        print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
+
+        # Create output file
+        self.scan_target_dict =  {'endpoint_port_obj_map': endpoint_port_obj_map, 'scan_endpoint_list' : list(total_endpoint_set), 'template_path_list' : template_path_list }
 
 
     def set_nmap_scan_arr(self, script_args, skip_load_balance_ports):
@@ -451,13 +591,9 @@ class ScanInput():
                 nmap_scan_arr.append(scan_inst)
 
 
-        # Hash the scan input
-        #if len(nmap_scan_arr) > 0:
-        #    self.hash_nmap_inputs(nmap_scan_arr)
-
         # Set the output
         #print(nmap_scan_arr)
-        self.nmap_scan_arr =  nmap_scan_arr
+        self.scan_target_dict =  {'scan_list': nmap_scan_arr }
 
 
     #Convert port bitmap into port list
@@ -769,6 +905,14 @@ class ScheduledScanThread(threading.Thread):
                     print("[-] Nmap Module Scan Failed")
                     return
 
+            elif tool_name == 'nuclei':
+
+                # Execute nuclei
+                ret = self.nuclei_scan(scan_input_obj, module_scan=True)
+                if not ret:
+                    print("[-] Nmap Module Scan Failed")
+                    return
+
         
 
         return ret_val
@@ -1051,7 +1195,7 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def nuclei_scan(self, scan_input_obj ):
+    def nuclei_scan(self, scan_input_obj, module_scan=False, template_path_list=None ):
 
         ret_val = True
 
@@ -1059,8 +1203,17 @@ class ScheduledScanThread(threading.Thread):
         if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
 
-        # Refresh scan data (Get updated ports and hosts)
-        scan_input_obj.refresh()
+        if module_scan:
+            print("[*] Nuclei module scan")
+            # Set the input args for nmap
+            scan_input_obj.set_module_scan_arr('nuclei')
+        else:
+            print("[*] Nuclei template scan")
+            # Refresh to get latest scan results (NOT necessary for modules)
+            scan_input_obj.refresh()
+            # Set the input args for nmap
+            scan_input_obj.set_nuclei_scan_arr(template_path_list)
+
 
         # Get scope for nuclei scan
         ret = scan_pipeline.nuclei_scope(scan_input_obj)
@@ -1082,20 +1235,12 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
 
-        fingerprint_template_path = "technologies:fingerprinthub-web-fingerprints.yaml"
-        cves_template_path = "cves"
         try:
             # Execute nuclei
-            ret = scan_pipeline.nuclei_scan(scan_input_obj, fingerprint_template_path)
+            ret = scan_pipeline.nuclei_scan(scan_input_obj)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 ret_val = False
-
-            # Execute nuclei
-            #ret = scan_pipeline.nuclei_scan(scan_input_obj, cves_template_path)
-            #if not ret:
-            #    print("[-] Nuclei Scan Failed")
-            #    ret_val = False
 
         finally:
             if self.connection_manager:
@@ -1117,21 +1262,21 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            scan_input_obj.current_tool_id = self.recon_manager.tool_map['nuclei']
+            if 'nuclei' in self.recon_manager.tool_map:
+                scan_input_obj.current_tool_id = self.recon_manager.tool_map['nuclei']
+            
 
-            # Import nuclei results
-            ret = scan_pipeline.nuclei_import(scan_input_obj, fingerprint_template_path)
-            if not ret:
-                print("[-] Failed")
+                # Import nuclei results
+                ret = scan_pipeline.nuclei_import(scan_input_obj)
+                if not ret:
+                    print("[-] Failed")
+                    ret_val = False
+
+                scan_input_obj.current_tool_id = None
+
+            else:
+                print("[-] Nuclei tool not available")
                 ret_val = False
-
-            scan_input_obj.current_tool_id = None
-
-            # Import nuclei results
-            #ret = scan_pipeline.parse_nuclei(scan_input_obj, cves_template_path)
-            #if not ret:
-            #    print("[-] Failed")
-            #    ret_val = False
 
         finally:
             if self.connection_manager:
@@ -1241,7 +1386,8 @@ class ScheduledScanThread(threading.Thread):
 
         if sched_scan_obj.nuclei_scan_flag == 1:
             # Execute nuclei
-            ret = self.nuclei_scan(scan_input_obj)
+            fingerprint_template_path = ["technologies/fingerprinthub-web-fingerprints.yaml"]
+            ret = self.nuclei_scan(scan_input_obj, template_path_list=fingerprint_template_path)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 return False
@@ -1406,6 +1552,7 @@ class ReconManager:
             collection_tools = self.get_tools()
             for tool in collection_tools:
                 self.tool_map[tool.name] = tool.id
+
         except Exception as e:
             print(traceback.format_exc())
             pass

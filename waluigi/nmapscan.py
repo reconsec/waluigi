@@ -48,7 +48,8 @@ class NmapScope(luigi.ExternalTask):
         # Open the input file
         nmap_inputs_f = open(nmap_inputs_file, 'w')
 
-        nmap_scan_arr = scan_input_obj.nmap_scan_arr
+        scan_target_dict = scan_input_obj.scan_target_dict
+        nmap_scan_arr = scan_target_dict['scan_list']
         if nmap_scan_arr and len(nmap_scan_arr) > 0:
 
             # Create dict object with hash
@@ -190,6 +191,7 @@ class NmapScan(luigi.Task):
                 # Add to meta data
                 nmap_scan_inst['nmap_command'] = command
                 nmap_scan_inst['output_file'] = nmap_output_xml_file
+
                 # Add module id if it exists
                 if 'module_id' in nmap_scan_arr:
                     nmap_scan_inst['module_id'] = nmap_scan_arr['module_id']

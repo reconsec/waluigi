@@ -145,15 +145,15 @@ def nuclei_scope(scan_input):
     return True
 
 
-def nuclei_scan(scan_input, template_path):
-    luigi_run_result = luigi.build([nucleiscan.NucleiScan(scan_input=scan_input, template_path=template_path)], local_scheduler=True, detailed_summary=True)
+def nuclei_scan(scan_input):
+    luigi_run_result = luigi.build([nucleiscan.NucleiScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def nuclei_import(scan_input, template_path):
-    luigi_run_result = luigi.build([nucleiscan.ImportNucleiOutput(scan_input=scan_input, template_path=template_path)], local_scheduler=True, detailed_summary=True)
+def nuclei_import(scan_input):
+    luigi_run_result = luigi.build([nucleiscan.ImportNucleiOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

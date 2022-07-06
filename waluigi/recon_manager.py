@@ -123,44 +123,45 @@ class ScanInput():
 
         
         module_list = self.scan_modules
-        if module_list and len(module_list) > 0:
+        if module_list and len(module_list) > 0:            
 
-            if tool_name == 'nmap':
+            scan_arr = []
 
-                nmap_scan_arr = []
+            # Get selected ports
+            selected_port_set = set()
+            selected_port_list = self.scheduled_scan.ports
+            if len(selected_port_list) > 0:
 
-                # Get selected ports
-                selected_port_set = set()
-                selected_port_list = self.scheduled_scan.ports
-                if len(selected_port_list) > 0:
-
-                    for port_entry in selected_port_list:
-                        target_ip = port_entry.host.ipv4_addr
-                        ip_str = str(netaddr.IPAddress(target_ip)).strip()
-                        port_str = str(port_entry.port).strip()
-                        selected_port_set.add(ip_str + ":" + port_str)
+                for port_entry in selected_port_list:
+                    target_ip = port_entry.host.ipv4_addr
+                    ip_str = str(netaddr.IPAddress(target_ip)).strip()
+                    port_str = str(port_entry.port).strip()
+                    selected_port_set.add(ip_str + ":" + port_str)
 
 
-                #Loop through targets
-                #print(selected_port_set)
-                modules = list(module_list)
-                #print(modules)
-                counter = 0
-                for module in modules:
+            #Loop through targets
+            #print(selected_port_set)
+            modules = list(module_list)
+            #print(modules)
 
-                    scan_inst = {}
-                    port_list = set()
+            for module in modules:
 
-                    module_tool = module['tool']
-                    if tool_name == module_tool:
+                scan_inst = {}
+                port_list = set()
 
-                        module_id = module['id']
-                        script_args = module['args']
+                module_tool = module['tool']
+                if tool_name == module_tool:
+
+                    module_id = module['id']
+                    template_path = module['args']
+                    target_list = module['targets']
+
+
+                    if tool_name == 'nmap':
+
                         # Split on space as the script args are stored as strings not arrays
                         script_args_arr = script_args.split(" ")
-                        target_list = module['targets']
 
-                        # Write IPs to file
                         ip_list = set()
                         #print(target_list)
                         for target in target_list:
@@ -188,18 +189,67 @@ class ScanInput():
                             scan_inst['script-args'] = script_args_arr
 
                             # Add the scan instance
-                            nmap_scan_arr.append(scan_inst)
-                            counter += 1
-
-                # Set the output
-                self.scan_target_dict =  {'scan_list': nmap_scan_arr }
+                            scan_arr.append(scan_inst)
 
 
-            elif tool_name == 'nuclei':
+                    # Create scan instance for each module
+                    elif tool_name == 'nuclei':
+
+                        total_endpoint_set = set()
+                        endpoint_port_obj_map = {}
+                        target_set = set()
+                        #print(target_list)
+                        for target in target_list:
+
+                            print(target)
+                            port_str = str(target['port']).strip()
+                            secure = target['secure']
+                            port_id = target['port_id']
+                            target_ip = target['ipv4_addr']
+                            ip_str = str(netaddr.IPAddress(target_ip)).strip()
+                            port_obj_instance = {"port_id" : port_id }
+
+                            if len(ip_str) > 0:
+
+                                # If selected ports has been set, then make sure it's in the list
+                                target_tuple = ip_str + ":" + port_str
+                                if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
+                                    continue
+
+                                print("[*] Adding tuple: %s" % target_tuple)
+
+                                # Add target as IP and port
+                                target_set.add(target_tuple)
+
+                                # Add target with http(s)
+                                # Setup args array
+                                endpoint = 'http'
+                                if secure == '1':
+                                    endpoint += "s"
+
+                                endpoint += "://" + target_tuple
+                                target_set.add(endpoint)
+
+                                if endpoint not in total_endpoint_set:
+                                    endpoint_port_obj_map[endpoint] = port_obj_instance
+                                    total_endpoint_set.add(endpoint)
 
 
-                # Set the output
-                self.scan_target_dict =  {'scan_list': nuclei_scan_arr }
+                        # Add entry
+                        if len(target_set) > 0:
+
+                            # Create scan instance
+                            scan_inst['module_id'] = module_id
+                            scan_inst['scan_endpoint_list'] = list(target_set)
+                            scan_inst['template_path_list'] = [template_path]
+                            scan_inst['endpoint_port_obj_map'] = endpoint_port_obj_map
+
+                            # Add the scan instance
+                            scan_arr.append(scan_inst)
+
+
+            # Set scan data
+            self.scan_target_dict =  {'scan_list': scan_arr }
 
 
     def set_nuclei_scan_arr(self, template_path_list):
@@ -331,8 +381,9 @@ class ScanInput():
         print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
 
         # Create output file
-        self.scan_target_dict =  {'endpoint_port_obj_map': endpoint_port_obj_map, 'scan_endpoint_list' : list(total_endpoint_set), 'template_path_list' : template_path_list }
-
+        scan_obj =  {'endpoint_port_obj_map': endpoint_port_obj_map, 'scan_endpoint_list' : list(total_endpoint_set), 'template_path_list' : template_path_list }
+        self.scan_target_dict =  {'scan_list': [scan_obj] }
+    
 
     def set_nmap_scan_arr(self, script_args, skip_load_balance_ports):
 
@@ -877,7 +928,6 @@ class ScheduledScanThread(threading.Thread):
 
             # Refresh scan data (Get updated ports and hosts)
             scan_input_obj.refresh(modules=True)
-
             modules = scan_input_obj.scan_modules
 
         finally:

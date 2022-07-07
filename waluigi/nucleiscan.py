@@ -14,10 +14,10 @@ from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
 from waluigi import scan_utils
 
-def nuclei_process_wrapper(cmd_args, use_shell=False):
+def nuclei_process_wrapper(cmd_args, use_shell, my_env):
 
     ret_msg = ""
-    p = subprocess.Popen(cmd_args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(cmd_args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=my_env)
      
     stdout_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
     stderr_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr)
@@ -200,7 +200,7 @@ class NucleiScan(luigi.Task):
                         scan_inst['output_file_path'] = nuclei_output_file
 
                         # Loop through domains - truncate to the first 20
-                        thread_list.append(pool.apply_async(nuclei_process_wrapper, (command, use_shell)))
+                        thread_list.append(pool.apply_async(nuclei_process_wrapper, (command, use_shell, my_env)))
                         counter += 1
 
                 # Close the pool

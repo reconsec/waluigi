@@ -9,7 +9,6 @@ import glob
 import multiprocessing
 import traceback
 
-from enum import Enum
 from datetime import date
 from luigi.util import inherits
 from tqdm import tqdm
@@ -17,59 +16,15 @@ from multiprocessing.pool import ThreadPool
 from waluigi import recon_manager
 from waluigi import scan_utils
 from urllib.parse import urlparse
-from threading  import Thread
-from queue import Queue
 
-
-class ProcessStreamReader(Thread):
-
-    class StreamType(Enum):
-        STDOUT = 1
-        STDERR = 2
-
-    def __init__(self, pipe_type, pipe_stream):
-        Thread.__init__(self)
-        self.pipe_type = pipe_type
-        self.pipe_stream = pipe_stream
-        self.output_queue = Queue()
-        self._daemon = True
-        self.daemon = True
-
-    def queue(self, data):
-        self.output_queue.put(data)
-
-
-    def run(self):
-
-        pipe = self.pipe_stream
-        pipe_name = self.pipe_type
-
-        try:
-            with pipe:
-                for line in iter(pipe.readline, b''):
-                    self.queue(line)
-        except Exception as e:
-            print("[-] Exception")
-            pass
-        finally:
-            self.queue(None)
-
-    def get_output(self):
-
-        output_str = b''
-        for line in iter(self.output_queue.get, None):
-            output_str += line
-
-        return output_str
 
 def httpx_wrapper(cmd_args):
 
     ret_value = True
     p = subprocess.Popen(cmd_args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    q = Queue()
-
-    stdout_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDOUT, p.stdout)
-    stderr_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDERR, p.stderr)
+    
+    stdout_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
+    stderr_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr)
 
     stdout_reader.start()
     stderr_reader.start()

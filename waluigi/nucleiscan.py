@@ -10,57 +10,32 @@ import errno
 from luigi.util import inherits
 from datetime import date
 from waluigi import recon_manager
-from waluigi import scan_utils
-from threading  import Thread
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
-
-try:
-    from queue import Queue
-except ImportError:
-    from Queue import Queue  # python 2.x
-
-def pipe_reader(pipe_dict, queue):
-
-    pipe = pipe_dict['pipe']
-    pipe_name = pipe_dict['pipe_name']
-
-    try:
-        with pipe:
-            for line in iter(pipe.readline, b''):
-                queue.put((pipe_name, line))
-    except Exception as e:
-        print("[-] Exception")
-        pass
-    finally:
-        queue.put(None)
-
+from waluigi import scan_utils
 
 def nuclei_process_wrapper(cmd_args, use_shell=False):
 
     ret_msg = ""
-    scan_process = subprocess.Popen(cmd_args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    q = Queue()
+    p = subprocess.Popen(cmd_args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+     
+    stdout_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
+    stderr_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr)
 
-    pipe_stdout = {'pipe': scan_process.stdout, 'pipe_name': 'stdout' }
-    pipe_stderr = {'pipe': scan_process.stderr, 'pipe_name': 'stderr' }
+    stdout_reader.start()
+    stderr_reader.start()
 
-    stdout_thread = Thread(target=pipe_reader, args=[pipe_stdout, q])
-    stderr_thread = Thread(target=pipe_reader, args=[pipe_stderr, q])
-
-    stdout_thread.daemon = True # thread dies with the program
-    stderr_thread.daemon = True # thread dies with the program
-
-    stdout_thread.start()
-    stderr_thread.start()
-
-    scan_process.wait()
+    exit_code = p.wait()
+    if exit_code != 0:
+        print("[*] Exit code: %s" % str(exit_code))
+        output_bytes = stderr_reader.get_output()
+        print("[-] Error: %s " % output_bytes.decode())
+        ret_value = False
 
     return ret_msg
 
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
-scan_process = None
 
 class NucleiScope(luigi.ExternalTask):
 
@@ -146,25 +121,6 @@ class NucleiScan(luigi.Task):
             my_env["HOME"] = "/opt"
             nuclei_template_root = '/opt'
 
-        # Get templates
-        #scan_target_dict = scan_input_obj.scan_target_dict
-        #scan_list = scan_target_dict['scan_list']
-        # template_path_list = scan_target_dict['template_path_list']
-
-        # template_arr = []
-        # for template_path in template_path_list:
-        #     template_path = template_path.replace("/", os.path.sep)
-
-        #     nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
-        #     full_template_path = nuclei_template_path + os.path.sep + template_path
-        #     if os.path.exists(full_template_path) == False:
-        #         print("[-] Nuclei template path '%s' does not exist" % full_template_path)
-        #         raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), full_template_path)
-
-        #     template_arr.append("-t")
-        #     template_arr.append(full_template_path)
-
-
         # Get output file path
         output_file_path = self.output().path
         output_dir = os.path.dirname(output_file_path)
@@ -220,6 +176,11 @@ class NucleiScan(luigi.Task):
 
                         # Nmap command args
                         nuclei_output_file = output_dir + os.path.sep + "nuclei_scan_out_" + scan_step + "_" + str(counter)
+
+                        command = []
+                        if os.name != 'nt':
+                            command.append("sudo")
+
                         command = [
                             "nuclei",
                             "-json",

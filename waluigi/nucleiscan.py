@@ -17,6 +17,7 @@ from waluigi import scan_utils
 def nuclei_process_wrapper(cmd_args, use_shell, my_env):
 
     ret_msg = ""
+    print(cmd_args)
     p = subprocess.Popen(cmd_args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=my_env)
      
     stdout_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
@@ -181,7 +182,7 @@ class NucleiScan(luigi.Task):
                         if os.name != 'nt':
                             command.append("sudo")
 
-                        command = [
+                        command_inner = [
                             "nuclei",
                             "-json",
                             "-duc",
@@ -193,8 +194,10 @@ class NucleiScan(luigi.Task):
                         ]
 
                         # Add templates
-                        command.extend(template_arr)
+                        command_inner.extend(template_arr)
                         #print(command)
+
+                        command.extend(command_inner)
 
                         # Add output file to list
                         scan_inst['output_file_path'] = nuclei_output_file

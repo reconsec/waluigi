@@ -67,6 +67,7 @@ class ScanInput():
         self.scan_modules = None
         self.current_step = 0
         self.current_tool_id = None
+        self.selected_interface = None
 
         # Create a scan id if it does not exist
         if self.scheduled_scan.scan_id is None:
@@ -86,6 +87,9 @@ class ScanInput():
         # Get the shodan key
         #print("[*] Retrieving Shodan data")
         self.shodan_key = self.scan_thread.recon_manager.get_shodan_key()
+
+        # Get the selected interface
+        self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
 
 
     # Function to return a hash of the input IPs, ports, and script args to determine uniqueness of the scan
@@ -201,7 +205,7 @@ class ScanInput():
                         #print(target_list)
                         for target in target_list:
 
-                            print(target)
+                            #print(target)
                             port_str = str(target['port']).strip()
                             secure = target['secure']
                             port_id = target['port_id']
@@ -1813,6 +1817,24 @@ class ReconManager:
             shodan_key = shodan_key_obj.key
 
         return shodan_key
+
+    def get_collector_interface(self):
+
+        interface = None
+        r = requests.get('%s/api/collector/interface' % (self.manager_url), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return interface
+        if r.status_code != 200:
+            print("[-] Unknown Error")
+            return interface
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        if data:
+            interface_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+            interface = interface_obj.interface
+
+        return interface
 
     def get_urls(self, scan_id):
 

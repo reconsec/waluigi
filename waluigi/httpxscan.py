@@ -211,6 +211,8 @@ class HttpXScan(luigi.Task):
                     "-json",
                     "-tls-probe",
                     "-td",
+                    "-t",
+                    "100",
                     "-nf",
                     "-l",
                     scan_input_file_path,

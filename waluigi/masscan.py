@@ -150,6 +150,7 @@ class MasscanScan(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
+        selected_interface = scan_input_obj.selected_interface
 
         masscan_output_file_path = self.output().path
 
@@ -185,8 +186,14 @@ class MasscanScan(luigi.Task):
                     ips_file_path
                 ]
 
+                # Add the specific interface to scan from if its selected
+                if selected_interface:
+                    int_name = selected_interface.name.strip()
+                    command_arr.extend(['-e', int_name])
+
                 command.extend(command_arr)
 
+                print(command)
                 # Execute process
                 subprocess.run(command)
 

@@ -96,6 +96,7 @@ class NmapScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
         scan_step = str(scan_input_obj.current_step)
+        selected_interface = scan_input_obj.selected_interface
 
         # Read input file
         nmap_input_file = self.input()                
@@ -174,6 +175,11 @@ class NmapScan(luigi.Task):
                     ip_list_path
 
                 ]
+
+                # Add the specific interface to scan from if its selected
+                if selected_interface:
+                    int_name = selected_interface.name.strip()
+                    command_arr.extend(['-e', int_name])
 
                 
                 # Add base arguments

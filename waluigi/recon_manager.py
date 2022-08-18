@@ -28,6 +28,12 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
 
+# Exception thrown if the bearer token is invalid
+class ToolMissingError(Exception):
+    def __init__(self, tool_name):
+        super().__init__("[-] %s tool is not present in Reverge tool library. Consider refreshing the list." % tool_name)
+
+
 class ScanStatus(enum.Enum):
     CREATED = 1
     RUNNING = 2
@@ -50,7 +56,6 @@ class PortScan():
         self.target_set = set()
         self.script_args = None
         self.resolve_dns = False
-
 
 
 class ScanInput():
@@ -90,38 +95,6 @@ class ScanInput():
 
         # Get the selected interface
         self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
-
-
-    # Function to return a hash of the input IPs, ports, and script args to determine uniqueness of the scan
-    def hash_nmap_inputs(self, nmap_scan_list):
-
-        hash_alg=hashlib.sha1
-        hashobj = hash_alg()
-
-        for nmap_scan_entry in nmap_scan_list:
-
-            port_list = nmap_scan_entry['port_list']
-            port_list.sort()        
-            port_comma_list = ','.join(port_list).encode()
-            hashobj.update(port_comma_list)
-
-            ip_list = nmap_scan_entry['ip_list']
-            ip_list.sort()        
-            ip_comma_list = ','.join(ip_list).encode()
-            hashobj.update(ip_comma_list)
-
-            if 'script-args' in nmap_scan_entry:
-                script_args = nmap_scan_entry['script-args']
-                if script_args:
-                    script_args_cpy = script_args.copy()
-                    script_args_cpy.sort()        
-                    script_args_list = ','.join(script_args_cpy).encode()
-                    hashobj.update(script_args_list)
-
-        image_hash = hashobj.digest()
-        image_hash_str = binascii.hexlify(image_hash).decode()
-        self.nmap_scan_hash = image_hash_str
-
 
     def set_module_scan_arr(self, tool_name):
 
@@ -736,6 +709,7 @@ class ScheduledScanThread(threading.Thread):
     def mass_scan(self, scan_input_obj):
 
         ret_val = True
+        tool_name = 'masscan'
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
@@ -778,7 +752,10 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            scan_input_obj.current_tool_id = self.recon_manager.tool_map['masscan']
+            if tool_name in self.recon_manager.tool_map:
+                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
 
             # Import masscan results
             ret = scan_pipeline.masscan_import(scan_input_obj)
@@ -890,20 +867,76 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
 
 
-    def dirsearch_scan(self, scan_id, scan_sched_obj=None ):
+    def feroxbuster_scan(self, scan_input_obj ):
 
         ret_val = True
-        #print(scan_sched_obj)
-        port_obj_list = scan_sched_obj.ports
-        if port_obj_list and len(port_obj_list) > 0:
-            for port_inst in port_obj_list:
-                host = port_inst.host
-                print(host)
-                secure = port_inst.secure
-                print(secure)
-                port_num = port_inst.port
-                print(port_num)
+        tool_name = 'feroxbuster'
 
+       # Check if scan is cancelled
+        if self.is_scan_cancelled(scan_input_obj.scan_id):
+            return ret_val
+
+        # Refresh scan data (Get updated ports and hosts)
+        scan_input_obj.refresh()
+
+        if self.connection_manager:
+            # Connect to synack target
+            con = self.connection_manager.connect_to_target()
+            if not con:
+                print("[-] Failed connecting to target")
+                return False
+
+            # Obtain the lock before we start a scan
+            lock_val = self.connection_manager.get_connection_lock()
+
+            # Sleep to ensure routing is setup
+            time.sleep(2)
+
+        try:
+            # Execute pyshot
+            ret = scan_pipeline.feroxbuster_scan(scan_input_obj)
+            if not ret:
+                print("[-] Feroxbuster Scan Failed")
+                ret_val = False
+
+        finally:
+            if self.connection_manager:
+                # Release the lock after scan
+                self.connection_manager.free_connection_lock(lock_val)
+            if not ret_val:
+                return ret_val
+
+        if self.connection_manager:
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+        try:
+
+            # Set the tool id
+            if tool_name in self.recon_manager.tool_map:
+                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Import http probe results
+            ret = scan_pipeline.feroxbuster_import(scan_input_obj)
+            if not ret:
+                print("[-] Feroxbuster Scan Import Failed")
+                ret_val = False
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
+
+        finally:
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
 
         return ret_val
 
@@ -1042,6 +1075,7 @@ class ScheduledScanThread(threading.Thread):
     def httpx_scan(self, scan_input_obj):
 
         ret_val = True
+        tool_name = 'httpx'
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
@@ -1090,7 +1124,10 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            scan_input_obj.current_tool_id = self.recon_manager.tool_map['httpx']
+            if tool_name in self.recon_manager.tool_map:
+                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
 
             # Import http probe results
             ret = scan_pipeline.httpx_import(scan_input_obj)
@@ -1250,6 +1287,7 @@ class ScheduledScanThread(threading.Thread):
     def nuclei_scan(self, scan_input_obj, module_scan=False, template_path_list=None ):
 
         ret_val = True
+        tool_name = 'nuclei'
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
@@ -1314,21 +1352,18 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            if 'nuclei' in self.recon_manager.tool_map:
-                scan_input_obj.current_tool_id = self.recon_manager.tool_map['nuclei']
-            
-
-                # Import nuclei results
-                ret = scan_pipeline.nuclei_import(scan_input_obj)
-                if not ret:
-                    print("[-] Failed")
-                    ret_val = False
-
-                scan_input_obj.current_tool_id = None
-
+            if tool_name in self.recon_manager.tool_map:
+                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
             else:
-                print("[-] Nuclei tool not available")
+                raise ToolMissingError(tool_name)            
+
+            # Import nuclei results
+            ret = scan_pipeline.nuclei_import(scan_input_obj)
+            if not ret:
+                print("[-] Failed")
                 ret_val = False
+
+            scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -1345,7 +1380,6 @@ class ScheduledScanThread(threading.Thread):
         # Set connection target in connection manager to this target 
         target_id = scan_input_obj.scheduled_scan.target_id
         self.recon_manager.set_current_target(self.connection_manager, target_id)
-
 
         if sched_scan_obj.dns_scan_flag == 1:
             # Execute crobat
@@ -1459,7 +1493,7 @@ class ScheduledScanThread(threading.Thread):
 
         if sched_scan_obj.dirsearch_scan_flag == 1:
             # Execute dirsearch
-            ret = self.dirsearch_scan(scan_id, sched_scan_obj)
+            ret = self.feroxbuster_scan(scan_input_obj)
             if not ret:
                 print("[-] Dirsearch Scan Failed")
                 return False
@@ -1555,6 +1589,10 @@ class ScheduledScanThread(threading.Thread):
                                 time.sleep(5)
                                 continue
 
+                        except ToolMissingError as e:
+                            print(traceback.format_exc())
+                            # Attempt to update the tool map from the server
+                            recon_manager.update_tool_map()                            
                         except Exception as e:
                             print(traceback.format_exc())
                             pass
@@ -1599,6 +1637,13 @@ class ReconManager:
                 print(traceback.format_exc())
                 pass
 
+        self.update_tool_map()
+
+    def set_debug(self, debug):
+        self.debug = debug
+
+    def update_tool_map(self):
+
         # Get tool ids from server
         try:
             collection_tools = self.get_tools()
@@ -1608,9 +1653,6 @@ class ReconManager:
         except Exception as e:
             print(traceback.format_exc())
             pass
-
-    def set_debug(self, debug):
-        self.debug = debug
 
     def dbg_print(self, output):
         if self.debug:

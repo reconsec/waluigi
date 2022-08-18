@@ -29,11 +29,11 @@ class ProcessStreamReader(Thread):
             with pipe:
                 for line in iter(pipe.readline, b''):
                     if self.print_output:
-                        print(line)
+                        print(line.decode())
 
                     self.queue(line)
         except Exception as e:
-            print("[-] Exception")
+            print("[-] Exception: " + str(e))
             pass
         finally:
             self.queue(None)

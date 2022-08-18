@@ -12,6 +12,7 @@ from waluigi import crobatdns
 from waluigi import scancleanup
 from waluigi import shodanlookup
 from waluigi import dirsearchscan
+from waluigi import feroxbusterscan
 
 
 def masscan_scope(scan_input):
@@ -165,22 +166,42 @@ def import_shodan(scan_input):
         return False
     return True
 
-def dirsearch_scope(scan_id, recon_manager, scan_dict, scan_hash):
-    luigi_run_result = luigi.build([dirsearchscan.DirsearchScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+# def dirsearch_scope(scan_id, recon_manager, scan_dict, scan_hash):
+#     luigi_run_result = luigi.build([dirsearchscan.DirsearchScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
+
+
+# def dirsearch_scan(scan_id, recon_manager ):
+#     luigi_run_result = luigi.build([dirsearchscan.DirsearchScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
+
+
+# def parse_dirsearch(scan_id, recon_manager ):
+#     luigi_run_result = luigi.build([dirsearchscan.ParseDirsearchOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
+
+def feroxbuster_scope(scan_input):
+    luigi_run_result = luigi.build([feroxbusterscan.FeroxScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def dirsearch_scan(scan_id, recon_manager ):
-    luigi_run_result = luigi.build([dirsearchscan.DirsearchScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+def feroxbuster_scan(scan_input):
+    luigi_run_result = luigi.build([feroxbusterscan.FeroxScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
 
 
-def parse_dirsearch(scan_id, recon_manager ):
-    luigi_run_result = luigi.build([dirsearchscan.ParseDirsearchOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+def feroxbuster_import(scan_input):
+    luigi_run_result = luigi.build([feroxbusterscan.ImportFeroxOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

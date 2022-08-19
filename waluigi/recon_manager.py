@@ -73,6 +73,7 @@ class ScanInput():
         self.current_step = 0
         self.current_tool_id = None
         self.selected_interface = None
+        self.wordlist = None
 
         # Create a scan id if it does not exist
         if self.scheduled_scan.scan_id is None:
@@ -777,6 +778,7 @@ class ScheduledScanThread(threading.Thread):
     def nmap_scan(self, scan_input_obj, module_scan=False, script_args=None, skip_load_balance_ports=False):
 
         ret_val = True
+        tool_name = 'nmap'
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
@@ -853,11 +855,20 @@ class ScheduledScanThread(threading.Thread):
 
         try:
 
+            # Set the tool id
+            if tool_name in self.recon_manager.tool_map:
+                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
             # Import nmap results
             ret = scan_pipeline.parse_nmap(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:

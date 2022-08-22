@@ -285,7 +285,8 @@ class ParseNmapOutput(luigi.Task):
                         print(traceback.format_exc())
                         
                         try:
-                            shutil.rmtree(nmap_output_file.path)
+                            dir_path = os.path.dirname(meta_file)
+                            shutil.rmtree(dir_path)
                         except Exception as e:
                             pass
 
@@ -342,7 +343,7 @@ class ParseNmapOutput(luigi.Task):
                                     for script in script_res:
 
                                         script_id = script['id']
-                                        port_int = int(port_str)
+                                        #port_int = int(port_str)
                                         if script_id == 'ssl-cert':
 
                                             port_obj['secure'] = 1
@@ -359,6 +360,8 @@ class ParseNmapOutput(luigi.Task):
                                                         if "DNS" in dns_entry:
                                                             dns_stripped = dns_entry.replace("DNS:","").strip()
                                                             domain_set.add(dns_stripped)
+
+                                                    break
 
                                                 #print(domains)
                                         elif 'http' in script_id:

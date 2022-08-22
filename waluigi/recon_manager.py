@@ -1,5 +1,4 @@
 from Cryptodome.PublicKey import RSA
-from Cryptodome.Random import get_random_bytes
 from Cryptodome.Cipher import AES, PKCS1_OAEP
 from types import SimpleNamespace
 from threading import Event
@@ -14,9 +13,6 @@ import threading
 import time
 import traceback
 import os
-import string
-import random
-import hashlib
 import netaddr
 import netifaces
 import enum
@@ -68,7 +64,6 @@ class ScanInput():
         self.shodan_key = None
         self.hosts = None
         self.scan_target_dict = None
-        self.nmap_scan_hash = None
         self.scan_modules = None
         self.current_step = 0
         self.current_tool_id = None
@@ -711,10 +706,19 @@ class ScheduledScanThread(threading.Thread):
 
         ret_val = True
         tool_name = 'masscan'
+        tool_id = None
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val  
+            return ret_val
+        
+        if tool_name in self.recon_manager.tool_map:
+           tool_id = self.recon_manager.tool_map[tool_name]
+        else:
+            raise ToolMissingError(tool_name)
+
+        # Get scope
+        scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_id)
 
         # Connect to synack target
         if self.connection_manager:
@@ -753,10 +757,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            if tool_name in self.recon_manager.tool_map:
-                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+            scan_input_obj.current_tool_id = tool_id
 
             # Import masscan results
             ret = scan_pipeline.masscan_import(scan_input_obj)
@@ -1449,18 +1450,18 @@ class ScheduledScanThread(threading.Thread):
         if sched_scan_obj.nmap_scan_flag == 1:
 
 
-            ssl_http_scripts = ["--script", "+ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
-            version_args = ["-sV","-n"]
+            #ssl_http_scripts = ["--script", "+ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
+            version_args = ["-sV","-n","--script","+ssl-cert","--script-args","ssl=True"]
 
             # Execute nmap
             skip_load_balance_ports = self.recon_manager.is_load_balanced()
-            ret = self.nmap_scan(scan_input_obj, script_args=ssl_http_scripts, skip_load_balance_ports=skip_load_balance_ports)
-            if not ret:
-                print("[-] Nmap Intial Scan Failed")
-                return False
+            # ret = self.nmap_scan(scan_input_obj, script_args=ssl_http_scripts, skip_load_balance_ports=skip_load_balance_ports)
+            # if not ret:
+            #     print("[-] Nmap Intial Scan Failed")
+            #     return False
 
-            # Increment step
-            scan_input_obj.current_step += 1
+            # # Increment step
+            # scan_input_obj.current_step += 1
 
             # Execute nmap
             ret = self.nmap_scan(scan_input_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
@@ -1850,6 +1851,22 @@ class ReconManager:
         content = r.json()
         data = self._decrypt_json(content)
         target_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+
+        return target_obj
+
+    def get_tool_scope(self, scan_id, tool_id):
+
+        target_obj = None
+        r = requests.get('%s/api/scan/%s/scope/%s' % (self.manager_url, scan_id, tool_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return target_obj
+        if r.status_code != 200:
+            print("[-] Unknown Error")
+            return target_obj
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        target_obj = json.loads(data)
 
         return target_obj
 

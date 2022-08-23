@@ -65,13 +65,12 @@ class ShodanScope(luigi.ExternalTask):
 
         #subnets = self.recon_manager.get_subnets(self.scan_id)
         print("[+] Retrieved %d subnets from database" % len(subnets))
-        if len(subnets) > 0:
-            
+        f = open(shodan_ip_file, 'w')
+        if len(subnets) > 0:            
             # Write subnets to file
-            f = open(shodan_ip_file, 'w')
             for subnet in subnets:
                 f.write(subnet + '\n')
-            f.close()
+        f.close()
 
         # Path to scan outputs log
         scan_utils.add_file_to_cleanup(scan_id, shodan_inputs_dir)
@@ -260,7 +259,9 @@ class ShodanScan(luigi.Task):
             # Open output file and write json of output
             outfile = self.output().path
             f_out = open(outfile, 'w')
-            f_out.write(json.dumps(output_arr))
+
+            if len(output_arr) > 0:
+                f_out.write(json.dumps(output_arr))
 
             # Close the file
             f_out.close()
@@ -268,6 +269,9 @@ class ShodanScan(luigi.Task):
             # Path to scan outputs log
             output_dir = os.path.dirname(self.output().path)
             scan_utils.add_file_to_cleanup(scan_id, output_dir)
+            
+        else:
+            print("[-] No shodan API key provided.")
 
 
 @inherits(ShodanScan)
@@ -312,8 +316,8 @@ class ParseShodanOutput(luigi.Task):
                 print("Entries: %d" % len(json_data))
                 ret_val = recon_manager.import_shodan_data(scan_id, json_data)
 
-                # Write to output file
-                f = open(self.output().path, 'w')
-                f.write("complete")
-                f.close()
+        # Write to output file
+        f = open(self.output().path, 'w')
+        f.write("complete")
+        f.close()
 

@@ -36,42 +36,12 @@ class MassScanScope(luigi.ExternalTask):
         if os.path.isfile(masscan_inputs_file):
             return luigi.LocalTarget(masscan_inputs_file)
 
-        subnets = []
-        port_list = []
+        # Get the scan inputs
+        scan_target_dict = scan_input_obj.scan_target_dict
+        #print(scan_target_dict)
 
-        # Get selected ports
-        selected_port_list = scan_input_obj.scheduled_scan.ports
-        if len(selected_port_list) > 0:
-            port_set = set()
-            ip_set = set()
-            for port_entry in selected_port_list:
-
-                #Add IP
-                ip_addr = port_entry.host.ipv4_addr
-                ip_set.add(ip_addr)
-
-                # Add Port
-                port_set.add(port_entry.port)
-
-            subnets = list(ip_set)
-            port_list = list(port_set)
-
-        else:
-
-            # Get subnets
-            subnet_set = set()
-            target_obj = scan_input_obj.scan_target
-            subnets = target_obj.subnets
-
-            for subnet in subnets:
-                ip = subnet.subnet
-                subnet_inst = ip + "/" + str(subnet.mask)
-                subnet_set.add(subnet_inst)
-            subnets = list(subnet_set)
-
-            # Get port map and convert it
-            port_list = scan_input_obj.port_map_to_port_list()
-
+        subnets = scan_target_dict['targets']
+        port_list = scan_target_dict['ports']
 
         # Create output file
         masscan_config_file = None
@@ -294,5 +264,3 @@ class ParseMasscanOutput(luigi.Task):
         f = open(self.output().path, 'w')
         f.write("complete")
         f.close()
-
-

@@ -9,13 +9,14 @@ class ProcessStreamReader(Thread):
         STDOUT = 1
         STDERR = 2
 
-    def __init__(self, pipe_type, pipe_stream):
+    def __init__(self, pipe_type, pipe_stream, print_output=False):
         Thread.__init__(self)
         self.pipe_type = pipe_type
         self.pipe_stream = pipe_stream
         self.output_queue = Queue()
         self._daemon = True
         self.daemon = True
+        self.print_output = print_output
 
     def queue(self, data):
         self.output_queue.put(data)
@@ -24,14 +25,15 @@ class ProcessStreamReader(Thread):
     def run(self):
 
         pipe = self.pipe_stream
-        pipe_name = self.pipe_type
-
         try:
             with pipe:
                 for line in iter(pipe.readline, b''):
+                    if self.print_output:
+                        print(line.decode())
+
                     self.queue(line)
         except Exception as e:
-            print("[-] Exception")
+            print("[-] Exception: " + str(e))
             pass
         finally:
             self.queue(None)

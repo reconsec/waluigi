@@ -44,6 +44,18 @@ class ScanStatus(enum.Enum):
         elif (self == ScanStatus.CANCELLED):   return "CANCELLED"
         elif (self == ScanStatus.ERROR):   return "ERROR"
 
+class CollectionToolStatus(enum.Enum):
+   CREATED = 1
+   RUNNING = 2
+   COMPLETED = 3
+   ERROR = 4
+
+   def __str__(self):
+      if (self == CollectionToolStatus.CREATED):     return "CREATED"
+      elif (self == CollectionToolStatus.RUNNING):    return "RUNNING"
+      elif (self == CollectionToolStatus.COMPLETED):   return "COMPLETED"
+      elif (self == CollectionToolStatus.ERROR):   return "ERROR"
+
 
 class PortScan():
 
@@ -358,264 +370,264 @@ class ScanInput():
         self.scan_target_dict =  {'scan_list': [scan_obj] }
     
 
-    def set_nmap_scan_arr(self, script_args, skip_load_balance_ports):
+    # def set_nmap_scan_arr(self, script_args, skip_load_balance_ports):
 
-        nmap_scan_arr = []
+    #     nmap_scan_arr = []
 
-        # Dict of ports to port objects
-        port_target_map = {}
+    #     # Dict of ports to port objects
+    #     port_target_map = {}
 
-        # Set scan target
-        target_obj = self.scan_target
+    #     # Set scan target
+    #     target_obj = self.scan_target
 
-        # URL set
-        target_url_set = set()
-        for url in target_obj.urls:
-            target_url_set.add(url.url)
+    #     # URL set
+    #     target_url_set = set()
+    #     for url in target_obj.urls:
+    #         target_url_set.add(url.url)
 
-        # Was masscan also selected
-        masscan_selected = self.scheduled_scan.masscan_scan_flag == 1
+    #     # Was masscan also selected
+    #     masscan_selected = self.scheduled_scan.masscan_scan_flag == 1
 
-        # Get selected ports
-        selected_port_list = self.scheduled_scan.ports
-        if len(selected_port_list) > 0:
+    #     # Get selected ports
+    #     selected_port_list = self.scheduled_scan.ports
+    #     if len(selected_port_list) > 0:
 
-            for port_entry in selected_port_list:
+    #         for port_entry in selected_port_list:
 
-                # Convert to string
-                port_str = str(port_entry.port)
+    #             # Convert to string
+    #             port_str = str(port_entry.port)
 
-                if port_str in port_target_map.keys():
-                    port_obj = port_target_map[port_str]
-                else:
-                    port_obj = PortScan(int(port_entry.port))
-                    port_target_map[port_str] = port_obj
+    #             if port_str in port_target_map.keys():
+    #                 port_obj = port_target_map[port_str]
+    #             else:
+    #                 port_obj = PortScan(int(port_entry.port))
+    #                 port_target_map[port_str] = port_obj
 
-                # Add IP
-                target_ip = port_entry.host.ipv4_addr
-                port_obj.target_set.add(target_ip)
+    #             # Add IP
+    #             target_ip = port_entry.host.ipv4_addr
+    #             port_obj.target_set.add(target_ip)
 
-                # Set script arguments
-                port_obj.script_args = script_args
+    #             # Set script arguments
+    #             port_obj.script_args = script_args
 
-        else:
+    #     else:
 
-            port_arr = self.port_map_to_port_list()
-            print("[+] Retrieved %d ports from database" % len(port_arr))
+    #         port_arr = self.port_map_to_port_list()
+    #         print("[+] Retrieved %d ports from database" % len(port_arr))
 
-            # Iterate over hosts
-            hosts = self.hosts
-            if hosts and len(hosts) > 0:
+    #         # Iterate over hosts
+    #         hosts = self.hosts
+    #         if hosts and len(hosts) > 0:
 
-                print("[+] Retrieved %d hosts from database" % len(hosts))
-                for host in hosts:
+    #             print("[+] Retrieved %d hosts from database" % len(hosts))
+    #             for host in hosts:
 
-                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
-                    domains = host.domains
+    #                 target_ip = str(netaddr.IPAddress(host.ipv4_addr))
+    #                 domains = host.domains
 
-                    # If masscan was part of the scan, then use results from it to feed NMAP
-                    if (masscan_selected or self.scheduled_scan.rescan == 1) and len(host.ports) > 0:
+    #                 # If masscan was part of the scan, then use results from it to feed NMAP
+    #                 if (masscan_selected or self.scheduled_scan.rescan == 1) and len(host.ports) > 0:
 
-                        #print(port_arr)
-                        for port in host.ports:
+    #                     #print(port_arr)
+    #                     for port in host.ports:
 
-                            dns_resolv = False
-                            port_int = port.port
-                            port_str = str(port_int)
+    #                         dns_resolv = False
+    #                         port_int = port.port
+    #                         port_str = str(port_int)
 
-                            # Ensure we are only scanning ports that have selected
-                            if len(port_arr) > 0 and port_str not in port_arr:
-                                continue
+    #                         # Ensure we are only scanning ports that have selected
+    #                         if len(port_arr) > 0 and port_str not in port_arr:
+    #                             continue
 
-                            # Skip any possible load balanced ports that haven't already been marked as http from pre scan
-                            if skip_load_balance_ports:
+    #                         # Skip any possible load balanced ports that haven't already been marked as http from pre scan
+    #                         if skip_load_balance_ports:
 
-                                #Check for port that have already been marked as http based
-                                http_found = False
-                                if port.components:
-                                    for component in port.components:
-                                        if 'http' in component.component_name:
-                                            http_found = True
-                                            break
+    #                             #Check for port that have already been marked as http based
+    #                             http_found = False
+    #                             if port.components:
+    #                                 for component in port.components:
+    #                                     if 'http' in component.component_name:
+    #                                         http_found = True
+    #                                         break
 
-                                # Skip if not already detected as http based
-                                if (port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443') and http_found == False:
-                                    continue
+    #                             # Skip if not already detected as http based
+    #                             if (port_str == '80' or port_str == '443' or port_str == '8080' or port_str == '8443') and http_found == False:
+    #                                 continue
 
-                                if http_found:
-                                    dns_resolv = True
+    #                             if http_found:
+    #                                 dns_resolv = True
 
-                            # Get the port object
-                            if port_str in port_target_map.keys():
-                                port_obj = port_target_map[port_str]
-                            else:
-                                port_obj = PortScan(int(port_int))
-                                port_target_map[port_str] = port_obj
+    #                         # Get the port object
+    #                         if port_str in port_target_map.keys():
+    #                             port_obj = port_target_map[port_str]
+    #                         else:
+    #                             port_obj = PortScan(int(port_int))
+    #                             port_target_map[port_str] = port_obj
 
-                            # Add IP
-                            port_obj.target_set.add(target_ip)
-                            port_obj.script_args = script_args
+    #                         # Add IP
+    #                         port_obj.target_set.add(target_ip)
+    #                         port_obj.script_args = script_args
 
-                            # Set DNS resolve
-                            port_obj.resolve_dns = dns_resolv
+    #                         # Set DNS resolve
+    #                         port_obj.resolve_dns = dns_resolv
 
-                            # Add the domains
-                            for domain in domains:
-                                domain_name = domain.name
-                                if len(domain_name) > 0:
-                                    domain_name = domain_name.replace("*.","")
-                                    port_obj.target_set.add(domain_name)
+    #                         # Add the domains
+    #                         for domain in domains:
+    #                             domain_name = domain.name
+    #                             if len(domain_name) > 0:
+    #                                 domain_name = domain_name.replace("*.","")
+    #                                 port_obj.target_set.add(domain_name)
 
-                    if masscan_selected == False and len(port_arr) > 0:
+    #                 if masscan_selected == False and len(port_arr) > 0:
 
-                        for port in port_arr:
+    #                     for port in port_arr:
 
-                            port_str = str(port)
+    #                         port_str = str(port)
 
-                            # Get the port object
-                            if port_str in port_target_map.keys():
-                                port_obj = port_target_map[port_str]
-                            else:
-                                port_obj = PortScan(port)
-                                port_target_map[port_str] = port_obj
+    #                         # Get the port object
+    #                         if port_str in port_target_map.keys():
+    #                             port_obj = port_target_map[port_str]
+    #                         else:
+    #                             port_obj = PortScan(port)
+    #                             port_target_map[port_str] = port_obj
 
-                            # Add Target IP
-                            port_obj.target_set.add(target_ip)
-                            port_obj.script_args = script_args
+    #                         # Add Target IP
+    #                         port_obj.target_set.add(target_ip)
+    #                         port_obj.script_args = script_args
 
-                            # Add the domains
-                            for domain in domains:
-                                domain_name = domain.name
-                                if len(domain_name) > 0:
-                                    domain_name = domain_name.replace("*.","")
-                                    port_obj.target_set.add(domain_name)
+    #                         # Add the domains
+    #                         for domain in domains:
+    #                             domain_name = domain.name
+    #                             if len(domain_name) > 0:
+    #                                 domain_name = domain_name.replace("*.","")
+    #                                 port_obj.target_set.add(domain_name)
 
 
-            else:
+    #         else:
 
-                if masscan_selected:
-                    print("[-] Masscan already executed and no ports were detected. May need to set scan interface for masscan")
-                    return
+    #             if masscan_selected:
+    #                 print("[-] Masscan already executed and no ports were detected. May need to set scan interface for masscan")
+    #                 return
                 
-                # If no hosts exist then get the target subnets
-                subnet_set = set()             
-                if target_obj:
-                    subnets = target_obj.subnets
+    #             # If no hosts exist then get the target subnets
+    #             subnet_set = set()             
+    #             if target_obj:
+    #                 subnets = target_obj.subnets
 
-                    for subnet in subnets:
-                        ip = subnet.subnet
-                        subnet_inst = ip + "/" + str(subnet.mask)
-                        subnet_set.add(subnet_inst)
+    #                 for subnet in subnets:
+    #                     ip = subnet.subnet
+    #                     subnet_inst = ip + "/" + str(subnet.mask)
+    #                     subnet_set.add(subnet_inst)
 
-                    subnets = list(subnet_set)
-                    print("[+] Retrieved %d subnets from database" % len(subnets))
-                    for subnet in subnets:
+    #                 subnets = list(subnet_set)
+    #                 print("[+] Retrieved %d subnets from database" % len(subnets))
+    #                 for subnet in subnets:
 
-                        for port in port_arr:
-                            port_str = str(port)
+    #                     for port in port_arr:
+    #                         port_str = str(port)
 
-                            # Get the port object
-                            if port_str in port_target_map.keys():
-                                port_obj = port_target_map[port_str]
-                            else:
-                                port_obj = PortScan(int(port))
-                                port_target_map[port_str] = port_obj
+    #                         # Get the port object
+    #                         if port_str in port_target_map.keys():
+    #                             port_obj = port_target_map[port_str]
+    #                         else:
+    #                             port_obj = PortScan(int(port))
+    #                             port_target_map[port_str] = port_obj
 
-                            # Add the IP
-                            port_obj.target_set.add(subnet)
-                            port_obj.script_args = script_args
+    #                         # Add the IP
+    #                         port_obj.target_set.add(subnet)
+    #                         port_obj.script_args = script_args
 
 
-            # Add any target urls to the scan
-            print("[+] Retrieved %d urls from database" % len(target_url_set))
-            for url in target_url_set:
+    #         # Add any target urls to the scan
+    #         print("[+] Retrieved %d urls from database" % len(target_url_set))
+    #         for url in target_url_set:
 
-                # Add the url to the list for the port
-                try:
-                    u = urlparse(url)
-                except Exception as e:
-                    print(traceback.format_exc())
-                    continue
+    #             # Add the url to the list for the port
+    #             try:
+    #                 u = urlparse(url)
+    #             except Exception as e:
+    #                 print(traceback.format_exc())
+    #                 continue
 
                 
-                # If there is no protocol specified then scan all ports selected
-                if len(u.netloc) == 0:
+    #             # If there is no protocol specified then scan all ports selected
+    #             if len(u.netloc) == 0:
 
-                    # Remove any wildcards
-                    url = url.replace("*.","")
-                    for port in port_arr:
+    #                 # Remove any wildcards
+    #                 url = url.replace("*.","")
+    #                 for port in port_arr:
 
-                        port_str = str(port)
+    #                     port_str = str(port)
 
-                        # Get the port object
-                        if port_str in port_target_map.keys():
-                            port_obj = port_target_map[port_str]
-                        else:
-                            port_obj = PortScan(int(port))
-                            port_target_map[port_str] = port_obj
+    #                     # Get the port object
+    #                     if port_str in port_target_map.keys():
+    #                         port_obj = port_target_map[port_str]
+    #                     else:
+    #                         port_obj = PortScan(int(port))
+    #                         port_target_map[port_str] = port_obj
 
-                        # Add the IP
-                        port_obj.target_set.add(url)
-                        port_obj.script_args = script_args
-                        port_obj.resolve_dns = True
+    #                     # Add the IP
+    #                     port_obj.target_set.add(url)
+    #                     port_obj.script_args = script_args
+    #                     port_obj.resolve_dns = True
 
-                    #Proceed to next url    
-                    continue
+    #                 #Proceed to next url    
+    #                 continue
 
-                secure = 0
-                if u.scheme == 'https':
-                    secure = 1
+    #             secure = 0
+    #             if u.scheme == 'https':
+    #                 secure = 1
 
-                port_str = '80'
-                if u.port is None:
-                    domain = u.netloc
-                    if secure:
-                        port_str = '443'
-                else:
-                    port_str = str(u.port)
-                    domain = u.netloc.split(":")[0]
+    #             port_str = '80'
+    #             if u.port is None:
+    #                 domain = u.netloc
+    #                 if secure:
+    #                     port_str = '443'
+    #             else:
+    #                 port_str = str(u.port)
+    #                 domain = u.netloc.split(":")[0]
 
-                # Get the port object
-                if port_str in port_target_map.keys():
-                    port_obj = port_target_map[port_str]
-                else:
-                    port_obj = PortScan(int(u.port))
-                    port_target_map[port] = port_obj
+    #             # Get the port object
+    #             if port_str in port_target_map.keys():
+    #                 port_obj = port_target_map[port_str]
+    #             else:
+    #                 port_obj = PortScan(int(u.port))
+    #                 port_target_map[port] = port_obj
 
-                # Add the domain
-                port_obj.target_set.add(domain)
-                port_obj.resolve_dns = True
+    #             # Add the domain
+    #             port_obj.target_set.add(domain)
+    #             port_obj.resolve_dns = True
 
 
-        # Create nmap scan array            
-        if len(port_target_map) > 0:
+    #     # Create nmap scan array            
+    #     if len(port_target_map) > 0:
 
-            #print(port_target_map)
-            # Create scan instance of format {'port_list':[], 'ip_list':[], 'script-args':[]}
-            for port in port_target_map.keys():
+    #         #print(port_target_map)
+    #         # Create scan instance of format {'port_list':[], 'ip_list':[], 'script-args':[]}
+    #         for port in port_target_map.keys():
 
-                scan_inst = {}
+    #             scan_inst = {}
 
-                # Get port dict
-                port_obj = port_target_map[port]
+    #             # Get port dict
+    #             port_obj = port_target_map[port]
 
-                # Get targets
-                targets = port_obj.target_set
-                script_args = port_obj.script_args
-                resolve_dns_flag = port_obj.resolve_dns
+    #             # Get targets
+    #             targets = port_obj.target_set
+    #             script_args = port_obj.script_args
+    #             resolve_dns_flag = port_obj.resolve_dns
                 
-                scan_inst['ip_list'] = list(targets)
-                scan_inst['port_list'] = [str(port)]
-                scan_inst['script-args'] = script_args
-                scan_inst['resolve_dns'] = resolve_dns_flag
+    #             scan_inst['ip_list'] = list(targets)
+    #             scan_inst['port_list'] = [str(port)]
+    #             scan_inst['script-args'] = script_args
+    #             scan_inst['resolve_dns'] = resolve_dns_flag
 
-                # Add the scan instance
-                nmap_scan_arr.append(scan_inst)
+    #             # Add the scan instance
+    #             nmap_scan_arr.append(scan_inst)
 
 
-        # Set the output
-        #print(nmap_scan_arr)
-        self.scan_target_dict =  {'scan_list': nmap_scan_arr }
+    #     # Set the output
+    #     #print(nmap_scan_arr)
+    #     self.scan_target_dict =  {'scan_list': nmap_scan_arr }
 
 
     #Convert port bitmap into port list
@@ -701,21 +713,22 @@ class ScheduledScanThread(threading.Thread):
                 self.connection_manager.free_connection_lock(lock_val)
 
         return ret_val
+        
 
-    def mass_scan(self, scan_input_obj):
+    def mass_scan(self, scan_input_obj, tool_id):
 
         ret_val = True
-        tool_name = 'masscan'
-        tool_id = None
+        # tool_name = 'masscan'
+        # tool_id = None
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
         
-        if tool_name in self.recon_manager.tool_map:
-           tool_id = self.recon_manager.tool_map[tool_name]
-        else:
-            raise ToolMissingError(tool_name)
+        # if tool_name in self.recon_manager.tool_map:
+        #    tool_id = self.recon_manager.tool_map[tool_name]
+        # else:
+        #     raise ToolMissingError(tool_name)
 
         # Get scope
         scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_id)
@@ -757,7 +770,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+            # scan_input_obj.current_tool_id = tool_id
 
             # Import masscan results
             ret = scan_pipeline.masscan_import(scan_input_obj)
@@ -766,7 +779,7 @@ class ScheduledScanThread(threading.Thread):
                 ret_val = False
 
             # Reset the tool id
-            scan_input_obj.current_tool_id = None
+            # scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -776,24 +789,29 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
     
 
-    def nmap_scan(self, scan_input_obj, module_scan=False, script_args=None, skip_load_balance_ports=False):
+    def nmap_scan(self, scan_input_obj, tool_id, module_scan=False, skip_load_balance_ports=False):
+    # /*, script_args=None, skip_load_balance_ports=False*/):
 
         ret_val = True
-        tool_name = 'nmap'
+        # tool_name = 'nmap'
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
 
-        if self.connection_manager:
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+        # if self.connection_manager:
+        #     # Connect to extender for import
+        #     lock_val = self.connection_manager.connect_to_extender()
+        #     if not lock_val:
+        #         print("[-] Failed connecting to extender")
+        #         return False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+        #     # Sleep to ensure routing is setup
+        #     time.sleep(3)
+
+        # Get scope
+        scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_id, skip_load_balance_ports)
+        print(scan_input_obj.scan_target_dict)
 
         if module_scan:
             # Set the input args for nmap
@@ -802,7 +820,7 @@ class ScheduledScanThread(threading.Thread):
             # Refresh to get latest scan results (NOT necessary for modules)
             scan_input_obj.refresh()
             # Set the input args for nmap
-            scan_input_obj.set_nmap_scan_arr(script_args, skip_load_balance_ports)
+            #scan_input_obj.set_nmap_scan_arr(script_args, skip_load_balance_ports)
 
         # Create the nmap script array
         try:
@@ -857,10 +875,10 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Set the tool id
-            if tool_name in self.recon_manager.tool_map:
-                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+            # if tool_name in self.recon_manager.tool_map:
+            #     scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
+            # else:
+            #     raise ToolMissingError(tool_name)
 
             # Import nmap results
             ret = scan_pipeline.parse_nmap(scan_input_obj)
@@ -869,7 +887,7 @@ class ScheduledScanThread(threading.Thread):
                 ret_val = False
 
             # Reset the tool id
-            scan_input_obj.current_tool_id = None
+            # scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -1157,77 +1175,6 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-
-    # def http_probe_scan(self, scan_input_obj):
-
-    #     ret_val = True
-
-    #     # Check if scan is cancelled
-    #     if self.is_scan_cancelled(scan_input_obj.scan_id):
-    #         return ret_val
-
-    #     # Refresh scan data (Get updated ports and hosts)
-    #     scan_input_obj.refresh()
-
-    #     if self.connection_manager:
-    #         # Connect to synack target
-    #         con = self.connection_manager.connect_to_target()
-    #         if not con:
-    #             print("[-] Failed connecting to target")
-    #             return False
-
-    #         # Obtain the lock before we start a scan
-    #         lock_val = self.connection_manager.get_connection_lock()
-
-    #         # Sleep to ensure routing is setup
-    #         time.sleep(2)
-
-    #     try:
-    #         # Execute pyshot
-    #         ret = scan_pipeline.http_probe_scan(scan_input_obj)
-    #         if not ret:
-    #             print("[-] HTTP Probe Failed")
-    #             ret_val = False
-
-    #     finally:
-    #         if self.connection_manager:
-    #             # Release the lock after scan
-    #             self.connection_manager.free_connection_lock(lock_val)
-    #         if not ret_val:
-    #             return ret_val
-
-    #     if self.connection_manager:
-    #         # Connect to extender for import
-    #         lock_val = self.connection_manager.connect_to_extender()
-    #         if not lock_val:
-    #             print("[-] Failed connecting to extender")
-    #             return False
-
-    #         # Sleep to ensure routing is setup
-    #         time.sleep(3)
-
-    #     try:
-
-    #         # Set the tool id
-    #         scan_input_obj.current_tool_id = self.recon_manager.tool_map['http-probe']
-
-    #         # Import http probe results
-    #         ret = scan_pipeline.http_probe_import(scan_input_obj)
-    #         if not ret:
-    #             print("[-] Failed")
-    #             ret_val = False
-
-    #         # Reset the tool id
-    #         scan_input_obj.current_tool_id = None
-
-    #     finally:
-    #         if self.connection_manager:
-    #             # Free the lock
-    #             self.connection_manager.free_connection_lock(lock_val)
-
-    #     return ret_val
-
-
     def pyshot_scan(self, scan_input_obj):
 
         ret_val = True
@@ -1405,14 +1352,28 @@ class ScheduledScanThread(threading.Thread):
 
         if sched_scan_obj.masscan_scan_flag == 1:
 
+            tool_name = 'masscan'
+            tool_id = None
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
+
             # Execute masscan
-            ret = self.mass_scan(scan_input_obj)
+            ret = self.mass_scan(scan_input_obj, tool_id)
             if not ret:
+                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 print("[-] Masscan Failed")
                 return False
-            #else:
-                # TODO - Get URLs
-            #    print("[*] No subnets retrieved. Skipping masscan.")
+
+            # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1437,21 +1398,20 @@ class ScheduledScanThread(threading.Thread):
             # Increment step
             scan_input_obj.current_step += 1
 
-        # if sched_scan_obj.http_scan_flag == 1:
-        #     # Execute http probe
-        #     ret = self.http_probe_scan(scan_input_obj)
-        #     if not ret:
-        #         print("[-] HTTP Probe Failed")
-        #         return
-
-        #     # Increment step
-        #     scan_input_obj.current_step += 1
-
         if sched_scan_obj.nmap_scan_flag == 1:
+            
+            tool_name = 'nmap'
+            tool_id = None
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
 
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
 
             #ssl_http_scripts = ["--script", "+ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
-            version_args = ["-sV","-n","--script","+ssl-cert","--script-args","ssl=True"]
+            #version_args = ["-sV","-n","--script","+ssl-cert","--script-args","ssl=True"]
 
             # Execute nmap
             skip_load_balance_ports = self.recon_manager.is_load_balanced()
@@ -1464,10 +1424,17 @@ class ScheduledScanThread(threading.Thread):
             # scan_input_obj.current_step += 1
 
             # Execute nmap
-            ret = self.nmap_scan(scan_input_obj, script_args=version_args, skip_load_balance_ports=skip_load_balance_ports)
+            ret = self.nmap_scan(scan_input_obj, tool_id, skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Service Scan Failed")
+                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 return False
+
+            # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1516,7 +1483,6 @@ class ScheduledScanThread(threading.Thread):
         
         # Cleanup files
         ret = scan_pipeline.scan_cleanup(scan_input_obj.scan_id)
-
 
         return True
 
@@ -1854,10 +1820,14 @@ class ReconManager:
 
         return target_obj
 
-    def get_tool_scope(self, scan_id, tool_id):
+    def get_tool_scope(self, scan_id, tool_id, load_balanced=False):
 
         target_obj = None
-        r = requests.get('%s/api/scan/%s/scope/%s' % (self.manager_url, scan_id, tool_id), headers=self.headers, verify=False)
+        target_url = '%s/api/scan/%s/scope/%s' % (self.manager_url, scan_id, tool_id)
+        if load_balanced:
+            target_url += "?load_balanced=True"
+
+        r = requests.get(target_url, headers=self.headers, verify=False)
         if r.status_code == 404:
             return target_obj
         if r.status_code != 200:
@@ -2083,13 +2053,27 @@ class ReconManager:
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/scan/%s/' % (self.manager_url, scan_id), headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating scan status.")
+
+        return True
+
+    def update_tool_status(self, scan_id, scan_step, tool_id, status, status_message=''):
+
+        # Import the data to the manager
+        status_dict = {'scan_step' : scan_step, 'status': status, 'status_message': status_message}
+        json_data = json.dumps(status_dict).encode()
+        cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
+        packet = cipher_aes.nonce + tag + ciphertext
+        
+        b64_val = base64.b64encode(packet).decode()
+        r = requests.post('%s/api/scan/%s/tool/%s' % (self.manager_url, scan_id, tool_id), headers=self.headers, json={"data": b64_val}, verify=False)
+        if r.status_code != 200:
+            raise RuntimeError("[-] Error updating tool status.")
 
         return True
 
@@ -2100,8 +2084,6 @@ class ReconManager:
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/ports' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
@@ -2117,8 +2099,6 @@ class ReconManager:
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/ports/ext' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
@@ -2134,8 +2114,6 @@ class ReconManager:
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/integration/shodan/import/%s' % (self.manager_url, str(scan_id)), headers=self.headers, json={"data": b64_val}, verify=False)
@@ -2154,8 +2132,6 @@ class ReconManager:
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/screenshots' % self.manager_url, headers=self.headers, json={"data": b64_val},

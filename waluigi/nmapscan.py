@@ -4,19 +4,12 @@ import subprocess
 import shutil
 import netaddr
 import concurrent.futures
-import requests
 import luigi
-import glob
 import traceback
-import hashlib
-import binascii
 
 from luigi.util import inherits
-from datetime import date
 from libnmap.parser import NmapParser
-from waluigi import recon_manager
 from waluigi import scan_utils
-from multiprocessing.pool import ThreadPool
 
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -49,6 +42,7 @@ class NmapScope(luigi.ExternalTask):
         nmap_inputs_f = open(nmap_inputs_file, 'w')
 
         scan_target_dict = scan_input_obj.scan_target_dict
+        print(scan_target_dict)
         nmap_scan_arr = scan_target_dict['scan_list']
         if nmap_scan_arr and len(nmap_scan_arr) > 0:
 

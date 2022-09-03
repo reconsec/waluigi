@@ -42,15 +42,10 @@ class NmapScope(luigi.ExternalTask):
         nmap_inputs_f = open(nmap_inputs_file, 'w')
 
         scan_target_dict = scan_input_obj.scan_target_dict
-        print(scan_target_dict)
-        nmap_scan_arr = scan_target_dict['scan_list']
-        if nmap_scan_arr and len(nmap_scan_arr) > 0:
-
-            # Create dict object with hash
-            nmap_scan = {'nmap_scan_list': nmap_scan_arr}
+        if scan_target_dict:
 
             # Write the output
-            nmap_scan_input = json.dumps(nmap_scan)
+            nmap_scan_input = json.dumps(scan_target_dict)
             nmap_inputs_f.write(nmap_scan_input)
 
             # Add file to output file to be removed at cleanup
@@ -111,16 +106,64 @@ class NmapScan(luigi.Task):
         nmap_scan_data = None
         if len(json_input) > 0:
             nmap_scan_obj = json.loads(json_input)
-            input_nmap_scan_list = nmap_scan_obj['nmap_scan_list']
+            input_nmap_scan_list = nmap_scan_obj['scan_list']
+            nmap_scan_args = nmap_scan_obj['script-args']
+            #print(input_nmap_scan_list)
 
             commands = []
             counter = 0
 
             # Output structure for scan jobs
             nmap_scan_list = []
-            nmap_scan_data = {'nmap_scan_list': nmap_scan_list}
+            host_map = {}
+            nmap_scan_data = {'nmap_input_map': host_map}
+            #host_map = {}
 
-            for nmap_scan_arr in input_nmap_scan_list:
+            # Parse into scan jobs
+            nmap_scan_port_map = {}
+            for port_obj in input_nmap_scan_list:
+                port_str = port_obj['port']
+                port_id = port_obj['port_id']
+                host_id = port_obj['host_id']
+                target_arr = port_obj['target_list']
+                resolve_dns = port_obj['resolve_dns']
+
+                # Create mapping to host id for IP address
+                for target in target_arr:
+                    if target in host_map:
+                        host_entry_map = host_map[target]
+                    else:
+                        host_entry_map = { 'host_id' : host_id, 'port_map' : {} }
+                        host_map[target] = host_entry_map
+
+                    # Add the port to port_id map
+                    port_map = host_entry_map['port_map']
+                    port_map[port_str] = port_id
+
+                # Get dict for port or create it
+                if port_str in nmap_scan_port_map:
+                    port_obj = nmap_scan_port_map[port_str]
+                else:
+                    port_obj = {'port_list': [port_str], 'script-args' : nmap_scan_args}
+                    nmap_scan_port_map[port_str] = port_obj
+
+                # Add the targets
+                if 'ip_set' in port_obj:
+                    ip_set = port_obj['ip_set']
+                else:
+                    ip_set = set()
+                    port_obj['ip_set'] = ip_set
+
+                ip_set.update(target_arr)
+
+                # Set the DNS resolution
+                port_obj['resolve_dns'] = resolve_dns
+
+
+            # Loop through map and create nmap command array
+            for port_str in nmap_scan_port_map:
+
+                nmap_scan_arr = nmap_scan_port_map[port_str]
 
                 nmap_scan_inst = {}
                 script_args = None
@@ -129,7 +172,7 @@ class NmapScan(luigi.Task):
                 ip_list_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, scan_step)
 
                 # Write IPs to a file
-                ip_list = nmap_scan_arr['ip_list']
+                ip_list = nmap_scan_arr['ip_set']
                 if len(ip_list) == 0:
                     continue
 
@@ -174,7 +217,6 @@ class NmapScan(luigi.Task):
                 if selected_interface:
                     int_name = selected_interface.name.strip()
                     command_arr.extend(['-e', int_name])
-
                 
                 # Add base arguments
                 command.extend(command_arr)
@@ -198,13 +240,16 @@ class NmapScan(luigi.Task):
 
                 nmap_scan_list.append(nmap_scan_inst)
 
-                #print(command)
+                print(command)
                 commands.append(command)
                 counter += 1
 
             # Run threaded
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 executor.map(subprocess.run, commands)
+
+        # Add the command list to the output file
+        nmap_scan_data['nmap_scan_list'] = nmap_scan_list
 
         # Write out meta data file
         f = open(meta_file_path, 'w')
@@ -266,6 +311,8 @@ class ParseNmapOutput(luigi.Task):
             if len(json_input) > 0:
                 nmap_scan_obj = json.loads(json_input)
                 nmap_json_arr = nmap_scan_obj['nmap_scan_list']
+                nmap_input_map = nmap_scan_obj['nmap_input_map']
+                #print(nmap_input_map)
 
                 for nmap_scan_entry in nmap_json_arr:
 
@@ -291,20 +338,35 @@ class ParseNmapOutput(luigi.Task):
                     for host in nmap_report.hosts:
 
                         host_ip = host.id
+                        # Get the host entry for the IP address in the results
+                        host_entry = None
+                        host_id = None
+                        port_map = None
+                        if host_ip in nmap_input_map:
+                            host_entry = nmap_input_map[host_ip]
+                            host_id = host_entry['host_id']
+                            port_map = host_entry['port_map']
+
                         ip_addr_int = int(netaddr.IPAddress(host_ip))
 
                         # Loop through ports
                         for port in host.get_open_ports():
 
-                            domain_set = set()     
-
+                            domain_set = set()
 
                             port_str = str(port[0])
-                            port_id = port[1] + "." + port_str
+                            port_service_id = port[1] + "." + port_str
 
-                            # Greate basic port object
+                            # Check if we have a port_id
+                            port_id = None
+                            if port_map and port_str in port_map:
+                                port_id = port_map[port_str]
+
+                            # Create basic port object
                             port_obj = { 'scan_id' : scan_id,
+                                         'host_id' : host_id,
                                          'port' : port_str,
+                                         'port_id' : port_id,
                                          'ipv4_addr' : ip_addr_int }
 
                             # Get hostnames
@@ -316,7 +378,7 @@ class ParseNmapOutput(luigi.Task):
                                     port_obj['hostname'] = hostname_str
 
                             # Get service details if present
-                            svc = host.get_service_byid(port_id)
+                            svc = host.get_service_byid(port_service_id)
                             if svc:
 
                                 if svc.banner and len(svc.banner) > 0:                          
@@ -388,8 +450,13 @@ class ParseNmapOutput(luigi.Task):
                     if len(port_arr) > 0:
                         #print(port_arr)
 
+                        tool_id = scan_input_obj.current_tool_id
+                        scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
+                        #print(scan_results)
+                        ret_val = recon_manager.import_ports_ext(scan_results)
+
                         # Import the ports to the manager
-                        ret_val = recon_manager.import_ports(port_arr)
+                        #ret_val = recon_manager.import_ports(port_arr)
 
         # Write to output file
         f = open(self.output().path, 'w')

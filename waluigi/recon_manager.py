@@ -104,6 +104,7 @@ class ScanInput():
         # Get the selected interface
         self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
 
+
     def set_module_scan_arr(self, tool_name):
 
         
@@ -188,7 +189,7 @@ class ScanInput():
 
                             #print(target)
                             port_str = str(target['port']).strip()
-                            secure = target['secure']
+                            secure = str(target['secure'])
                             port_id = target['port_id']
                             target_ip = target['ipv4_addr']
                             ip_str = str(netaddr.IPAddress(target_ip)).strip()

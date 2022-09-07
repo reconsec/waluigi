@@ -851,7 +851,7 @@ class ScheduledScanThread(threading.Thread):
         try:
 
             # Execute nmap
-            ret = scan_pipeline.nmap_scan(scan_input_obj)
+            ret = scan_pipeline.nmap_scan_func(scan_input_obj)
             if not ret:
                 print("[-] Nmap Failed")
                 ret_val = False
@@ -925,7 +925,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Execute pyshot
-            ret = scan_pipeline.feroxbuster_scan(scan_input_obj)
+            ret = scan_pipeline.feroxbuster_scan_func(scan_input_obj)
             if not ret:
                 print("[-] Feroxbuster Scan Failed")
                 ret_val = False
@@ -1091,7 +1091,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Do DNS lookup and import results
-            ret = scan_pipeline.import_dns(scan_input_obj)
+            ret = scan_pipeline.dns_import(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -1130,7 +1130,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Execute pyshot
-            ret = scan_pipeline.httpx_scan(scan_input_obj)
+            ret = scan_pipeline.httpx_scan_func(scan_input_obj)
             if not ret:
                 print("[-] HTTPX Scan Failed")
                 ret_val = False
@@ -1208,7 +1208,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Execute pyshot
-            ret = scan_pipeline.pyshot_scan(scan_input_obj)
+            ret = scan_pipeline.pyshot_scan_func(scan_input_obj)
             if not ret:
                 print("[-] Pyshot Failed")
                 ret_val = False
@@ -1232,7 +1232,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Import pyshot results
-            ret = scan_pipeline.import_screenshots(scan_input_obj)
+            ret = scan_pipeline.pyshot_import(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
@@ -1287,7 +1287,7 @@ class ScheduledScanThread(threading.Thread):
 
         try:
             # Execute nuclei
-            ret = scan_pipeline.nuclei_scan(scan_input_obj)
+            ret = scan_pipeline.nuclei_scan_func(scan_input_obj)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 ret_val = False
@@ -1483,7 +1483,7 @@ class ScheduledScanThread(threading.Thread):
 
         
         # Cleanup files
-        ret = scan_pipeline.scan_cleanup(scan_input_obj.scan_id)
+        ret = scan_pipeline.scan_cleanup_func(scan_input_obj.scan_id)
 
         return True
 

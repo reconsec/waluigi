@@ -62,7 +62,7 @@ class HttpXScope(luigi.ExternalTask):
         # Get selected ports        
         scan_arr = []
         selected_port_list = scan_input_obj.scheduled_scan.ports
-        print(selected_port_list)
+        #print(selected_port_list)
         if len(selected_port_list) > 0:
 
             for port_entry in selected_port_list:
@@ -87,18 +87,28 @@ class HttpXScope(luigi.ExternalTask):
                 for host in hosts:
 
                     ip_str = str(netaddr.IPAddress(host.ipv4_addr))
-                    for port_obj in host.ports:
 
-                        # Write each port id and IP pair to a file
-                        port_id = str(port_obj.id)
-                        port_str = str(port_obj.port)
+                    port_objs = host.ports
+                    if len(port_objs) > 0:
+                        for port_obj in port_objs:
 
-                        # Ensure we are only scanning ports that have selected
-                        if len(port_arr) > 0 and port_str not in port_arr:
-                            continue
+                            # Write each port id and IP pair to a file
+                            port_id = str(port_obj.id)
+                            port_str = str(port_obj.port)
 
-                        scan_instance = {"port_id" : port_id, "host_id" : host.id, "ipv4_addr" : ip_str, "port" : port_str }
-                        scan_arr.append(scan_instance)
+                            # Ensure we are only scanning ports that have selected
+                            if len(port_arr) > 0 and port_str not in port_arr:
+                                continue
+
+                            scan_instance = {"port_id" : port_id, "host_id" : host.id, "ipv4_addr" : ip_str, "port" : port_str }
+                            scan_arr.append(scan_instance)
+                    else:
+
+                        # Host exist but no ports so pull from selected ports
+                        for port_str in port_arr:
+                            scan_instance = {"port_id" : None, "host_id" : host.id, "ipv4_addr" : ip_str, "port" : port_str }
+                            scan_arr.append(scan_instance)
+
 
 
         # Create output file
@@ -193,7 +203,6 @@ class HttpXScan(luigi.Task):
                 output_file_list.append(scan_output_file_path)
 
                 ip_list = port_ip_dict[port_str]
-
 
                 # Write ips to file
                 scan_input_file_path = output_dir + os.path.sep + "httpx_in_" + port_str
@@ -314,7 +323,7 @@ class ImportHttpXOutput(luigi.Task):
 
                                     # Attempt to get the port id
                                     host = httpx_scan['host']
-                                    port = httpx_scan['port']
+                                    port_str = httpx_scan['port']
 
                                     # Get IP from DNS if host
                                     ip_str = None
@@ -329,13 +338,20 @@ class ImportHttpXOutput(luigi.Task):
 
                                     # If we have an IP
                                     if ip_str:
-                                        host_key = '%s:%s' % (ip_str, port)
+                                        host_key = '%s:%s' % (ip_str, port_str)
 
                                         if host_key in port_to_id_map:
                                             port_id_dict = port_to_id_map[host_key]
+
                                             port_id = port_id_dict['port_id']
+                                            if port_id == 'None':
+                                                port_id = None
+
                                             host_id = port_id_dict['host_id']
-                                            port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan}
+                                            if host_id == 'None':
+                                                host_id = None
+
+                                            port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan, 'ip' : ip_str, 'port' : port_str}
                                             port_arr.append(port_obj)
             
 

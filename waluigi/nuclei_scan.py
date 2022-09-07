@@ -187,6 +187,9 @@ class NucleiScan(luigi.Task):
                             "-json",
                             "-duc",
                             "-ni",
+                            "-pt",  # Limit to HTTP
+                            "-rl", # Rate limit 50
+                            "50",
                             "-l",
                             nuclei_scan_input_file_path,
                             "-o",

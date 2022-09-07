@@ -17,30 +17,6 @@ from multiprocessing.pool import ThreadPool
 from waluigi import recon_manager
 from waluigi import scan_utils
 
-
-def process_wrapper(cmd_args):
-
-    ret_value = True
-    print("[*] Executing '%s'" % str(cmd_args))
-    p = subprocess.Popen(cmd_args, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
-    stdout_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout, True)
-    stderr_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr, True)
-
-    p.stdin.close()
-
-    stdout_reader.start()
-    stderr_reader.start()
-
-    exit_code = p.wait()
-    if exit_code != 0:
-        print("[*] Exit code: %s" % str(exit_code))
-        output_bytes = stderr_reader.get_output()
-        print("[-] Error: %s " % output_bytes.decode())
-        ret_value = False
-
-    return ret_value
-
 def construct_url(target_str, port, secure):
     
     port_str = str(port).strip()
@@ -319,7 +295,7 @@ class FeroxScan(luigi.Task):
                 thread_list = []
 
                 for command_args in command_list:
-                    thread_list.append(pool.apply_async(process_wrapper, (command_args,)))
+                    thread_list.append(pool.apply_async(scan_utils.process_wrapper, (command_args,)))
 
                 # Close the pool
                 pool.close()

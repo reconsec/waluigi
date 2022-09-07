@@ -1,4 +1,5 @@
 import os
+import subprocess
 from threading  import Thread
 from queue import Queue
 from enum import Enum
@@ -45,6 +46,29 @@ class ProcessStreamReader(Thread):
             output_str += line
 
         return output_str
+
+def process_wrapper(cmd_args):
+
+    ret_value = True
+    print("[*] Executing '%s'" % str(cmd_args))
+    p = subprocess.Popen(cmd_args, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    stdout_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDOUT, p.stdout, True)
+    stderr_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDERR, p.stderr, True)
+
+    p.stdin.close()
+
+    stdout_reader.start()
+    stderr_reader.start()
+
+    exit_code = p.wait()
+    if exit_code != 0:
+        print("[*] Exit code: %s" % str(exit_code))
+        output_bytes = stderr_reader.get_output()
+        print("[-] Error: %s " % output_bytes.decode())
+        ret_value = False
+
+    return ret_value
 
 def get_cleanup_file_path(scan_id):
 

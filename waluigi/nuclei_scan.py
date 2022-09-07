@@ -278,25 +278,26 @@ class ImportNucleiOutput(luigi.Task):
                     output_file_path = scan_inst['output_file_path']                    
 
                     # Read nuclei output
-                    f = open(output_file_path)
-                    data = f.read()
-                    f.close()
+                    if os.path.exists(output_file_path):
+                        f = open(output_file_path)
+                        data = f.read()
+                        f.close()
 
-                    scan_arr = []
-                    json_blobs = data.split("\n")
-                    for blob in json_blobs:
-                        blob_trimmed = blob.strip()
-                        if len(blob_trimmed) > 0:
-                            nuclei_scan_result = json.loads(blob)
+                        scan_arr = []
+                        json_blobs = data.split("\n")
+                        for blob in json_blobs:
+                            blob_trimmed = blob.strip()
+                            if len(blob_trimmed) > 0:
+                                nuclei_scan_result = json.loads(blob)
 
-                            if 'host' in nuclei_scan_result:
-                                endpoint = nuclei_scan_result['host']
+                                if 'host' in nuclei_scan_result:
+                                    endpoint = nuclei_scan_result['host']
 
-                                # Get the port object that maps to this url
-                                if endpoint in endpoint_port_obj_map:
-                                    port_obj = endpoint_port_obj_map[endpoint]
-                                    port_obj['nuclei_script_results'] = nuclei_scan_result
-                                    port_arr.append(port_obj)
+                                    # Get the port object that maps to this url
+                                    if endpoint in endpoint_port_obj_map:
+                                        port_obj = endpoint_port_obj_map[endpoint]
+                                        port_obj['nuclei_script_results'] = nuclei_scan_result
+                                        port_arr.append(port_obj)
 
         # Import the nuclei scans
         if len(port_arr) > 0:

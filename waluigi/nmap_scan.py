@@ -108,6 +108,11 @@ class NmapScan(luigi.Task):
             nmap_scan_obj = json.loads(json_input)
             input_nmap_scan_list = nmap_scan_obj['scan_list']
             nmap_scan_args = nmap_scan_obj['script-args']
+
+            module_id = None
+            if 'module_id' in nmap_scan_obj:
+                module_id = nmap_scan_obj['module_id']
+
             #print(input_nmap_scan_list)
 
             commands = []
@@ -235,8 +240,8 @@ class NmapScan(luigi.Task):
                 nmap_scan_inst['output_file'] = nmap_output_xml_file
 
                 # Add module id if it exists
-                if 'module_id' in nmap_scan_arr:
-                    nmap_scan_inst['module_id'] = nmap_scan_arr['module_id']
+                if module_id:
+                    nmap_scan_inst['module_id'] = module_id
 
                 nmap_scan_list.append(nmap_scan_inst)
 
@@ -312,7 +317,7 @@ class ParseNmapOutput(luigi.Task):
                 nmap_scan_obj = json.loads(json_input)
                 nmap_json_arr = nmap_scan_obj['nmap_scan_list']
                 nmap_input_map = nmap_scan_obj['nmap_input_map']
-                #print(nmap_input_map)
+                print(nmap_scan_obj)
 
                 for nmap_scan_entry in nmap_json_arr:
 

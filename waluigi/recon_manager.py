@@ -76,7 +76,6 @@ class ScanInput():
         self.shodan_key = None
         self.hosts = None
         self.scan_target_dict = None
-        self.scan_modules = None
         self.current_step = 0
         self.current_tool_id = None
         self.selected_interface = None
@@ -105,137 +104,138 @@ class ScanInput():
         self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
 
 
-    def set_module_scan_arr(self, tool_name):
+    # def set_module_scan_arr(self, tool_name):
 
         
-        module_list = self.scan_modules
-        if module_list and len(module_list) > 0:            
+    #     module_list = self.scan_modules
+    #     if module_list and len(module_list) > 0:            
 
-            scan_arr = []
+    #         scan_arr = []
 
-            # Get selected ports
-            selected_port_set = set()
-            selected_port_list = self.scheduled_scan.ports
-            if len(selected_port_list) > 0:
+    #         # Get selected ports
+    #         selected_port_set = set()
+    #         selected_port_list = self.scheduled_scan.ports
+    #         if len(selected_port_list) > 0:
 
-                for port_entry in selected_port_list:
-                    target_ip = port_entry.host.ipv4_addr
-                    ip_str = str(netaddr.IPAddress(target_ip)).strip()
-                    port_str = str(port_entry.port).strip()
-                    selected_port_set.add(ip_str + ":" + port_str)
-
-
-            #Loop through targets
-            #print(selected_port_set)
-            modules = list(module_list)
-            #print(modules)
-
-            for module in modules:
-
-                scan_inst = {}
-                port_list = set()
-
-                module_tool = module['tool']
-                if tool_name == module_tool:
-
-                    module_id = module['id']
-                    template_path = module['args']
-                    target_list = module['targets']
+    #             for port_entry in selected_port_list:
+    #                 target_ip = port_entry.host.ipv4_addr
+    #                 ip_str = str(netaddr.IPAddress(target_ip)).strip()
+    #                 port_str = str(port_entry.port).strip()
+    #                 selected_port_set.add(ip_str + ":" + port_str)
 
 
-                    if tool_name == 'nmap':
+    #         #Loop through targets
+    #         #print(selected_port_set)
+    #         modules = list(module_list)
+    #         #print(modules)
 
-                        # Split on space as the script args are stored as strings not arrays
-                        script_args_arr = script_args.split(" ")
+    #         for module in modules:
 
-                        ip_list = set()
-                        #print(target_list)
-                        for target in target_list:
-                            port_str = str(target['port']).strip()
-                            target_ip = target['ipv4_addr']
-                            ip_str = str(netaddr.IPAddress(target_ip)).strip()
-                            if len(ip_str) > 0:
+    #             scan_inst = {}
+    #             port_list = set()
 
-                                # If selected ports has been set, then make sure it's in the list
-                                target_tuple = ip_str + ":" + port_str
-                                if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
-                                    continue
+    #             module_tool = module['tool']
+    #             if tool_name == module_tool:
 
-                                print("[*] Adding tuple: %s" % target_tuple)
-                                ip_list.add(ip_str)
-                                port_list.add(port_str)
-
-                        # Add entry
-                        if len(ip_list) > 0:
-
-                            # Create scan instance
-                            scan_inst['module_id'] = module_id
-                            scan_inst['ip_list'] = list(ip_list)
-                            scan_inst['port_list'] = list(port_list)
-                            scan_inst['script-args'] = script_args_arr
-
-                            # Add the scan instance
-                            scan_arr.append(scan_inst)
+    #                 module_id = module['id']
+    #                 template_path = module['args']
+    #                 target_list = module['targets']
 
 
-                    # Create scan instance for each module
-                    elif tool_name == 'nuclei':
+    #                 if tool_name == 'nmap':
 
-                        total_endpoint_set = set()
-                        endpoint_port_obj_map = {}
-                        target_set = set()
-                        #print(target_list)
-                        for target in target_list:
+    #                     # Split on space as the script args are stored as strings not arrays
+    #                     script_args_arr = module['script-args']
 
-                            #print(target)
-                            port_str = str(target['port']).strip()
-                            secure = str(target['secure'])
-                            port_id = target['port_id']
-                            target_ip = target['ipv4_addr']
-                            ip_str = str(netaddr.IPAddress(target_ip)).strip()
-                            port_obj_instance = {"port_id" : port_id }
+    #                     ip_list = set()
+    #                     #print(target_list)
+    #                     for target in target_list:
+    #                         port_str = str(target['port']).strip()
+    #                         target_ip = target['ipv4_addr']
+    #                         ip_str = str(netaddr.IPAddress(target_ip)).strip()
+    #                         if len(ip_str) > 0:
 
-                            if len(ip_str) > 0:
+    #                             # If selected ports has been set, then make sure it's in the list
+    #                             target_tuple = ip_str + ":" + port_str
+    #                             if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
+    #                                 continue
 
-                                # If selected ports has been set, then make sure it's in the list
-                                target_tuple = ip_str + ":" + port_str
-                                if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
-                                    continue
+    #                             print("[*] Adding tuple: %s" % target_tuple)
+    #                             ip_list.add(ip_str)
+    #                             port_list.add(port_str)
 
-                                print("[*] Adding tuple: %s" % target_tuple)
+    #                     # Add entry
+    #                     if len(ip_list) > 0:
 
-                                # Add target as IP and port
-                                target_set.add(target_tuple)
+    #                         # Create scan instance
+    #                         scan_inst['module_id'] = module_id
+    #                         scan_inst['ip_list'] = list(ip_list)
+    #                         scan_inst['port_list'] = list(port_list)
+    #                         scan_inst['script-args'] = script_args_arr
 
-                                # Add target with http(s)
-                                # Setup args array
-                                endpoint = 'http'
-                                if secure == '1':
-                                    endpoint += "s"
-
-                                endpoint += "://" + target_tuple
-                                target_set.add(endpoint)
-
-                                if endpoint not in total_endpoint_set:
-                                    endpoint_port_obj_map[endpoint] = port_obj_instance
-                                    total_endpoint_set.add(endpoint)
+    #                         # Add the scan instance
+    #                         scan_arr.append(scan_inst)
 
 
-                        # Add entry
-                        if len(target_set) > 0:
+    #                 # Create scan instance for each module
+    #                 elif tool_name == 'nuclei':
 
-                            # Create scan instance
-                            scan_inst['module_id'] = module_id
-                            scan_inst['scan_endpoint_list'] = list(target_set)
-                            scan_inst['template_path_list'] = [template_path]
-                            scan_inst['endpoint_port_obj_map'] = endpoint_port_obj_map
+    #                     total_endpoint_set = set()
+    #                     endpoint_port_obj_map = {}
+    #                     target_set = set()
+    #                     #print(target_list)
+    #                     for target in target_list:
 
-                            # Add the scan instance
-                            scan_arr.append(scan_inst)
+    #                         #print(target)
+    #                         port_str = str(target['port']).strip()
+    #                         secure = str(target['secure'])
+    #                         port_id = target['port_id']
+    #                         target_ip = target['ipv4_addr']
+    #                         ip_str = str(netaddr.IPAddress(target_ip)).strip()
+    #                         port_obj_instance = {"port_id" : port_id }
+
+    #                         if len(ip_str) > 0:
+
+    #                             # If selected ports has been set, then make sure it's in the list
+    #                             target_tuple = ip_str + ":" + port_str
+    #                             if len(selected_port_set) > 0 and target_tuple not in selected_port_set:
+    #                                 continue
+
+    #                             print("[*] Adding tuple: %s" % target_tuple)
+
+    #                             # Add target as IP and port
+    #                             target_set.add(target_tuple)
+
+    #                             # Add target with http(s)
+    #                             # Setup args array
+    #                             endpoint = 'http'
+    #                             if secure == '1':
+    #                                 endpoint += "s"
+
+    #                             endpoint += "://" + target_tuple
+    #                             target_set.add(endpoint)
+
+    #                             if endpoint not in total_endpoint_set:
+    #                                 endpoint_port_obj_map[endpoint] = port_obj_instance
+    #                                 total_endpoint_set.add(endpoint)
 
 
-            # Set scan data
-            self.scan_target_dict =  {'scan_list': scan_arr }
+    #                     # Add entry
+    #                     if len(target_set) > 0:
+
+    #                         # Create scan instance
+    #                         scan_inst['module_id'] = module_id
+    #                         scan_inst['scan_endpoint_list'] = list(target_set)
+    #                         scan_inst['template_path_list'] = [template_path]
+    #                         scan_inst['endpoint_port_obj_map'] = endpoint_port_obj_map
+
+    #                         # Add the scan instance
+    #                         scan_arr.append(scan_inst)
+
+
+    #         # Set scan data
+    #         print(scan_arr)
+    #         self.scan_target_dict =  {'scan_list': scan_arr }
 
 
     def set_nuclei_scan_arr(self, template_path_list):
@@ -656,8 +656,8 @@ class ScanInput():
         # Refresh hosts,ports,components
         self.hosts = self.scan_thread.recon_manager.get_hosts(self.scan_id)
 
-        if modules:
-            self.scan_modules = self.scan_thread.recon_manager.get_modules(self.scan_id)
+        # if modules:
+        #     self.scan_modules = self.scan_thread.recon_manager.get_modules(self.scan_id)
 
         return
 
@@ -716,23 +716,16 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
         
 
-    def mass_scan(self, scan_input_obj, tool_id):
+    def mass_scan(self, scan_input_obj):
 
         ret_val = True
-        # tool_name = 'masscan'
-        # tool_id = None
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
         
-        # if tool_name in self.recon_manager.tool_map:
-        #    tool_id = self.recon_manager.tool_map[tool_name]
-        # else:
-        #     raise ToolMissingError(tool_name)
-
         # Get scope
-        scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_id)
+        scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
 
         # Connect to synack target
         if self.connection_manager:
@@ -770,17 +763,11 @@ class ScheduledScanThread(threading.Thread):
 
         try:
 
-            # Set the tool id
-            # scan_input_obj.current_tool_id = tool_id
-
             # Import masscan results
             ret = scan_pipeline.masscan_import(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
-
-            # Reset the tool id
-            # scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -790,11 +777,10 @@ class ScheduledScanThread(threading.Thread):
         return ret_val
     
 
-    def nmap_scan(self, scan_input_obj, tool_id, module_scan=False, skip_load_balance_ports=False):
+    def nmap_scan(self, scan_input_obj, module_scan=False, skip_load_balance_ports=False):
     # /*, script_args=None, skip_load_balance_ports=False*/):
 
         ret_val = True
-        # tool_name = 'nmap'
 
         # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
@@ -810,19 +796,16 @@ class ScheduledScanThread(threading.Thread):
         #     # Sleep to ensure routing is setup
         #     time.sleep(3)
 
-        # Get scope
-        scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_id, skip_load_balance_ports)
-        print(scan_input_obj.scan_target_dict)
 
-        if module_scan:
-            # Set the input args for nmap
-            scan_input_obj.set_module_scan_arr('nmap')
-        else:
-            # Refresh to get latest scan results (NOT necessary for modules)
-            scan_input_obj.refresh()
-            # Set the input args for nmap
-            #scan_input_obj.set_nmap_scan_arr(script_args, skip_load_balance_ports)
 
+        if module_scan == False:
+        #     # Set the input args for nmap
+        #     scan_input_obj.set_module_scan_arr('nmap')
+        # else:
+            # Get scope
+            scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id, skip_load_balance_ports)
+            #print(scan_input_obj.scan_target_dict)
+            
         # Create the nmap script array
         try:
 
@@ -875,20 +858,11 @@ class ScheduledScanThread(threading.Thread):
 
         try:
 
-            # Set the tool id
-            # if tool_name in self.recon_manager.tool_map:
-            #     scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
-            # else:
-            #     raise ToolMissingError(tool_name)
-
             # Import nmap results
             ret = scan_pipeline.parse_nmap(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
-
-            # Reset the tool id
-            # scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -901,7 +875,6 @@ class ScheduledScanThread(threading.Thread):
     def feroxbuster_scan(self, scan_input_obj ):
 
         ret_val = True
-        tool_name = 'feroxbuster'
 
        # Check if scan is cancelled
         if self.is_scan_cancelled(scan_input_obj.scan_id):
@@ -949,20 +922,11 @@ class ScheduledScanThread(threading.Thread):
 
         try:
 
-            # Set the tool id
-            if tool_name in self.recon_manager.tool_map:
-                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
-
             # Import http probe results
             ret = scan_pipeline.feroxbuster_import(scan_input_obj)
             if not ret:
                 print("[-] Feroxbuster Scan Import Failed")
                 ret_val = False
-
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -980,56 +944,90 @@ class ScheduledScanThread(threading.Thread):
         if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
 
-        if self.connection_manager:
+        # if self.connection_manager:
 
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+        #     # Connect to extender for import
+        #     lock_val = self.connection_manager.connect_to_extender()
+        #     if not lock_val:
+        #         print("[-] Failed connecting to extender")
+        #         return False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+        #     # Sleep to ensure routing is setup
+        #     time.sleep(3)
 
         # Get modules for this scan
-        try:
+        # try:
 
-            # Refresh scan data (Get updated ports and hosts)
-            scan_input_obj.refresh(modules=True)
-            modules = scan_input_obj.scan_modules
+        #     # Refresh scan data (Get updated ports and hosts)
+        #    # scan_input_obj.refresh(modules=True)
+        #     modules = scan_input_obj.scan_modules
 
-        finally:
-            # Release lock
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
+        # finally:
+        #     # Release lock
+        #     if self.connection_manager:
+        #         # Free the lock
+        #         self.connection_manager.free_connection_lock(lock_val)
 
 
-        tool_set = set()
-        for module in modules:
-            tool_name = module['tool']
-            tool_set.add(tool_name)
+        # tool_set = set()
+        # for module in modules:
+        #     tool_name = module['tool']
+        #     tool_set.add(tool_name)
+
+        # Get scope
+        module_tool_id = scan_input_obj.current_tool_id
+        module_map  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, module_tool_id)
 
         # Iterate over tool list
-        for tool_name in tool_set:
+        if module_map:
 
-            if tool_name == 'nmap':
+            for module_scan_inst in module_map:
 
-                # Execute nmap
-                ret = self.nmap_scan(scan_input_obj, module_scan=True)
-                if not ret:
-                    print("[-] Nmap Module Scan Failed")
-                    return
+                # Set the input
+                scan_input_obj.scan_target_dict = module_scan_inst['scan_input']
+                if 'module_id' in module_scan_inst:
+                    scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
 
-            elif tool_name == 'nuclei':
+                tool_name = module_scan_inst['tool_name']
+                if tool_name == 'nmap':
 
-                # Execute nuclei
-                ret = self.nuclei_scan(scan_input_obj, module_scan=True)
-                if not ret:
-                    print("[-] Nmap Module Scan Failed")
-                    return
+                    # Set the nmap tool id so import works properly
+                    if tool_name in self.recon_manager.tool_map:
+                        tool_id = self.recon_manager.tool_map[tool_name]
+                    else:
+                        raise ToolMissingError(tool_name)
 
-        
+                    # Set the tool id
+                    scan_input_obj.current_tool_id = tool_id
+
+                    # Execute nmap
+                    ret = self.nmap_scan(scan_input_obj, module_scan=True)
+                    if not ret:
+                        print("[-] Nmap Module Scan Failed")
+                        ret_val = False
+
+                    # Set the tool id
+                    scan_input_obj.current_tool_id = module_tool_id
+
+                elif tool_name == 'nuclei':
+
+                    # Set the nuclei tool id so import works properly
+                    if tool_name in self.recon_manager.tool_map:
+                        tool_id = self.recon_manager.tool_map[tool_name]
+                    else:
+                        raise ToolMissingError(tool_name)
+
+                    # Set the tool id
+                    scan_input_obj.current_tool_id = tool_id
+
+                    # Execute nuclei
+                    ret = self.nuclei_scan(scan_input_obj, module_scan=True)
+                    if not ret:
+                        print("[-] Nmap Module Scan Failed")
+                        ret_val = False
+
+                    # Set the tool id
+                    scan_input_obj.current_tool_id = module_tool_id        
 
         return ret_val
 
@@ -1154,11 +1152,11 @@ class ScheduledScanThread(threading.Thread):
 
         try:
 
-            # Set the tool id
-            if tool_name in self.recon_manager.tool_map:
-                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+            # # Set the tool id
+            # if tool_name in self.recon_manager.tool_map:
+            #     scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
+            # else:
+            #     raise ToolMissingError(tool_name)
 
             # Import http probe results
             ret = scan_pipeline.httpx_import(scan_input_obj)
@@ -1166,8 +1164,8 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] HTTPX Scan Import Failed")
                 ret_val = False
 
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
+            # # Reset the tool id
+            # scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -1310,20 +1308,12 @@ class ScheduledScanThread(threading.Thread):
             time.sleep(3)
 
         try:
-
-            # Set the tool id
-            if tool_name in self.recon_manager.tool_map:
-                scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)            
-
+     
             # Import nuclei results
             ret = scan_pipeline.nuclei_import(scan_input_obj)
             if not ret:
                 print("[-] Failed")
                 ret_val = False
-
-            scan_input_obj.current_tool_id = None
 
         finally:
             if self.connection_manager:
@@ -1339,14 +1329,32 @@ class ScheduledScanThread(threading.Thread):
 
         # Set connection target in connection manager to this target 
         target_id = scan_input_obj.scheduled_scan.target_id
+        tool_id = None
         self.recon_manager.set_current_target(self.connection_manager, target_id)
 
         if sched_scan_obj.dns_scan_flag == 1:
+
+            tool_name = 'subfinder'
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
+            
             # Execute crobat
             ret = self.dns_lookup(scan_input_obj)
             if not ret:
                 print("[-] DNS Resolution Failed")
+                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 return False
+
+            # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1354,7 +1362,6 @@ class ScheduledScanThread(threading.Thread):
         if sched_scan_obj.masscan_scan_flag == 1:
 
             tool_name = 'masscan'
-            tool_id = None
             if tool_name in self.recon_manager.tool_map:
                 tool_id = self.recon_manager.tool_map[tool_name]
             else:
@@ -1364,7 +1371,7 @@ class ScheduledScanThread(threading.Thread):
             scan_input_obj.current_tool_id = tool_id
 
             # Execute masscan
-            ret = self.mass_scan(scan_input_obj, tool_id)
+            ret = self.mass_scan(scan_input_obj)
             if not ret:
                 self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 print("[-] Masscan Failed")
@@ -1390,11 +1397,28 @@ class ScheduledScanThread(threading.Thread):
             scan_input_obj.current_step += 1
 
         if sched_scan_obj.http_scan_flag == 1:
+
+            tool_name = 'httpx'
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
+
             # Execute http probe
             ret = self.httpx_scan(scan_input_obj)
             if not ret:
+                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 print("[-] HTTPX Scan Failed")
                 return False
+
+            # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1402,7 +1426,6 @@ class ScheduledScanThread(threading.Thread):
         if sched_scan_obj.nmap_scan_flag == 1:
             
             tool_name = 'nmap'
-            tool_id = None
             if tool_name in self.recon_manager.tool_map:
                 tool_id = self.recon_manager.tool_map[tool_name]
             else:
@@ -1425,7 +1448,7 @@ class ScheduledScanThread(threading.Thread):
             # scan_input_obj.current_step += 1
 
             # Execute nmap
-            ret = self.nmap_scan(scan_input_obj, tool_id, skip_load_balance_ports)
+            ret = self.nmap_scan(scan_input_obj, skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Service Scan Failed")
                 self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
@@ -1441,42 +1464,109 @@ class ScheduledScanThread(threading.Thread):
             scan_input_obj.current_step += 1
 
         if sched_scan_obj.pyshot_scan_flag == 1:
+
+            tool_name = 'pyshot'
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
+
             # Execute pyshot
             ret = self.pyshot_scan(scan_input_obj)
             if not ret:
                 print("[-] Pyshot Failed")
+                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 return False
+
+            # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
 
         if sched_scan_obj.nuclei_scan_flag == 1:
+
+            tool_name = 'nuclei'
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
+
             # Execute nuclei
             fingerprint_template_path = ["technologies/fingerprinthub-web-fingerprints.yaml"]
             ret = self.nuclei_scan(scan_input_obj, template_path_list=fingerprint_template_path)
             if not ret:
                 print("[-] Nuclei Scan Failed")
+                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 return False
+
+             # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
 
         if sched_scan_obj.module_scan_flag == 1:
+
+            tool_name = 'module'
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
+
             # Execute module scan
             ret = self.module_scan(scan_input_obj)
             if not ret:
                 print("[-] Module Scan Failed")
+                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
                 return False
+
+            # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
 
         if sched_scan_obj.dirsearch_scan_flag == 1:
+
+            tool_name = 'feroxbuster'
+            if tool_name in self.recon_manager.tool_map:
+                tool_id = self.recon_manager.tool_map[tool_name]
+            else:
+                raise ToolMissingError(tool_name)
+
+            # Set the tool id
+            scan_input_obj.current_tool_id = tool_id
+
             # Execute dirsearch
             ret = self.feroxbuster_scan(scan_input_obj)
             if not ret:
-                print("[-] Dirsearch Scan Failed")
+                print("[-] FeroxBuster Scan Failed")
                 return False
+
+            # Update scan status
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+            # Reset the tool id
+            scan_input_obj.current_tool_id = None
 
             # Increment step
             scan_input_obj.current_step += 1
@@ -1932,22 +2022,22 @@ class ReconManager:
 
         return sched_scan_arr
 
-    def get_modules(self, scan_id):
+    # def get_modules(self, scan_id):
 
-        module_arr = []
-        r = requests.get('%s/api/scan/%s/modules' % (self.manager_url,scan_id), headers=self.headers, verify=False)
-        if r.status_code == 404:
-            return module_arr
-        elif r.status_code != 200:
-            print("[-] Unknown Error")
-            return module_arr
+    #     module_arr = []
+    #     r = requests.get('%s/api/scan/%s/modules' % (self.manager_url,scan_id), headers=self.headers, verify=False)
+    #     if r.status_code == 404:
+    #         return module_arr
+    #     elif r.status_code != 200:
+    #         print("[-] Unknown Error")
+    #         return module_arr
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        if data:
-            module_arr = json.loads(data)
+    #     content = r.json()
+    #     data = self._decrypt_json(content)
+    #     if data:
+    #         module_arr = json.loads(data)
 
-        return module_arr
+    #     return module_arr
 
     def get_scheduled_scan(self, sched_scan_id):
 

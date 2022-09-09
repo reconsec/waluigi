@@ -238,137 +238,137 @@ class ScanInput():
     #         self.scan_target_dict =  {'scan_list': scan_arr }
 
 
-    def set_nuclei_scan_arr(self, template_path_list):
+    # def set_nuclei_scan_arr(self, template_path_list):
 
-        total_endpoint_set = set()
-        endpoint_port_obj_map = {}
+    #     total_endpoint_set = set()
+    #     endpoint_port_obj_map = {}
 
-        selected_port_list = self.scheduled_scan.ports
-        if len(selected_port_list) > 0:
+    #     selected_port_list = self.scheduled_scan.ports
+    #     if len(selected_port_list) > 0:
 
-            for port_entry in selected_port_list:
+    #         for port_entry in selected_port_list:
 
-                #Add IP
-                ip_addr = port_entry.host.ipv4_addr
-                ip_str = str(netaddr.IPAddress(ip_addr))
+    #             #Add IP
+    #             ip_addr = port_entry.host.ipv4_addr
+    #             ip_str = str(netaddr.IPAddress(ip_addr))
 
 
-                port_str = str(port_entry.port)
-                #Skip port 5985 - WinRS
-                http_found = False
-                ws_man_found = False
-                if port_entry.components:
-                    for component in port_entry.components:
-                        if 'http' in component.component_name:
-                            http_found = True
-                        elif 'wsman' in component.component_name:
-                            ws_man_found = True
+    #             port_str = str(port_entry.port)
+    #             #Skip port 5985 - WinRS
+    #             http_found = False
+    #             ws_man_found = False
+    #             if port_entry.components:
+    #                 for component in port_entry.components:
+    #                     if 'http' in component.component_name:
+    #                         http_found = True
+    #                     elif 'wsman' in component.component_name:
+    #                         ws_man_found = True
 
-                # Skip if not already detected as http based
-                if http_found == False or ws_man_found==True:
-                    continue
+    #             # Skip if not already detected as http based
+    #             if http_found == False or ws_man_found==True:
+    #                 continue
 
-                # Setup inputs
-                prefix = ''
-                if http_found:
-                    prefix = 'http://'
+    #             # Setup inputs
+    #             prefix = ''
+    #             if http_found:
+    #                 prefix = 'http://'
 
-                if port_entry.secure== 1:
-                    prefix = 'https://'
+    #             if port_entry.secure== 1:
+    #                 prefix = 'https://'
 
-                #endpoint_set = set()
-                port_id = str(port_entry.id)
-                port_obj_instance = {"port_id" : port_entry.id}
+    #             #endpoint_set = set()
+    #             port_id = str(port_entry.id)
+    #             port_obj_instance = {"port_id" : port_entry.id}
 
-                endpoint = prefix + ip_str + ":" + port_str
-                if endpoint not in total_endpoint_set:
+    #             endpoint = prefix + ip_str + ":" + port_str
+    #             if endpoint not in total_endpoint_set:
 
-                    #endpoint_set.add(endpoint)
-                    endpoint_port_obj_map[endpoint] = port_obj_instance
-                    total_endpoint_set.add(endpoint)
+    #                 #endpoint_set.add(endpoint)
+    #                 endpoint_port_obj_map[endpoint] = port_obj_instance
+    #                 total_endpoint_set.add(endpoint)
 
-                # Add endpoint per domain
-                for domain in port_entry.host.domains[:10]:
+    #             # Add endpoint per domain
+    #             for domain in port_entry.host.domains[:10]:
 
-                    # Remove any wildcards
-                    domain_str = domain.lstrip("*.")
+    #                 # Remove any wildcards
+    #                 domain_str = domain.lstrip("*.")
 
-                    endpoint = prefix + domain_str + ":" + port_str
-                    # print("[*] Endpoint: %s" % endpoint)
-                    if endpoint not in total_endpoint_set:
-                        #endpoint_set.add(endpoint)
+    #                 endpoint = prefix + domain_str + ":" + port_str
+    #                 # print("[*] Endpoint: %s" % endpoint)
+    #                 if endpoint not in total_endpoint_set:
+    #                     #endpoint_set.add(endpoint)
 
-                        endpoint_port_obj_map[endpoint] = port_obj_instance
-                        total_endpoint_set.add(endpoint)
+    #                     endpoint_port_obj_map[endpoint] = port_obj_instance
+    #                     total_endpoint_set.add(endpoint)
 
-        else:
+    #     else:
 
-            # Get hosts
-            hosts = self.hosts
-            print("[+] Retrieved %d hosts from database" % len(hosts))
+    #         # Get hosts
+    #         hosts = self.hosts
+    #         print("[+] Retrieved %d hosts from database" % len(hosts))
 
-            if hosts:
+    #         if hosts:
 
-                for host in hosts:
+    #             for host in hosts:
 
-                    ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
-                    for port_obj in host.ports:
+    #                 ip_addr = str(netaddr.IPAddress(host.ipv4_addr))
+    #                 for port_obj in host.ports:
 
-                        port_str = str(port_obj.port)
-                        #Skip port 5985 - WinRS
-                        http_found = False
-                        ws_man_found = False
-                        if port_obj.components:
-                            for component in port_obj.components:
-                                if 'http' in component.component_name:
-                                    http_found = True
-                                elif 'wsman' in component.component_name:
-                                    ws_man_found = True
+    #                     port_str = str(port_obj.port)
+    #                     #Skip port 5985 - WinRS
+    #                     http_found = False
+    #                     ws_man_found = False
+    #                     if port_obj.components:
+    #                         for component in port_obj.components:
+    #                             if 'http' in component.component_name:
+    #                                 http_found = True
+    #                             elif 'wsman' in component.component_name:
+    #                                 ws_man_found = True
 
-                        # Skip if not already detected as http based
-                        if http_found == False or ws_man_found==True:
-                            continue
+    #                     # Skip if not already detected as http based
+    #                     if http_found == False or ws_man_found==True:
+    #                         continue
 
-                        # Setup inputs
-                        prefix = ''
-                        if http_found:
-                            prefix = 'http://'
+    #                     # Setup inputs
+    #                     prefix = ''
+    #                     if http_found:
+    #                         prefix = 'http://'
 
-                        if port_obj.secure == 1:
-                            prefix = 'https://'
+    #                     if port_obj.secure == 1:
+    #                         prefix = 'https://'
 
-                        #endpoint_set = set()
-                        port_id = str(port_obj.id)
+    #                     #endpoint_set = set()
+    #                     port_id = str(port_obj.id)
 
-                        endpoint = prefix + ip_addr + ":" + port_str
-                        port_obj_instance = {"port_id" : port_obj.id }
+    #                     endpoint = prefix + ip_addr + ":" + port_str
+    #                     port_obj_instance = {"port_id" : port_obj.id }
                         
-                        # print("[*] Endpoint: %s" % endpoint)
+    #                     # print("[*] Endpoint: %s" % endpoint)
 
-                        if endpoint not in total_endpoint_set:
-                            #endpoint_set.add(endpoint)
-                            endpoint_port_obj_map[endpoint] = port_obj_instance
-                            total_endpoint_set.add(endpoint)
+    #                     if endpoint not in total_endpoint_set:
+    #                         #endpoint_set.add(endpoint)
+    #                         endpoint_port_obj_map[endpoint] = port_obj_instance
+    #                         total_endpoint_set.add(endpoint)
 
-                        # Add endpoint per domain
-                        for domain in host.domains[:10]:
+    #                     # Add endpoint per domain
+    #                     for domain in host.domains[:10]:
 
-                            # Remove any wildcards
-                            domain_str = domain.name.lstrip("*.")
+    #                         # Remove any wildcards
+    #                         domain_str = domain.name.lstrip("*.")
 
-                            endpoint = prefix + domain_str + ":" + port_str
-                            # print("[*] Endpoint: %s" % endpoint)
-                            if endpoint not in total_endpoint_set:
-                                #endpoint_set.add(endpoint)
-                                endpoint_port_obj_map[endpoint] = port_obj_instance
-                                total_endpoint_set.add(endpoint)
+    #                         endpoint = prefix + domain_str + ":" + port_str
+    #                         # print("[*] Endpoint: %s" % endpoint)
+    #                         if endpoint not in total_endpoint_set:
+    #                             #endpoint_set.add(endpoint)
+    #                             endpoint_port_obj_map[endpoint] = port_obj_instance
+    #                             total_endpoint_set.add(endpoint)
 
 
-        print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
+    #     print("[*] Total endpoints for scanning: %d" % len(total_endpoint_set))
 
-        # Create output file
-        scan_obj =  {'endpoint_port_obj_map': endpoint_port_obj_map, 'scan_endpoint_list' : list(total_endpoint_set), 'template_path_list' : template_path_list }
-        self.scan_target_dict =  {'scan_list': [scan_obj] }
+    #     # Create output file
+    #     scan_obj =  {'endpoint_port_obj_map': endpoint_port_obj_map, 'scan_endpoint_list' : list(total_endpoint_set), 'template_path_list' : template_path_list }
+    #     self.scan_target_dict =  {'scan_list': [scan_obj] }
     
 
     # def set_nmap_scan_arr(self, script_args, skip_load_balance_ports):
@@ -1242,7 +1242,7 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def nuclei_scan(self, scan_input_obj, module_scan=False, template_path_list=None ):
+    def nuclei_scan(self, scan_input_obj, module_scan=False ):
 
         ret_val = True
         tool_name = 'nuclei'
@@ -1251,16 +1251,21 @@ class ScheduledScanThread(threading.Thread):
         if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
 
-        if module_scan:
-            print("[*] Nuclei module scan")
-            # Set the input args for nmap
-            scan_input_obj.set_module_scan_arr('nuclei')
-        else:
-            print("[*] Nuclei template scan")
+        # Get the scope
+        if module_scan == False:
+            scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
+ 
+
+        # if module_scan:
+        #     print("[*] Nuclei module scan")
+        #     # Set the input args for nmap
+        #     scan_input_obj.set_module_scan_arr('nuclei')
+        # else:
+           # print("[*] Nuclei template scan")
             # Refresh to get latest scan results (NOT necessary for modules)
-            scan_input_obj.refresh()
+            #scan_input_obj.refresh()
             # Set the input args for nmap
-            scan_input_obj.set_nuclei_scan_arr(template_path_list)
+            #scan_input_obj.set_nuclei_scan_arr(template_path_list)
 
 
         # Get scope for nuclei scan
@@ -1502,8 +1507,8 @@ class ScheduledScanThread(threading.Thread):
             scan_input_obj.current_tool_id = tool_id
 
             # Execute nuclei
-            fingerprint_template_path = ["technologies/fingerprinthub-web-fingerprints.yaml"]
-            ret = self.nuclei_scan(scan_input_obj, template_path_list=fingerprint_template_path)
+            #fingerprint_template_path = ["technologies/fingerprinthub-web-fingerprints.yaml"]
+            ret = self.nuclei_scan(scan_input_obj)
             if not ret:
                 print("[-] Nuclei Scan Failed")
                 self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)

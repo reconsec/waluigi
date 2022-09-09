@@ -47,11 +47,11 @@ class ProcessStreamReader(Thread):
 
         return output_str
 
-def process_wrapper(cmd_args):
+def process_wrapper(cmd_args, use_shell=False, my_env=None):
 
     ret_value = True
     print("[*] Executing '%s'" % str(cmd_args))
-    p = subprocess.Popen(cmd_args, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(cmd_args, shell=use_shell, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=my_env)
     
     stdout_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDOUT, p.stdout, True)
     stderr_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDERR, p.stderr, True)

@@ -1,9 +1,6 @@
 import json
 import os
-import subprocess
-import netaddr
 import luigi
-import glob
 import traceback
 import errno
 
@@ -13,28 +10,6 @@ from waluigi import recon_manager
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
 from waluigi import scan_utils
-
-def nuclei_process_wrapper(cmd_args, use_shell, my_env):
-
-    ret_msg = ""
-    print(cmd_args)
-    p = subprocess.Popen(cmd_args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=my_env)
-     
-    stdout_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
-    stderr_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr)
-
-    stdout_reader.start()
-    stderr_reader.start()
-
-    exit_code = p.wait()
-    if exit_code != 0:
-        print("[*] Exit code: %s" % str(exit_code))
-        output_bytes = stderr_reader.get_output()
-        print("[-] Error: %s " % output_bytes.decode())
-        ret_value = False
-
-    return ret_msg
-
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
@@ -61,11 +36,10 @@ class NucleiScope(luigi.ExternalTask):
             return luigi.LocalTarget(nuclei_inputs_file)
 
         scan_target_dict = scan_input_obj.scan_target_dict
-        scan_list = scan_target_dict['scan_list']
 
         # Create output file
         nuclei_inputs_f = open(nuclei_inputs_file, 'w')
-        if len(scan_list) > 0:
+        if scan_target_dict:
             # Dump array to JSON
             nuclei_scan_input = json.dumps(scan_target_dict)
             # Write to output file
@@ -82,8 +56,6 @@ class NucleiScope(luigi.ExternalTask):
 
 @inherits(NucleiScope)
 class NucleiScan(luigi.Task):
-
-    #template_path = luigi.Parameter()
 
     def requires(self):
         # Requires the target scope
@@ -132,7 +104,6 @@ class NucleiScan(luigi.Task):
         nuclei_scan_data = f.read()
         f.close()
 
-        nuclei_output_file_list = []
         nuclei_scan_obj = None
         if len(nuclei_scan_data) > 0:
 
@@ -143,27 +114,31 @@ class NucleiScan(luigi.Task):
 
             if nuclei_scan_obj:
 
+                print(nuclei_scan_obj)
+
                 pool = ThreadPool(processes=10)
                 thread_list = []
                 counter = 0
                 scan_list = nuclei_scan_obj['scan_list']
                 for scan_inst in scan_list:
-
+                    print(scan_inst)
                     scan_endpoint_list = scan_inst['scan_endpoint_list']
                     template_path_list = scan_inst['template_path_list']
 
                     template_arr = []
                     for template_path in template_path_list:
-                        template_path = template_path.replace("/", os.path.sep)
 
-                        nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
-                        full_template_path = nuclei_template_path + os.path.sep + template_path
-                        if os.path.exists(full_template_path) == False:
-                            print("[-] Nuclei template path '%s' does not exist" % full_template_path)
-                            raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), full_template_path)
+                        if template_path:
+                            template_path = template_path.replace("/", os.path.sep)
 
-                        template_arr.append("-t")
-                        template_arr.append(full_template_path)
+                            nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
+                            full_template_path = nuclei_template_path + os.path.sep + template_path
+                            if os.path.exists(full_template_path) == False:
+                                print("[-] Nuclei template path '%s' does not exist" % full_template_path)
+                                raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), full_template_path)
+
+                            template_arr.append("-t")
+                            template_arr.append(full_template_path)
 
 
                     # Write to nuclei input file if endpoints exist
@@ -207,7 +182,7 @@ class NucleiScan(luigi.Task):
                         scan_inst['output_file_path'] = nuclei_output_file
 
                         # Loop through domains - truncate to the first 20
-                        thread_list.append(pool.apply_async(nuclei_process_wrapper, (command, use_shell, my_env)))
+                        thread_list.append(pool.apply_async(scan_utils.process_wrapper, (command, use_shell, my_env)))
                         counter += 1
 
                 # Close the pool

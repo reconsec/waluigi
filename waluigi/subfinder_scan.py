@@ -209,25 +209,26 @@ class SubfinderScan(luigi.Task):
             scan_utils.process_wrapper(command)     
 
             # Open output file
-            f = open(scan_output_file_path, 'r')
-            scan_data = f.read()
-            f.close()    
+            if os.path.exists(scan_output_file_path):
+                f = open(scan_output_file_path, 'r')
+                scan_data = f.read()
+                f.close()    
 
-            print(scan_data)
-            # If there is output
-            if len(scan_data) > 0:
+                print(scan_data)
+                # If there is output
+                if len(scan_data) > 0:
 
-                domain_set = set()
-                json_blobs = scan_data.split("\n")
-                for blob in json_blobs:
-                    blob_trimmed = blob.strip()
-                    if len(blob_trimmed) > 0:
-                        domain_entry = json.loads(blob)
-                        domain_name = domain_entry['host']
-                        domain_set.add(domain_name)
+                    domain_set = set()
+                    json_blobs = scan_data.split("\n")
+                    for blob in json_blobs:
+                        blob_trimmed = blob.strip()
+                        if len(blob_trimmed) > 0:
+                            domain_entry = json.loads(blob)
+                            domain_name = domain_entry['host']
+                            domain_set.add(domain_name)
 
-                if len(domain_set) > 0:
-                    ret_list = dns_wrapper(domain_set)
+                    if len(domain_set) > 0:
+                        ret_list = dns_wrapper(domain_set)
 
         
         output_fd.write(json.dumps({'domain_list': ret_list}))

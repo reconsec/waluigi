@@ -253,8 +253,8 @@ class NmapScan(luigi.Task):
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 executor.map(subprocess.run, commands)
 
-        # Add the command list to the output file
-        nmap_scan_data['nmap_scan_list'] = nmap_scan_list
+            # Add the command list to the output file
+            nmap_scan_data['nmap_scan_list'] = nmap_scan_list
 
         # Write out meta data file
         f = open(meta_file_path, 'w')

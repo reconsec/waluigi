@@ -114,14 +114,14 @@ class NucleiScan(luigi.Task):
 
             if nuclei_scan_obj:
 
-                print(nuclei_scan_obj)
+                #print(nuclei_scan_obj)
 
                 pool = ThreadPool(processes=10)
                 thread_list = []
                 counter = 0
                 scan_list = nuclei_scan_obj['scan_list']
                 for scan_inst in scan_list:
-                    print(scan_inst)
+                    #print(scan_inst)
                     scan_endpoint_list = scan_inst['scan_endpoint_list']
                     template_path_list = scan_inst['template_path_list']
 

@@ -58,77 +58,6 @@ class FeroxScope(luigi.ExternalTask):
 
         scan_target_dict = scan_input_obj.scan_target_dict
 
-        # # Get selected ports        
-        # scan_arr = []
-        # selected_port_list = scan_input_obj.scheduled_scan.ports
-        # print(selected_port_list)
-        # if len(selected_port_list) > 0:
-
-        #     for port_entry in selected_port_list:
-
-        #         #Add IP
-        #         ip_addr = port_entry.host.ipv4_addr
-        #         host_id = port_entry.host_id
-        #         ip_str = str(netaddr.IPAddress(ip_addr))
-        #         port_str = str(port_entry.port)
-        #         secure_int = port_entry.secure
-
-        #         scan_instance = {"port_id" : port_entry.id, "host_id" : host_id, "ipv4_addr" : ip_str, "port" : port_entry.port, "secure" : secure_int, "domain_list" : list(port_entry.host.domains) }
-        #         scan_arr.append(scan_instance)
-
-        # else:
-
-        #     # Get hosts
-        #     port_arr = scan_input_obj.port_map_to_port_list()
-        #     hosts = scan_input_obj.hosts
-        #     print("[+] Retrieved %d hosts from database" % len(hosts))
-        #     if hosts and len(hosts) > 0:
-
-        #         for host in hosts:
-
-        #             ip_str = str(netaddr.IPAddress(host.ipv4_addr))
-        #             for port_obj in host.ports:
-
-        #                 # Check if nmap service is http
-        #                 #print(port_obj)
-        #                 http_found = False
-        #                 ws_man_found = False
-        #                 if port_obj.components:
-        #                     for component in port_obj.components:
-        #                         if 'http' in component.component_name:
-        #                             http_found = True
-        #                         elif 'wsman' in component.component_name:
-        #                             ws_man_found = True
-
-        #                 # Skip if not already detected as http based
-        #                 if http_found == False or ws_man_found==True:
-        #                     continue
-
-        #                 # Write each port id and IP pair to a file
-        #                 port_id = str(port_obj.id)
-        #                 port_str = str(port_obj.port)
-        #                 secure_int = port_obj.secure
-
-        #                 # Ensure we are only scanning ports that have selected
-        #                 if len(port_arr) > 0 and port_str not in port_arr:
-        #                     continue
-
-        #                 # Loop through domains
-        #                 domains = set()
-        #                 if host.domains:
-
-        #                     for domain_str in host.domains[:20]:
-
-        #                         # Remove any wildcards
-        #                         if "*." in domain_str:
-        #                             continue
-
-        #                         domains.add(domain_str)
-
-        #                 scan_instance = {"port_id" : port_id, "host_id" : host.id, "ipv4_addr" : ip_str, "port" : port_str, "secure" : secure_int, "domain_list" : list(domains)}
-        #                 scan_arr.append(scan_instance)
-
-
         # Create output file
         scan_inputs_fd = open(scan_inputs_file, 'w')
         if scan_target_dict:
@@ -182,15 +111,6 @@ class FeroxScan(luigi.Task):
         output_dir = os.path.dirname(output_file_path)
 
         url_to_id_map = {}
-        # scan_wordlist_data = self.scan_input.wordlist
-        # if scan_wordlist_data and len(scan_wordlist_data) > 0:
-        #     scan_wordlist_obj = tempfile.NamedTemporaryFile()
-        #     scan_wordlist = scan_wordlist_obj.name
-        #     f = open(scan_wordlist, 'wb')
-        #     f.writelines(scan_wordlist_data)
-        #     f.close()
-
-            #scan_wordlist = "/opt/SecLists/Discovery/Web-Content/dirsearch.txt"
         if len(scan_data) > 0:
                 ferox_scan_obj = json.loads(scan_data)
                 command_list = []

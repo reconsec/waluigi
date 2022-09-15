@@ -297,40 +297,41 @@ class ImportFeroxOutput(luigi.Task):
                 port_id = obj_data['port_id']
                 host_id = obj_data['host_id']
                 
-                f = open(output_file, 'r')
-                scan_data = f.read()
-                f.close()
+                if os.path.exists(output_file):
+                    f = open(output_file, 'r')
+                    scan_data = f.read()
+                    f.close()
 
-                if len(scan_data) > 0:
-                    #print(scan_data)
-                    json_blobs = scan_data.split("\n")
-                    for blob in json_blobs:
-                        blob_trimmed = blob.strip()
-                        if len(blob_trimmed) > 0:
-                            web_result = json.loads(blob_trimmed)
+                    if len(scan_data) > 0:
+                        #print(scan_data)
+                        json_blobs = scan_data.split("\n")
+                        for blob in json_blobs:
+                            blob_trimmed = blob.strip()
+                            if len(blob_trimmed) > 0:
+                                web_result = json.loads(blob_trimmed)
 
-                            if 'type' in web_result:
-                                result_type = web_result['type']
+                                if 'type' in web_result:
+                                    result_type = web_result['type']
 
-                                # Get the port object that maps to this url
-                                if result_type == "response":
-                                    if 'status' in web_result:
-                                        result_status = web_result['status']
-                                        endpoint_url = None
+                                    # Get the port object that maps to this url
+                                    if result_type == "response":
+                                        if 'status' in web_result:
+                                            result_status = web_result['status']
+                                            endpoint_url = None
 
-                                        if 'url' in web_result:
-                                            endpoint_url = web_result['url']
+                                            if 'url' in web_result:
+                                                endpoint_url = web_result['url']
 
-                                        # # Show the endpoint that was referenced in the 301
-                                        # if result_status == 301 or result_status == 302:
-                                        #     print(web_result)
-                                        #     if 'headers' in web_result:
-                                        #         headers = web_result['headers']
-                                        #         if 'location' in headers:
-                                        #             endpoint_url = headers['location']
+                                            # # Show the endpoint that was referenced in the 301
+                                            # if result_status == 301 or result_status == 302:
+                                            #     print(web_result)
+                                            #     if 'headers' in web_result:
+                                            #         headers = web_result['headers']
+                                            #         if 'location' in headers:
+                                            #             endpoint_url = headers['location']
 
-                                        port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'status' : result_status}
-                                        port_arr.append(port_inst)
+                                            port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'status' : result_status}
+                                            port_arr.append(port_inst)
 
             
             #port_id, status, domain, web_path

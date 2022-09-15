@@ -244,38 +244,40 @@ class ImportNucleiOutput(luigi.Task):
 
             # Get data and map
             nuclei_scan_obj = scan_data_dict['nuclei_scan_obj']
-            scan_list = nuclei_scan_obj['scan_list']
-            for scan_inst in scan_list:
-            
-                # Get endpoint to port map
-                if 'endpoint_port_obj_map' in scan_inst:
 
-                    endpoint_port_obj_map = scan_inst['endpoint_port_obj_map']
+            if nuclei_scan_obj and 'scan_list' in nuclei_scan_obj:
+                scan_list = nuclei_scan_obj['scan_list']
+                for scan_inst in scan_list:
+                
+                    # Get endpoint to port map
+                    if 'endpoint_port_obj_map' in scan_inst:
 
-                    if 'output_file_path' in scan_inst:
-                        output_file_path = scan_inst['output_file_path']                    
+                        endpoint_port_obj_map = scan_inst['endpoint_port_obj_map']
 
-                        # Read nuclei output
-                        if os.path.exists(output_file_path):
-                            f = open(output_file_path)
-                            data = f.read()
-                            f.close()
+                        if 'output_file_path' in scan_inst:
+                            output_file_path = scan_inst['output_file_path']                    
 
-                            scan_arr = []
-                            json_blobs = data.split("\n")
-                            for blob in json_blobs:
-                                blob_trimmed = blob.strip()
-                                if len(blob_trimmed) > 0:
-                                    nuclei_scan_result = json.loads(blob)
+                            # Read nuclei output
+                            if os.path.exists(output_file_path):
+                                f = open(output_file_path)
+                                data = f.read()
+                                f.close()
 
-                                    if 'host' in nuclei_scan_result:
-                                        endpoint = nuclei_scan_result['host']
+                                scan_arr = []
+                                json_blobs = data.split("\n")
+                                for blob in json_blobs:
+                                    blob_trimmed = blob.strip()
+                                    if len(blob_trimmed) > 0:
+                                        nuclei_scan_result = json.loads(blob)
 
-                                        # Get the port object that maps to this url
-                                        if endpoint in endpoint_port_obj_map:
-                                            port_obj = endpoint_port_obj_map[endpoint]
-                                            port_obj['nuclei_script_results'] = nuclei_scan_result
-                                            port_arr.append(port_obj)
+                                        if 'host' in nuclei_scan_result:
+                                            endpoint = nuclei_scan_result['host']
+
+                                            # Get the port object that maps to this url
+                                            if endpoint in endpoint_port_obj_map:
+                                                port_obj = endpoint_port_obj_map[endpoint]
+                                                port_obj['nuclei_script_results'] = nuclei_scan_result
+                                                port_arr.append(port_obj)
 
         # Import the nuclei scans
         if len(port_arr) > 0:

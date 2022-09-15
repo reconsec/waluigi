@@ -259,26 +259,23 @@ class ScheduledScanThread(threading.Thread):
         if self.is_scan_cancelled(scan_input_obj.scan_id):
             return ret_val
 
-        # if self.connection_manager:
-        #     # Connect to extender for import
-        #     lock_val = self.connection_manager.connect_to_extender()
-        #     if not lock_val:
-        #         print("[-] Failed connecting to extender")
-        #         return False
-
-        #     # Sleep to ensure routing is setup
-        #     time.sleep(3)
-
-
 
         if module_scan == False:
-        #     # Set the input args for nmap
-        #     scan_input_obj.set_module_scan_arr('nmap')
-        # else:
-            # Get scope
             scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id, skip_load_balance_ports)
-            #print(scan_input_obj.scan_target_dict)
-            
+            #print(scan_input_obj.scan_target_dict)           
+
+
+        if self.connection_manager:
+            # Connect to extender for import
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
+                return False
+
+            # Sleep to ensure routing is setup
+            time.sleep(3)
+
+
         # Create the nmap script array
         try:
 

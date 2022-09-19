@@ -262,7 +262,9 @@ class ScheduledScanThread(threading.Thread):
 
         if module_scan == False:
             scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id, skip_load_balance_ports)
-            #print(scan_input_obj.scan_target_dict)           
+            #print(scan_input_obj.scan_target_dict)
+        else:
+            print("[*] Module scan")          
 
 
         if self.connection_manager:
@@ -439,12 +441,6 @@ class ScheduledScanThread(threading.Thread):
         #     if self.connection_manager:
         #         # Free the lock
         #         self.connection_manager.free_connection_lock(lock_val)
-
-
-        # tool_set = set()
-        # for module in modules:
-        #     tool_name = module['tool']
-        #     tool_set.add(tool_name)
 
         # Get scope
         module_tool_id = scan_input_obj.current_tool_id
@@ -727,19 +723,6 @@ class ScheduledScanThread(threading.Thread):
         if module_scan == False:
             scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
  
-
-        # if module_scan:
-        #     print("[*] Nuclei module scan")
-        #     # Set the input args for nmap
-        #     scan_input_obj.set_module_scan_arr('nuclei')
-        # else:
-           # print("[*] Nuclei template scan")
-            # Refresh to get latest scan results (NOT necessary for modules)
-            #scan_input_obj.refresh()
-            # Set the input args for nmap
-            #scan_input_obj.set_nuclei_scan_arr(template_path_list)
-
-
         # Get scope for nuclei scan
         ret = scan_pipeline.nuclei_scope(scan_input_obj)
         if not ret:
@@ -911,21 +894,12 @@ class ScheduledScanThread(threading.Thread):
             # Set the tool id
             scan_input_obj.current_tool_id = tool_id
 
-            #ssl_http_scripts = ["--script", "+ssl-cert,+http-methods,+http-title,+http-headers","--script-args","ssl=True"]
-            #version_args = ["-sV","-n","--script","+ssl-cert","--script-args","ssl=True"]
 
             # Execute nmap
             skip_load_balance_ports = self.recon_manager.is_load_balanced()
-            # ret = self.nmap_scan(scan_input_obj, script_args=ssl_http_scripts, skip_load_balance_ports=skip_load_balance_ports)
-            # if not ret:
-            #     print("[-] Nmap Intial Scan Failed")
-            #     return False
-
-            # # Increment step
-            # scan_input_obj.current_step += 1
 
             # Execute nmap
-            ret = self.nmap_scan(scan_input_obj, skip_load_balance_ports)
+            ret = self.nmap_scan(scan_input_obj, skip_load_balance_ports=skip_load_balance_ports)
             if not ret:
                 print("[-] Nmap Service Scan Failed")
                 self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
@@ -1402,9 +1376,16 @@ class ReconManager:
             print("[-] Unknown Error")
             return target_obj
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        target_obj = json.loads(data)
+        try:
+            content = r.json()
+            data = self._decrypt_json(content)
+            print(data)
+            if len(data) > 0:
+                target_obj = json.loads(data)
+                
+        except Exception as e:
+            print(traceback.format_exc())
+            
 
         return target_obj
 

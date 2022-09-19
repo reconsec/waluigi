@@ -46,16 +46,16 @@ class NmapScope(luigi.ExternalTask):
 
             # Write the output
             nmap_scan_input = json.dumps(scan_target_dict)
-            nmap_inputs_f.write(nmap_scan_input)
-
-            # Add file to output file to be removed at cleanup
-            scan_utils.add_file_to_cleanup(scan_id, dir_path)
+            nmap_inputs_f.write(nmap_scan_input)            
 
         else:
             print("[-] Nmap scan array is empted.")
 
         # Close the file
         nmap_inputs_f.close()
+
+        # Add file to output file to be removed at cleanup
+        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(nmap_inputs_file)
 

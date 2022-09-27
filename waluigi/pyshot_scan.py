@@ -1,9 +1,5 @@
 import json
 import os
-import subprocess
-import shutil
-import netaddr
-import glob
 import binascii
 import luigi
 import multiprocessing
@@ -11,7 +7,6 @@ import traceback
 import hashlib
 import base64
 
-from datetime import date
 from luigi.util import inherits
 from pyshot import pyshot
 from waluigi import recon_manager
@@ -41,81 +36,18 @@ class PyshotScope(luigi.ExternalTask):
         if os.path.isfile(pyshot_inputs_file):
             return luigi.LocalTarget(pyshot_inputs_file)
 
-        # Get selected ports        
-        scan_arr = []
-        selected_port_list = scan_input_obj.scheduled_scan.ports
-        if len(selected_port_list) > 0:
-
-            for port_entry in selected_port_list:
-
-                #Add IP
-                ip_addr = port_entry.host.ipv4_addr
-                ip_str = str(netaddr.IPAddress(ip_addr))
-                port_str = str(port_entry.port)
-
-                scan_instance = {"port_id" : port_entry.id, "ipv4_addr" : ip_str, "port" : port_str, "secure" : port_entry.secure, "domain_list" : list(port_entry.host.domains) }
-                scan_arr.append(scan_instance)
-
-        else:
-
-            # Get hosts
-            port_arr = scan_input_obj.port_map_to_port_list()
-            hosts = scan_input_obj.hosts
-            print("[+] Retrieved %d hosts from database" % len(hosts))
-            if hosts and len(hosts) > 0:
-
-                for host in hosts:
-
-                    ip_str = str(netaddr.IPAddress(host.ipv4_addr))
-                    for port_obj in host.ports:
-
-                        # Check if nmap service is http
-                        #print(port_obj)
-                        http_found = False
-                        ws_man_found = False
-                        if port_obj.components:
-                            for component in port_obj.components:
-                                if 'http' in component.component_name:
-                                    http_found = True
-                                elif 'wsman' in component.component_name:
-                                    ws_man_found = True
-
-                        # Skip if not already detected as http based
-                        if http_found == False or ws_man_found==True:
-                            continue
-
-                        # Write each port id and IP pair to a file
-                        port_id = str(port_obj.id)
-                        port_str = str(port_obj.port)
-                        secure = str(port_obj.secure)
-
-
-                        # Ensure we are only scanning ports that have selected
-                        if len(port_arr) > 0 and port_str not in port_arr:
-                            continue
-
-                        # Loop through domains
-                        domains = set()
-                        if host.domains and len(host.domains) > 0:
-
-                            for domain in host.domains[:20]:
-
-                                # Remove any wildcards
-                                domain_str = domain.name.lstrip("*.")
-                                domains.add(domain_str)
-
-
-                        scan_instance = {"port_id" : port_id, "ipv4_addr" : ip_str, "port" : port_str, "secure" : secure, "domain_list" : list(domains) }
-                        scan_arr.append(scan_instance)
-
         # open input file
         pyshot_inputs_f = open(pyshot_inputs_file, 'w')
-        if len(scan_arr) > 0:
-            # Dump array to JSON
-            pyshot_scan_input = json.dumps(scan_arr)
-            # Write to output file
-            pyshot_inputs_f.write(pyshot_scan_input)
-            
+
+        scan_target_dict = scan_input_obj.scan_target_dict
+        if scan_target_dict:
+
+            # Write the output
+            scan_input = json.dumps(scan_target_dict)
+            pyshot_inputs_f.write(scan_input)            
+
+        else:
+            print("[-] Nmap scan array is empted.")
 
         pyshot_inputs_f.close()
 
@@ -175,7 +107,8 @@ class PyshotScan(luigi.Task):
         f.close()
 
         if len(pyshot_scan_data) > 0:
-            scan_arr = json.loads(pyshot_scan_data)
+            scan_obj = json.loads(pyshot_scan_data)
+            scan_arr = scan_obj['scan_list']
 
             # print(port_obj_arr)
             pool = ThreadPool(processes=10)

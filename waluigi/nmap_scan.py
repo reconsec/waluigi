@@ -11,9 +11,7 @@ from luigi.util import inherits
 from libnmap.parser import NmapParser
 from waluigi import scan_utils
 
-
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
-
 
 class NmapScope(luigi.ExternalTask):
 
@@ -455,13 +453,11 @@ class ParseNmapOutput(luigi.Task):
                     if len(port_arr) > 0:
                         #print(port_arr)
 
-                        tool_id = scan_input_obj.current_tool_id
+                        tool_obj = scan_input_obj.current_tool
+                        tool_id = tool_obj.id
                         scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                        #print(scan_results)
+                        print(scan_results)
                         ret_val = recon_manager.import_ports_ext(scan_results)
-
-                        # Import the ports to the manager
-                        #ret_val = recon_manager.import_ports(port_arr)
 
         # Write to output file
         f = open(self.output().path, 'w')

@@ -283,7 +283,8 @@ class ImportNucleiOutput(luigi.Task):
         if len(port_arr) > 0:
 
             # Import the ports to the manager
-            tool_id = scan_input_obj.current_tool_id
+            tool_obj = scan_input_obj.current_tool
+            tool_id = tool_obj.id
             scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
             #print(scan_results)
             ret_val = recon_manager.import_ports_ext(scan_results)

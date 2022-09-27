@@ -37,24 +37,28 @@ class SubfinderScope(luigi.ExternalTask):
         if os.path.isfile(dns_inputs_file):
             return luigi.LocalTarget(dns_inputs_file) 
 
-        target_obj = scan_input_obj.scan_target
-
         # Create output file
         f_inputs = open(dns_inputs_file, 'w')
         
         dns_url_file = dir_path + os.path.sep + "dns_urls_" + scan_id
         url_inputs_fd = open(dns_url_file, 'w')
-        # Write urls to file
-        if len(target_obj.urls) > 0:
-            print("[+] Retrieved %d urls from database" % len(target_obj.urls))
+
+        scan_target_dict = scan_input_obj.scan_target_dict
+        if scan_target_dict:
+            
+            # Write the output
+            url_list = scan_target_dict['scan_list']
 
             # Write urls to file
-            for url_obj in target_obj.urls:
-                url = url_obj.url
-                if url.startswith("*."):
-                    # Trim off wildcard
-                    url = url[2:]
-                    url_inputs_fd.write(url + '\n')
+            if len(url_list) > 0:
+                print("[+] Retrieved %d urls from database" % len(url_list))
+
+                # Write urls to file
+                for url_obj in url_list:
+                    url_inputs_fd.write(url_obj + '\n')          
+
+        else:
+            print("[-] Target url list is empty.")
 
         # Close urls inputs file
         url_inputs_fd.close()
@@ -167,6 +171,7 @@ class SubfinderScan(luigi.Task):
         # Read dns input files
         f = self.input().open()
         json_input = f.read()
+        print(json_input)
         f.close()
 
         # Ensure output folder exists
@@ -245,6 +250,9 @@ class SubfinderScan(luigi.Task):
             if len(domain_set) > 0:
                 ret_list = dns_wrapper(domain_set)
 
+        else:
+            # Remove empty file
+            os.remove(self.input().path)
         
         output_fd.write(json.dumps({'domain_list': ret_list}))
         output_fd.close()
@@ -318,17 +326,21 @@ class SubfinderImport(luigi.Task):
 
                     ip_addr_int = int(netaddr.IPAddress(ip_addr))
                     #print(domains)
-                    port_obj = {'scan_id': scan_id, 'ipv4_addr': ip_addr_int, 'domains': domains}
+                    port_obj = {'ipv4_addr': ip_addr_int, 'domains': domains}
 
                     # Add to list
                     port_arr.append(port_obj)
 
                 if len(port_arr) > 0:
-                    #print(port_arr)
-                    # Import the ports to the manager
-                    ret_val = recon_manager.import_ports(port_arr)
 
-                    print("[+] Imported domains to manager.")
+                    # Import the ports to the manager
+                    #ret_val = recon_manager.import_ports(port_arr)
+
+                    tool_obj = scan_input_obj.current_tool
+                    tool_id = tool_obj.id
+                    scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
+                    print(scan_results)
+                    ret_val = recon_manager.import_ports_ext(scan_results)
 
                     # Write to output file
                     f = open(self.output().path, 'w')

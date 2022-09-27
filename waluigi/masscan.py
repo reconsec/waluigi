@@ -14,6 +14,66 @@ from waluigi import scan_utils
 TCP = 'tcp'
 UDP = 'udp'
 
+def mass_scan(self, scan_input_obj):
+
+    ret_val = True
+
+    # Check if scan is cancelled
+    if self.is_scan_cancelled(scan_input_obj.scan_id):
+        return ret_val
+    
+    # Get scope
+    scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
+
+    # Connect to synack target
+    if self.connection_manager:
+        con = self.connection_manager.connect_to_target()
+        if not con:
+            print("[-] Failed connecting to target")
+            return False
+
+        # Obtain the lock before we start a scan
+        lock_val = self.connection_manager.get_connection_lock()
+
+        # Sleep to ensure routing is setup
+        time.sleep(3)
+
+    # Execute masscan
+    ret = scan_pipeline.masscan_scan(scan_input_obj)
+    if not ret:
+        print("[-] Masscan Failed")
+        ret_val = False
+
+    if self.connection_manager:
+        # Release the lock after scan
+        self.connection_manager.free_connection_lock(lock_val)
+        if not ret_val:
+            return ret_val
+
+        # Connect to extender for import
+        lock_val = self.connection_manager.connect_to_extender()
+        if not lock_val:
+            print("[-] Failed connecting to extender")
+            return False
+
+        # Sleep to ensure routing is setup
+        time.sleep(3)
+
+    try:
+
+        # Import masscan results
+        ret = scan_pipeline.masscan_import(scan_input_obj)
+        if not ret:
+            print("[-] Failed")
+            ret_val = False
+
+    finally:
+        if self.connection_manager:
+            # Free the lock
+            self.connection_manager.free_connection_lock(lock_val)
+
+    return ret_val
+
 
 class MassScanScope(luigi.ExternalTask):
 
@@ -256,8 +316,10 @@ class ParseMasscanOutput(luigi.Task):
         if len(port_arr) > 0:
 
             # Import the ports to the manager
-            tool_id = scan_input_obj.current_tool_id
+            tool_obj = scan_input_obj.current_tool
+            tool_id = tool_obj.id
             scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
+            print(scan_results)
             ret_val = recon_manager.import_ports_ext(scan_results)
 
         # Write to output file

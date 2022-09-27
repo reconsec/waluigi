@@ -16,6 +16,7 @@ import os
 import netaddr
 import netifaces
 import enum
+import functools
 
 # User Agent
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -24,11 +25,13 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
 
-# Exception thrown if the bearer token is invalid
-class ToolMissingError(Exception):
-    def __init__(self, tool_name):
-        super().__init__("[-] %s tool is not present in Reverge tool library. Consider refreshing the list." % tool_name)
-
+def tool_order_cmp(x, y):
+    if x.collection_tool.scan_order > y.collection_tool.scan_order:
+        return 1
+    elif x.collection_tool.scan_order < y.collection_tool.scan_order:
+        return -1
+    else:
+        return 0
 
 class ScanStatus(enum.Enum):
     CREATED = 1
@@ -79,7 +82,6 @@ class ScanInput():
         self.current_step = 0
         self.current_tool_id = None
         self.selected_interface = None
-        self.wordlist = None
 
         # Create a scan id if it does not exist
         if self.scheduled_scan.scan_id is None:
@@ -102,27 +104,6 @@ class ScanInput():
 
         # Get the selected interface
         self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
-
-
-    #Convert port bitmap into port list
-    def port_map_to_port_list(self):
-
-        port_list = []
-        port_map_str = self.scheduled_scan.port_map
-        if port_map_str and len(port_map_str) > 0:
-            port_map_obj = base64.b64decode(port_map_str)
-
-            # Get byte
-            for i in range(0, len(port_map_obj)):
-                current_byte = port_map_obj[i]
-                for j in range(8):
-                    mask = 1 << j
-                    if current_byte & mask:
-                        port_str = str(j + (i*8))
-                        port_list.append(port_str)
-
-        return port_list
-
 
     def refresh(self, modules=False):
 
@@ -161,286 +142,220 @@ class ScheduledScanThread(threading.Thread):
             self._enabled = True
             print("[*] Scan poller enabled.")
 
-    def is_scan_cancelled(self, scan_id):
+    # def is_scan_cancelled(self, scan_id):
 
-        ret_val = False
+    #     ret_val = False
 
-        # Connect to extender for import
-        if self.connection_manager:
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return ret_val
+    #     # Connect to extender for import
+    #     if self.connection_manager:
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return ret_val
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     try:
+    #         # Check if scan is cancelled
+    #         scan = self.recon_manager.get_scan(scan_id)
+    #         if scan and scan.status_int == ScanStatus.CANCELLED.value:
+    #             print("[-] Scan cancelled. Returning.")
+    #             ret_val = True
 
-        try:
-            # Check if scan is cancelled
-            scan = self.recon_manager.get_scan(scan_id)
-            if scan and scan.status_int == ScanStatus.CANCELLED.value:
-                print("[-] Scan cancelled. Returning.")
-                ret_val = True
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
 
-        return ret_val
+    #     return ret_val
         
 
-    def mass_scan(self, scan_input_obj):
+    # def mass_scan(self, scan_input_obj):
 
-        ret_val = True
-
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
+    #     ret_val = True
         
-        # Get scope
-        scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
+    #     # Connect to synack target
+    #     if self.connection_manager:
+    #         con = self.connection_manager.connect_to_target()
+    #         if not con:
+    #             print("[-] Failed connecting to target")
+    #             return False
 
-        # Connect to synack target
-        if self.connection_manager:
-            con = self.connection_manager.connect_to_target()
-            if not con:
-                print("[-] Failed connecting to target")
-                return False
+    #         # Obtain the lock before we start a scan
+    #         lock_val = self.connection_manager.get_connection_lock()
 
-            # Obtain the lock before we start a scan
-            lock_val = self.connection_manager.get_connection_lock()
+    #     # Execute masscan
+    #     ret = scan_pipeline.masscan_scan(scan_input_obj)
+    #     if not ret:
+    #         print("[-] Masscan Failed")
+    #         ret_val = False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     if self.connection_manager:
+    #         # Release the lock after scan
+    #         self.connection_manager.free_connection_lock(lock_val)
+    #         if not ret_val:
+    #             return ret_val
 
-        # Execute masscan
-        ret = scan_pipeline.masscan_scan(scan_input_obj)
-        if not ret:
-            print("[-] Masscan Failed")
-            ret_val = False
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
 
-        if self.connection_manager:
-            # Release the lock after scan
-            self.connection_manager.free_connection_lock(lock_val)
-            if not ret_val:
-                return ret_val
+    #     try:
 
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+    #         # Import masscan results
+    #         ret = scan_pipeline.masscan_import(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Failed")
+    #             ret_val = False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
 
-        try:
-
-            # Import masscan results
-            ret = scan_pipeline.masscan_import(scan_input_obj)
-            if not ret:
-                print("[-] Failed")
-                ret_val = False
-
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
-
-        return ret_val
+    #     return ret_val
     
 
-    def nmap_scan(self, scan_input_obj, module_scan=False, skip_load_balance_ports=False):
-    # /*, script_args=None, skip_load_balance_ports=False*/):
+    # def nmap_scan(self, scan_input_obj, module_scan=False ):
+    
+    #     ret_val = True
 
-        ret_val = True
+    #     # Check if load balanced, skip ports 80,443,8080,8443 that haven't already identified as having content
+    #     skip_load_balance_ports = self.recon_manager.is_load_balanced()
 
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
-
-
-        if module_scan == False:
-            scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id, skip_load_balance_ports)
-            #print(scan_input_obj.scan_target_dict)
-        else:
-            print("[*] Module scan")          
+    #     if module_scan == False:
+    #         scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id, skip_load_balance_ports)
+    #         #print(scan_input_obj.scan_target_dict)
+    #     else:
+    #         print("[*] Module scan")          
 
 
-        if self.connection_manager:
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+    #     if self.connection_manager:
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     # Create the nmap script array
+    #     try:
 
+    #         ret = scan_pipeline.nmap_scope(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Failed")
+    #             return False
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
 
-        # Create the nmap script array
-        try:
+    #     if self.connection_manager:
+    #         # Connect to synack target
+    #         con = self.connection_manager.connect_to_target()
+    #         if not con:
+    #             print("[-] Failed connecting to target")
+    #             return False
 
-            ret = scan_pipeline.nmap_scope(scan_input_obj)
-            if not ret:
-                print("[-] Failed")
-                return False
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
+    #         # Obtain the lock before we start a scan
+    #         lock_val = self.connection_manager.get_connection_lock()
 
-        if self.connection_manager:
-            # Connect to synack target
-            con = self.connection_manager.connect_to_target()
-            if not con:
-                print("[-] Failed connecting to target")
-                return False
+    #     try:
 
-            # Obtain the lock before we start a scan
-            lock_val = self.connection_manager.get_connection_lock()
+    #         # Execute nmap
+    #         ret = scan_pipeline.nmap_scan_func(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Nmap Failed")
+    #             ret_val = False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     finally:
+    #         if self.connection_manager:
+    #             # Release the lock after scan
+    #             self.connection_manager.free_connection_lock(lock_val)
+    #         if not ret_val:
+    #             return ret_val
 
-        try:
+    #     if self.connection_manager:
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
 
-            # Execute nmap
-            ret = scan_pipeline.nmap_scan_func(scan_input_obj)
-            if not ret:
-                print("[-] Nmap Failed")
-                ret_val = False
+    #     try:
 
-        finally:
-            if self.connection_manager:
-                # Release the lock after scan
-                self.connection_manager.free_connection_lock(lock_val)
-            if not ret_val:
-                return ret_val
+    #         # Import nmap results
+    #         ret = scan_pipeline.parse_nmap(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Failed")
+    #             ret_val = False
 
-        if self.connection_manager:
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
-
-        try:
-
-            # Import nmap results
-            ret = scan_pipeline.parse_nmap(scan_input_obj)
-            if not ret:
-                print("[-] Failed")
-                ret_val = False
-
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
-
-        return ret_val
+    #     return ret_val
 
 
-    def feroxbuster_scan(self, scan_input_obj ):
+    # def feroxbuster_scan(self, scan_input_obj ):
 
-        ret_val = True
+    #     ret_val = True
 
-       # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
+    #     # Refresh scan data (Get updated ports and hosts)
+    #     #scan_input_obj.refresh()
+    #     # Get scope
+    #     scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
 
-        # Refresh scan data (Get updated ports and hosts)
-        #scan_input_obj.refresh()
-        # Get scope
-        scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
+    #     if self.connection_manager:
+    #         # Connect to synack target
+    #         con = self.connection_manager.connect_to_target()
+    #         if not con:
+    #             print("[-] Failed connecting to target")
+    #             return False
 
-        if self.connection_manager:
-            # Connect to synack target
-            con = self.connection_manager.connect_to_target()
-            if not con:
-                print("[-] Failed connecting to target")
-                return False
+    #         # Obtain the lock before we start a scan
+    #         lock_val = self.connection_manager.get_connection_lock()
 
-            # Obtain the lock before we start a scan
-            lock_val = self.connection_manager.get_connection_lock()
+    #     try:
+    #         # Execute pyshot
+    #         ret = scan_pipeline.feroxbuster_scan_func(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Feroxbuster Scan Failed")
+    #             ret_val = False
 
-            # Sleep to ensure routing is setup
-            time.sleep(2)
+    #     finally:
+    #         if self.connection_manager:
+    #             # Release the lock after scan
+    #             self.connection_manager.free_connection_lock(lock_val)
+    #         if not ret_val:
+    #             return ret_val
 
-        try:
-            # Execute pyshot
-            ret = scan_pipeline.feroxbuster_scan_func(scan_input_obj)
-            if not ret:
-                print("[-] Feroxbuster Scan Failed")
-                ret_val = False
+    #     if self.connection_manager:
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
 
-        finally:
-            if self.connection_manager:
-                # Release the lock after scan
-                self.connection_manager.free_connection_lock(lock_val)
-            if not ret_val:
-                return ret_val
+    #     try:
 
-        if self.connection_manager:
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+    #         # Import http probe results
+    #         ret = scan_pipeline.feroxbuster_import(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Feroxbuster Scan Import Failed")
+    #             ret_val = False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
 
-        try:
-
-            # Import http probe results
-            ret = scan_pipeline.feroxbuster_import(scan_input_obj)
-            if not ret:
-                print("[-] Feroxbuster Scan Import Failed")
-                ret_val = False
-
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
-
-        return ret_val
+    #     return ret_val
 
 
     def module_scan(self, scan_input_obj):
 
         ret_val = True
-
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
-
-        # if self.connection_manager:
-
-        #     # Connect to extender for import
-        #     lock_val = self.connection_manager.connect_to_extender()
-        #     if not lock_val:
-        #         print("[-] Failed connecting to extender")
-        #         return False
-
-        #     # Sleep to ensure routing is setup
-        #     time.sleep(3)
-
-        # Get modules for this scan
-        # try:
-
-        #     # Refresh scan data (Get updated ports and hosts)
-        #    # scan_input_obj.refresh(modules=True)
-        #     modules = scan_input_obj.scan_modules
-
-        # finally:
-        #     # Release lock
-        #     if self.connection_manager:
-        #         # Free the lock
-        #         self.connection_manager.free_connection_lock(lock_val)
 
         # Get scope
         module_tool_id = scan_input_obj.current_tool_id
@@ -456,14 +371,10 @@ class ScheduledScanThread(threading.Thread):
                 if 'module_id' in module_scan_inst:
                     scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
 
-                tool_name = module_scan_inst['tool_name']
+                tool_inst = module_scan_inst['tool']
+                tool_name = tool_inst['name']
+                tool_id = tool_inst['id']
                 if tool_name == 'nmap':
-
-                    # Set the nmap tool id so import works properly
-                    if tool_name in self.recon_manager.tool_map:
-                        tool_id = self.recon_manager.tool_map[tool_name]
-                    else:
-                        raise ToolMissingError(tool_name)
 
                     # Set the tool id
                     scan_input_obj.current_tool_id = tool_id
@@ -478,12 +389,6 @@ class ScheduledScanThread(threading.Thread):
                     scan_input_obj.current_tool_id = module_tool_id
 
                 elif tool_name == 'nuclei':
-
-                    # Set the nuclei tool id so import works properly
-                    if tool_name in self.recon_manager.tool_map:
-                        tool_id = self.recon_manager.tool_map[tool_name]
-                    else:
-                        raise ToolMissingError(tool_name)
 
                     # Set the tool id
                     scan_input_obj.current_tool_id = tool_id
@@ -504,10 +409,6 @@ class ScheduledScanThread(threading.Thread):
 
         ret_val = True
 
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
-
         if self.connection_manager:
 
             # Connect to extender for import
@@ -515,9 +416,6 @@ class ScheduledScanThread(threading.Thread):
             if not lock_val:
                 print("[-] Failed connecting to extender")
                 return False
-
-            # Sleep to ensure routing is setup
-            time.sleep(3)
 
         try:
 
@@ -536,47 +434,36 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def dns_lookup(self, scan_input_obj):
+    # def dns_lookup(self, scan_input_obj):
 
-        ret_val = True
+    #     ret_val = True
 
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
+    #     if self.connection_manager:
 
-        if self.connection_manager:
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
 
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+    #     try:
+    #         # Do DNS lookup and import results
+    #         ret = scan_pipeline.dns_import(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Failed")
+    #             ret_val = False
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
-
-        try:
-            # Do DNS lookup and import results
-            ret = scan_pipeline.dns_import(scan_input_obj)
-            if not ret:
-                print("[-] Failed")
-                ret_val = False
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
-
-        return ret_val
+    #     return ret_val
 
 
     def httpx_scan(self, scan_input_obj):
 
         ret_val = True
         tool_name = 'httpx'
-
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
 
         # Refresh scan data (Get updated ports and hosts)
         scan_input_obj.refresh()
@@ -590,9 +477,6 @@ class ScheduledScanThread(threading.Thread):
 
             # Obtain the lock before we start a scan
             lock_val = self.connection_manager.get_connection_lock()
-
-            # Sleep to ensure routing is setup
-            time.sleep(2)
 
         try:
             # Execute pyshot
@@ -615,16 +499,7 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] Failed connecting to extender")
                 return False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
-
         try:
-
-            # # Set the tool id
-            # if tool_name in self.recon_manager.tool_map:
-            #     scan_input_obj.current_tool_id = self.recon_manager.tool_map[tool_name]
-            # else:
-            #     raise ToolMissingError(tool_name)
 
             # Import http probe results
             ret = scan_pipeline.httpx_import(scan_input_obj)
@@ -632,9 +507,6 @@ class ScheduledScanThread(threading.Thread):
                 print("[-] HTTPX Scan Import Failed")
                 ret_val = False
 
-            # # Reset the tool id
-            # scan_input_obj.current_tool_id = None
-
         finally:
             if self.connection_manager:
                 # Free the lock
@@ -642,146 +514,125 @@ class ScheduledScanThread(threading.Thread):
 
         return ret_val
 
-    def pyshot_scan(self, scan_input_obj):
+    # def pyshot_scan(self, scan_input_obj):
 
-        ret_val = True
+    #     ret_val = True
 
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
+    #     # Refresh scan data (Get updated ports and hosts)
+    #     scan_input_obj.refresh()
 
-        # Refresh scan data (Get updated ports and hosts)
-        scan_input_obj.refresh()
+    #     # Get scope for pyshot
+    #     ret = scan_pipeline.pyshot_scope(scan_input_obj)
+    #     if not ret:
+    #         print("[-] Failed")
+    #         return False
 
-        # Get scope for pyshot
-        ret = scan_pipeline.pyshot_scope(scan_input_obj)
-        if not ret:
-            print("[-] Failed")
-            return False
+    #     if self.connection_manager:
+    #         # Connect to synack target
+    #         con = self.connection_manager.connect_to_target()
+    #         if not con:
+    #             print("[-] Failed connecting to target")
+    #             return False
 
-        if self.connection_manager:
-            # Connect to synack target
-            con = self.connection_manager.connect_to_target()
-            if not con:
-                print("[-] Failed connecting to target")
-                return False
+    #         # Obtain the lock before we start a scan
+    #         lock_val = self.connection_manager.get_connection_lock()
 
-            # Obtain the lock before we start a scan
-            lock_val = self.connection_manager.get_connection_lock()
+    #     try:
+    #         # Execute pyshot
+    #         ret = scan_pipeline.pyshot_scan_func(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Pyshot Failed")
+    #             ret_val = False
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     finally:
+    #         if self.connection_manager:
+    #             # Release the lock after scan
+    #             self.connection_manager.free_connection_lock(lock_val)
+    #         if not ret_val:
+    #             return ret_val
 
-        try:
-            # Execute pyshot
-            ret = scan_pipeline.pyshot_scan_func(scan_input_obj)
-            if not ret:
-                print("[-] Pyshot Failed")
-                ret_val = False
+    #     if self.connection_manager:
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
 
-        finally:
-            if self.connection_manager:
-                # Release the lock after scan
-                self.connection_manager.free_connection_lock(lock_val)
-            if not ret_val:
-                return ret_val
+    #     try:
+    #         # Import pyshot results
+    #         ret = scan_pipeline.pyshot_import(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Failed")
+    #             ret_val = False
 
-        if self.connection_manager:
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     return ret_val
 
-        try:
-            # Import pyshot results
-            ret = scan_pipeline.pyshot_import(scan_input_obj)
-            if not ret:
-                print("[-] Failed")
-                ret_val = False
+    # def nuclei_scan(self, scan_input_obj, module_scan=False ):
 
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
+    #     ret_val = True
+    #     tool_name = 'nuclei'
 
-        return ret_val
-
-    def nuclei_scan(self, scan_input_obj, module_scan=False ):
-
-        ret_val = True
-        tool_name = 'nuclei'
-
-        # Check if scan is cancelled
-        if self.is_scan_cancelled(scan_input_obj.scan_id):
-            return ret_val
-
-        # Get the scope
-        if module_scan == False:
-            scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
+    #     # Get the scope
+    #     if module_scan == False:
+    #         scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, scan_input_obj.current_tool_id)
  
-        # Get scope for nuclei scan
-        ret = scan_pipeline.nuclei_scope(scan_input_obj)
-        if not ret:
-            print("[-] Failed")
-            return False
+    #     # Get scope for nuclei scan
+    #     ret = scan_pipeline.nuclei_scope(scan_input_obj)
+    #     if not ret:
+    #         print("[-] Failed")
+    #         return False
 
-        if self.connection_manager:
-            # Connect to synack target
-            con = self.connection_manager.connect_to_target()
-            if not con:
-                print("[-] Failed connecting to target")
-                return False
+    #     if self.connection_manager:
+    #         # Connect to synack target
+    #         con = self.connection_manager.connect_to_target()
+    #         if not con:
+    #             print("[-] Failed connecting to target")
+    #             return False
 
-            # Obtain the lock before we start a scan
-            lock_val = self.connection_manager.get_connection_lock()
+    #         # Obtain the lock before we start a scan
+    #         lock_val = self.connection_manager.get_connection_lock()
 
-            # Sleep to ensure routing is setup
-            time.sleep(3)
+    #     try:
+    #         # Execute nuclei
+    #         ret = scan_pipeline.nuclei_scan_func(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Nuclei Scan Failed")
+    #             ret_val = False
 
+    #     finally:
+    #         if self.connection_manager:
+    #             # Release the lock after scan
+    #             self.connection_manager.free_connection_lock(lock_val)
+    #         if not ret_val:
+    #             return ret_val
 
-        try:
-            # Execute nuclei
-            ret = scan_pipeline.nuclei_scan_func(scan_input_obj)
-            if not ret:
-                print("[-] Nuclei Scan Failed")
-                ret_val = False
+    #     if self.connection_manager:
+    #         # Connect to extender for import
+    #         lock_val = self.connection_manager.connect_to_extender()
+    #         if not lock_val:
+    #             print("[-] Failed connecting to extender")
+    #             return False
 
-        finally:
-            if self.connection_manager:
-                # Release the lock after scan
-                self.connection_manager.free_connection_lock(lock_val)
-            if not ret_val:
-                return ret_val
-
-        if self.connection_manager:
-            # Connect to extender for import
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
-
-            # Sleep to ensure routing is setup
-            time.sleep(3)
-
-        try:
+    #     try:
      
-            # Import nuclei results
-            ret = scan_pipeline.nuclei_import(scan_input_obj)
-            if not ret:
-                print("[-] Failed")
-                ret_val = False
+    #         # Import nuclei results
+    #         ret = scan_pipeline.nuclei_import(scan_input_obj)
+    #         if not ret:
+    #             print("[-] Failed")
+    #             ret_val = False
 
-        finally:
-            if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
+    #     finally:
+    #         if self.connection_manager:
+    #             # Free the lock
+    #             self.connection_manager.free_connection_lock(lock_val)
     
 
-        return ret_val
+    #     return ret_val
 
 
 
@@ -789,56 +640,99 @@ class ScheduledScanThread(threading.Thread):
 
         # Set connection target in connection manager to this target 
         target_id = scan_input_obj.scheduled_scan.target_id
-        tool_id = None
+        #tool_id = None
         self.recon_manager.set_current_target(self.connection_manager, target_id)
 
-        if sched_scan_obj.dns_scan_flag == 1:
+        #print(sched_scan_obj.collection_tools)
+        # Sort the list
+        
+        sorted_list = sorted(sched_scan_obj.collection_tools, key=functools.cmp_to_key(tool_order_cmp))
+        print(sorted_list)
 
-            tool_name = 'subfinder'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+        for collection_tool_inst in sorted_list:
 
-            # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+            tool_obj = collection_tool_inst.collection_tool
             
-            # Execute crobat
-            ret = self.dns_lookup(scan_input_obj)
-            if not ret:
-                print("[-] DNS Resolution Failed")
-                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
-                return False
-
-            # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
-
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
-
-            # Increment step
-            scan_input_obj.current_step += 1
-
-        if sched_scan_obj.masscan_scan_flag == 1:
-
-            tool_name = 'masscan'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
-
             # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+            scan_input_obj.current_tool = tool_obj
 
-            # Execute masscan
-            ret = self.mass_scan(scan_input_obj)
-            if not ret:
-                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
-                print("[-] Masscan Failed")
-                return False
+            # Connect to extender to see if scan has been cancelled and get tool scope
+            if self.connection_manager:
+                lock_val = self.connection_manager.connect_to_extender()
+                if not lock_val:
+                    print("[-] Failed connecting to extender")
+                    return False
+
+            try:
+                # Check if scan is cancelled
+                scan = self.recon_manager.get_scan(scan_input_obj.scan_id)
+                if scan and scan.status_int == ScanStatus.CANCELLED.value:
+                    print("[-] Scan cancelled. Returning.")
+                    return False
+
+                # Check if load balanced
+                skip_load_balance_ports = self.recon_manager.is_load_balanced() 
+
+                # Get scope
+                scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_obj.id, skip_load_balance_ports)
+                    
+            finally:
+
+                if self.connection_manager:
+                    # Free the lock
+                    self.connection_manager.free_connection_lock(lock_val)
+
+            # If the tool is active then connect to the target and run the scan
+            if tool_obj.tool_type == 2:
+
+                if self.connection_manager:
+                    # Connect to synack target
+                    con = self.connection_manager.connect_to_target()
+                    if not con:
+                        print("[-] Failed connecting to target")
+                        return False
+
+                    # Obtain the lock before we start a scan
+                    lock_val = self.connection_manager.get_connection_lock()
+
+                try:
+                    
+                    # Execute appropriate tool
+                    ret = scan_pipeline.scan_func(scan_input_obj)
+                    if not ret:
+                        self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_obj.id, CollectionToolStatus.ERROR.value)
+                        print("[-] Scan Failed")
+                        return False
+
+                finally:
+                    if self.connection_manager:
+                        # Release the lock after scan
+                        self.connection_manager.free_connection_lock(lock_val)
+           
+            # Connect to extender to import results
+            if self.connection_manager:
+
+                lock_val = self.connection_manager.connect_to_extender()
+                if not lock_val:
+                    print("[-] Failed connecting to extender")
+                    return False
+
+            try:
+        
+                # Import results
+                ret = scan_pipeline.import_func(scan_input_obj)
+                if not ret:
+                    self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_obj.id, CollectionToolStatus.ERROR.value)
+                    print("[-] Import Failed")
+                    return False
+
+            finally:
+                if self.connection_manager:
+                    # Free the lock
+                    self.connection_manager.free_connection_lock(lock_val)
 
             # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_obj.id, CollectionToolStatus.COMPLETED.value)
 
             # Reset the tool id
             scan_input_obj.current_tool_id = None
@@ -846,181 +740,235 @@ class ScheduledScanThread(threading.Thread):
             # Increment step
             scan_input_obj.current_step += 1
 
-        if sched_scan_obj.shodan_scan_flag == 1:
-            # Execute shodan
-            ret = self.shodan_lookup(scan_input_obj)
-            if not ret:
-                print("[-] Shodan Failed")
-                return False
+        # if sched_scan_obj.dns_scan_flag == 1:
 
-            # Increment step
-            scan_input_obj.current_step += 1
+        #     tool_name = 'subfinder'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
 
-        if sched_scan_obj.http_scan_flag == 1:
-
-            tool_name = 'httpx'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
-
-            # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
-
-            # Execute http probe
-            ret = self.httpx_scan(scan_input_obj)
-            if not ret:
-                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
-                print("[-] HTTPX Scan Failed")
-                return False
-
-            # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
-
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
-
-            # Increment step
-            scan_input_obj.current_step += 1
-
-        if sched_scan_obj.nmap_scan_flag == 1:
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
             
-            tool_name = 'nmap'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+        #     # Execute crobat
+        #     ret = self.dns_lookup(scan_input_obj)
+        #     if not ret:
+        #         print("[-] DNS Resolution Failed")
+        #         self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
+        #         return False
 
-            # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+        #     # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
+
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
+
+        # if sched_scan_obj.masscan_scan_flag == 1:
+
+        #     tool_name = 'masscan'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
+
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
+
+        #     # Execute masscan
+        #     ret = self.mass_scan(scan_input_obj)
+        #     if not ret:
+        #         self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
+        #         print("[-] Masscan Failed")
+        #         return False
+
+        #     # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
+
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
+
+        # if sched_scan_obj.shodan_scan_flag == 1:
+        #     # Execute shodan
+        #     ret = self.shodan_lookup(scan_input_obj)
+        #     if not ret:
+        #         print("[-] Shodan Failed")
+        #         return False
+
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
+
+        # if sched_scan_obj.http_scan_flag == 1:
+
+        #     tool_name = 'httpx'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
+
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
+
+        #     # Execute http probe
+        #     ret = self.httpx_scan(scan_input_obj)
+        #     if not ret:
+        #         self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
+        #         print("[-] HTTPX Scan Failed")
+        #         return False
+
+        #     # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
+
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
+
+        # if sched_scan_obj.nmap_scan_flag == 1:
+            
+        #     tool_name = 'nmap'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
+
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
 
 
-            # Execute nmap
-            skip_load_balance_ports = self.recon_manager.is_load_balanced()
+        #     # Execute nmap
+        #     skip_load_balance_ports = self.recon_manager.is_load_balanced()
 
-            # Execute nmap
-            ret = self.nmap_scan(scan_input_obj, skip_load_balance_ports=skip_load_balance_ports)
-            if not ret:
-                print("[-] Nmap Service Scan Failed")
-                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
-                return False
+        #     # Execute nmap
+        #     ret = self.nmap_scan(scan_input_obj, skip_load_balance_ports=skip_load_balance_ports)
+        #     if not ret:
+        #         print("[-] Nmap Service Scan Failed")
+        #         self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
+        #         return False
 
-            # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+        #     # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
 
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
 
-            # Increment step
-            scan_input_obj.current_step += 1
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
 
-        if sched_scan_obj.pyshot_scan_flag == 1:
+        # if sched_scan_obj.pyshot_scan_flag == 1:
 
-            tool_name = 'pyshot'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+        #     tool_name = 'pyshot'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
 
-            # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
 
-            # Execute pyshot
-            ret = self.pyshot_scan(scan_input_obj)
-            if not ret:
-                print("[-] Pyshot Failed")
-                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
-                return False
+        #     # Execute pyshot
+        #     ret = self.pyshot_scan(scan_input_obj)
+        #     if not ret:
+        #         print("[-] Pyshot Failed")
+        #         self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
+        #         return False
 
-            # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+        #     # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
 
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
 
-            # Increment step
-            scan_input_obj.current_step += 1
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
 
-        if sched_scan_obj.nuclei_scan_flag == 1:
+        # if sched_scan_obj.nuclei_scan_flag == 1:
 
-            tool_name = 'nuclei'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+        #     tool_name = 'nuclei'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
 
-            # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
 
-            # Execute nuclei
-            #fingerprint_template_path = ["technologies/fingerprinthub-web-fingerprints.yaml"]
-            ret = self.nuclei_scan(scan_input_obj)
-            if not ret:
-                print("[-] Nuclei Scan Failed")
-                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
-                return False
+        #     # Execute nuclei
+        #     #fingerprint_template_path = ["technologies/fingerprinthub-web-fingerprints.yaml"]
+        #     ret = self.nuclei_scan(scan_input_obj)
+        #     if not ret:
+        #         print("[-] Nuclei Scan Failed")
+        #         self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
+        #         return False
 
-             # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+        #      # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
 
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
 
-            # Increment step
-            scan_input_obj.current_step += 1
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
 
-        if sched_scan_obj.module_scan_flag == 1:
+        # if sched_scan_obj.module_scan_flag == 1:
 
-            tool_name = 'module'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+        #     tool_name = 'module'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
 
-            # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
 
-            # Execute module scan
-            ret = self.module_scan(scan_input_obj)
-            if not ret:
-                print("[-] Module Scan Failed")
-                self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
-                return False
+        #     # Execute module scan
+        #     ret = self.module_scan(scan_input_obj)
+        #     if not ret:
+        #         print("[-] Module Scan Failed")
+        #         self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.ERROR.value)
+        #         return False
 
-            # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+        #     # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
 
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
 
-            # Increment step
-            scan_input_obj.current_step += 1
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
 
-        if sched_scan_obj.dirsearch_scan_flag == 1:
+        # if sched_scan_obj.dirsearch_scan_flag == 1:
 
-            tool_name = 'feroxbuster'
-            if tool_name in self.recon_manager.tool_map:
-                tool_id = self.recon_manager.tool_map[tool_name]
-            else:
-                raise ToolMissingError(tool_name)
+        #     tool_name = 'feroxbuster'
+        #     if tool_name in self.recon_manager.tool_map:
+        #         tool_id = self.recon_manager.tool_map[tool_name]
+        #     else:
+        #         raise ToolMissingError(tool_name)
 
-            # Set the tool id
-            scan_input_obj.current_tool_id = tool_id
+        #     # Set the tool id
+        #     scan_input_obj.current_tool_id = tool_id
 
-            # Execute dirsearch
-            ret = self.feroxbuster_scan(scan_input_obj)
-            if not ret:
-                print("[-] FeroxBuster Scan Failed")
-                return False
+        #     # Execute dirsearch
+        #     ret = self.feroxbuster_scan(scan_input_obj)
+        #     if not ret:
+        #         print("[-] FeroxBuster Scan Failed")
+        #         return False
 
-            # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
+        #     # Update scan status
+        #     self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_id, CollectionToolStatus.COMPLETED.value)
 
-            # Reset the tool id
-            scan_input_obj.current_tool_id = None
+        #     # Reset the tool id
+        #     scan_input_obj.current_tool_id = None
 
-            # Increment step
-            scan_input_obj.current_step += 1
+        #     # Increment step
+        #     scan_input_obj.current_step += 1
 
         
         # Cleanup files
@@ -1048,9 +996,6 @@ class ScheduledScanThread(threading.Thread):
             if not lock_val:
                 print("[-] Failed connecting to extender")
                 return False
-
-            # Sleep to ensure routing is setup
-            time.sleep(3)
 
         try:
 
@@ -1108,11 +1053,7 @@ class ScheduledScanThread(threading.Thread):
                                 print("[-] Connection lock is currently held. Retrying")
                                 time.sleep(5)
                                 continue
-
-                        except ToolMissingError as e:
-                            print(traceback.format_exc())
-                            # Attempt to update the tool map from the server
-                            recon_manager.update_tool_map()                            
+                         
                         except Exception as e:
                             print(traceback.format_exc())
                             pass
@@ -1144,7 +1085,7 @@ class ReconManager:
         self.manager_url = manager_url
         self.headers = {'User-Agent': custom_user_agent, 'Authorization': 'Bearer ' + self.token}
         self.session_key = self._get_session_key()
-        self.tool_map = {}
+        #self.tool_map = {}
 
         # Get network interfaces
         self.network_ifaces = self.get_network_interfaces()
@@ -1157,22 +1098,22 @@ class ReconManager:
                 print(traceback.format_exc())
                 pass
 
-        self.update_tool_map()
+        #self.update_tool_map()
 
     def set_debug(self, debug):
         self.debug = debug
 
-    def update_tool_map(self):
+    # def update_tool_map(self):
 
-        # Get tool ids from server
-        try:
-            collection_tools = self.get_tools()
-            for tool in collection_tools:
-                self.tool_map[tool.name] = tool.id
+    #     # Get tool ids from server
+    #     try:
+    #         collection_tools = self.get_tools()
+    #         for tool in collection_tools:
+    #             self.tool_map[tool.name] = tool.id
 
-        except Exception as e:
-            print(traceback.format_exc())
-            pass
+    #     except Exception as e:
+    #         print(traceback.format_exc())
+    #         pass
 
     def dbg_print(self, output):
         if self.debug:

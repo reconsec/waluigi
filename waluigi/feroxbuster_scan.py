@@ -115,7 +115,6 @@ class FeroxScan(luigi.Task):
                 ferox_scan_obj = json.loads(scan_data)
                 command_list = []
 
-
                 scan_list = ferox_scan_obj['scan_list']
                 wordlist_arr = ferox_scan_obj['wordlist']
                 if wordlist_arr and len(wordlist_arr) > 0:
@@ -130,7 +129,7 @@ class FeroxScan(luigi.Task):
 
                 for scan_inst in scan_list:
 
-                    print(scan_inst)
+                    #print(scan_inst)
                     port_id = scan_inst['port_id']
                     host_id = scan_inst['host_id']
                     ip_addr = scan_inst['ipv4_addr']
@@ -149,8 +148,8 @@ class FeroxScan(luigi.Task):
                                 print("[-] Exception resolving domain: %s" % domain_str)
                                 continue
 
-                            print("[*] IP %s" % ip_str )
-                            print("[*] Domain %s" % domain_str )
+                            #print("[*] IP %s" % ip_str )
+                            #print("[*] Domain %s" % domain_str )
                             if ip_addr != ip_str:
                                 continue
 
@@ -339,7 +338,8 @@ class ImportFeroxOutput(luigi.Task):
                 #print(port_arr)
 
                 # Import the ports to the manager
-                tool_id = scan_input_obj.current_tool_id
+                tool_obj = scan_input_obj.current_tool
+                tool_id = tool_obj.id
                 scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
                 #print(scan_results)
                 ret_val = recon_manager.import_ports_ext(scan_results)

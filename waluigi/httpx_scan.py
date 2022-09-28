@@ -1,11 +1,8 @@
 import json
 import os
 import subprocess
-import shutil
 import netaddr
-import socket
 import luigi
-import glob
 import multiprocessing
 import traceback
 
@@ -58,56 +55,6 @@ class HttpXScope(luigi.ExternalTask):
         http_inputs_file = dir_path + os.path.sep + "httpx" + scan_id
         if os.path.isfile(http_inputs_file):
             return luigi.LocalTarget(http_inputs_file) 
-
-        # # Get selected ports        
-        # scan_arr = []
-        # selected_port_list = scan_input_obj.scheduled_scan.ports
-        # #print(selected_port_list)
-        # if len(selected_port_list) > 0:
-
-        #     for port_entry in selected_port_list:
-
-        #         #Add IP
-        #         ip_addr = port_entry.host.ipv4_addr
-        #         host_id = port_entry.host_id
-        #         ip_str = str(netaddr.IPAddress(ip_addr))
-        #         port_str = str(port_entry.port)
-
-        #         scan_instance = {"port_id" : port_entry.id, "host_id" : host_id, "ipv4_addr" : ip_str, "port" : port_entry.port }
-        #         scan_arr.append(scan_instance)
-
-        # else:
-
-        #     # Get hosts
-        #     port_arr = scan_input_obj.port_map_to_port_list()
-        #     hosts = scan_input_obj.hosts
-        #     print("[+] Retrieved %d hosts from database" % len(hosts))
-        #     if hosts and len(hosts) > 0:
-
-        #         for host in hosts:
-
-        #             ip_str = str(netaddr.IPAddress(host.ipv4_addr))
-
-        #             port_objs = host.ports
-        #             if len(port_objs) > 0:
-        #                 for port_obj in port_objs:
-
-        #                     # Write each port id and IP pair to a file
-        #                     port_id = str(port_obj.id)
-        #                     port_str = str(port_obj.port)
-
-        #                     # Ensure we are only scanning ports that have selected
-        #                     if len(port_arr) > 0 and port_str not in port_arr:
-        #                         continue
-
-        #                     scan_instance = {"port_id" : port_id, "host_id" : host.id, "ipv4_addr" : ip_str, "port" : port_str }
-        #                     scan_arr.append(scan_instance)
-        #             else:
-
-        #                 # Host exist but no ports so pull from selected ports
-        #                 for port_str in port_arr:
-        #                     scan_instance = {"port_id" : None, "host_id" : host.id, "ipv4_addr" : ip_str, "port" : port_str }
-        #                     scan_arr.append(scan_instance)
 
         # Create output file
         http_inputs_f = open(http_inputs_file, 'w')

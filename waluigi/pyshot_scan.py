@@ -126,6 +126,8 @@ class PyshotScan(luigi.Task):
                 ssl_val = False
                 if secure == '1':
                     ssl_val = True
+                elif port == '443':
+                    ssl_val = True
 
                 # Add argument without domain first
                 thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id)))
@@ -240,6 +242,4 @@ class ParsePyshotOutput(luigi.Task):
         f = open(self.output().path, 'w')
         f.write("complete")
         f.close()
-
-
 

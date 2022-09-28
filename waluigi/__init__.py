@@ -47,3 +47,8 @@ scan_pipeline.waluigi_tool_map[tool_name] = scan_tool
 tool_name = 'httpx'
 scan_tool = WaluigiTool(tool_name, scope_func=scan_pipeline.httpx_scope, scan_func=scan_pipeline.httpx_scan_func, import_func=scan_pipeline.httpx_import)
 scan_pipeline.waluigi_tool_map[tool_name] = scan_tool
+
+# Create module tool
+tool_name = 'module'
+scan_tool = WaluigiTool(tool_name, scope_func=None, scan_func=scan_pipeline.module_scan_func, import_func=scan_pipeline.module_import)
+scan_pipeline.waluigi_tool_map[tool_name] = scan_tool

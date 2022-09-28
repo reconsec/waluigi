@@ -37,40 +37,24 @@ class ShodanScope(luigi.ExternalTask):
         if os.path.isfile(shodan_ip_file):
             return luigi.LocalTarget(shodan_ip_file)
 
-        subnets = []
+        f = open(shodan_ip_file, 'w')
+        scan_target_dict = scan_input_obj.scan_target_dict
+        if scan_target_dict:
+            
+            # Write the output
+            subnet_list = scan_target_dict['scan_list']
 
-        # Get selected ports
-        selected_port_list = scan_input_obj.scheduled_scan.ports
-        if len(selected_port_list) > 0:
-            port_set = set()
-            ip_set = set()
-            for port_entry in selected_port_list:
+            # Write urls to file
+            if len(subnet_list) > 0:
+                print("[+] Retrieved %d subnets from database" % len(subnet_list))
 
-                #Add IP
-                ip_addr = port_entry.host.ipv4_addr
-                ip_set.add(ip_addr)
-
-            subnets = list(ip_set)
+                # Write urls to file
+                for subnet_obj in subnet_list:
+                    f.write(subnet_obj + '\n')          
 
         else:
+            print("[-] Target url list is empty.")
 
-            # Get hosts
-            hosts = scan_input_obj.hosts
-            #hosts = self.recon_manager.get_hosts(self.scan_id)
-            print("[+] Retrieved %d hosts from database" % len(hosts))
-            if hosts:
-                for host in hosts:
-                    target_ip = str(netaddr.IPAddress(host.ipv4_addr))
-                    # Write IP to file
-                    subnets.append(target_ip)
-
-        #subnets = self.recon_manager.get_subnets(self.scan_id)
-        print("[+] Retrieved %d subnets from database" % len(subnets))
-        f = open(shodan_ip_file, 'w')
-        if len(subnets) > 0:            
-            # Write subnets to file
-            for subnet in subnets:
-                f.write(subnet + '\n')
         f.close()
 
         # Path to scan outputs log
@@ -303,7 +287,6 @@ class ParseShodanOutput(luigi.Task):
         scan_id = scan_input_obj.scan_id
         recon_manager = scan_input_obj.scan_thread.recon_manager
         
-        port_arr = []
         shodan_output_file = self.input().path
         f = open(shodan_output_file, 'r')
         data = f.read()

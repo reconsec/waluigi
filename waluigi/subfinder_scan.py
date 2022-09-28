@@ -1,11 +1,9 @@
 import json
 import os
 import subprocess
-import shutil
 import netaddr
 import socket
 import luigi
-import glob
 import multiprocessing
 import traceback
 

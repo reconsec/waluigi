@@ -1,6 +1,5 @@
 import json
 import os
-import subprocess
 import netaddr
 import socket
 import luigi
@@ -52,7 +51,7 @@ class FeroxScope(luigi.ExternalTask):
             os.chmod(dir_path, 0o777)
 
         # path to input file
-        scan_inputs_file = dir_path + os.path.sep + "ferox" + scan_id
+        scan_inputs_file = dir_path + os.path.sep + "ferox-" + scan_id
         if os.path.isfile(scan_inputs_file):
             return luigi.LocalTarget(scan_inputs_file) 
 
@@ -112,20 +111,20 @@ class FeroxScan(luigi.Task):
 
         url_to_id_map = {}
         if len(scan_data) > 0:
-                ferox_scan_obj = json.loads(scan_data)
-                command_list = []
+            ferox_scan_obj = json.loads(scan_data)
+            command_list = []
 
-                scan_list = ferox_scan_obj['scan_list']
-                wordlist_arr = ferox_scan_obj['wordlist']
-                if wordlist_arr and len(wordlist_arr) > 0:
-                    # Create temp file
-                    scan_wordlist_obj = tempfile.NamedTemporaryFile()
-                    scan_wordlist = scan_wordlist_obj.name
+            scan_list = ferox_scan_obj['scan_list']
+            wordlist_arr = ferox_scan_obj['wordlist']
+            if wordlist_arr and len(wordlist_arr) > 0:
+                # Create temp file
+                scan_wordlist_obj = tempfile.NamedTemporaryFile()
+                scan_wordlist = scan_wordlist_obj.name
 
-                    output = "\n".join(wordlist_arr)
-                    f = open(scan_wordlist, 'wb')
-                    f.write(output.encode())
-                    f.close()
+                output = "\n".join(wordlist_arr)
+                f = open(scan_wordlist, 'wb')
+                f.write(output.encode())
+                f.close()
 
                 for scan_inst in scan_list:
 
@@ -236,8 +235,13 @@ class FeroxScan(luigi.Task):
                 # Loop through thread function calls and update progress
                 for thread_obj in tqdm(thread_list):
                     thread_obj.get()
+                    
+            else:
+                print("[-] No wordlist set. Aborting")
+
         else:
-            print("[-] No wordlist set. Aborting")
+            # Remove empty file
+            os.remove(self.input().path)
 
         results_dict = {'url_to_id_map': url_to_id_map}
 

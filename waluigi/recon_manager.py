@@ -137,7 +137,7 @@ class ScheduledScanThread(threading.Thread):
         #print(sched_scan_obj.collection_tools)
         # Sort the list        
         sorted_list = sorted(sched_scan_obj.collection_tools, key=functools.cmp_to_key(tool_order_cmp))
-        print(sorted_list)
+        #print(sorted_list)
 
         for collection_tool_inst in sorted_list:
 

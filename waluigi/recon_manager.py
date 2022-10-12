@@ -153,6 +153,7 @@ class ScheduledScanThread(threading.Thread):
                     print("[-] Failed connecting to extender")
                     return False
 
+            scan_input = None
             try:
                 # Check if scan is cancelled
                 scan = self.recon_manager.get_scan(scan_input_obj.scan_id)
@@ -164,13 +165,24 @@ class ScheduledScanThread(threading.Thread):
                 skip_load_balance_ports = self.recon_manager.is_load_balanced() 
 
                 # Get scope
-                scan_input_obj.scan_target_dict  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_obj.id, skip_load_balance_ports)
+                scan_input  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_obj.id, skip_load_balance_ports)
                     
             finally:
 
                 if self.connection_manager:
                     # Free the lock
                     self.connection_manager.free_connection_lock(lock_val)
+
+            # Return if there was an error getting the scope
+            if scan_input is None:
+                return False
+
+            # Skip tool if there is no input
+            if 'target_count' in scan_input and scan_input['target_count'] == 0:
+                continue
+
+            # Set the input
+            scan_input_obj.scan_target_dict = scan_input
 
             # If the tool is active then connect to the target and run the scan
             if tool_obj.tool_type == 2:
@@ -558,7 +570,7 @@ class ReconManager:
         if r.status_code == 404:
             return target_obj
         if r.status_code != 200:
-            print("[-] Unknown Error")
+            print("[-] Error retrieving tool scope.")
             return target_obj
 
         try:

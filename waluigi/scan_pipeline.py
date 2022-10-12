@@ -7,7 +7,6 @@ from waluigi import masscan
 from waluigi import httpx_scan
 from waluigi import nmap_scan
 from waluigi import nuclei_scan
-from waluigi import crobatdns
 from waluigi import scan_cleanup
 from waluigi import shodan_lookup
 from waluigi import feroxbuster_scan
@@ -164,12 +163,14 @@ def module_scan_func(scan_input_obj):
     ret_val = True
     # Get scope
     module_tool_id = scan_input_obj.current_tool_id
-    module_map  = scan_input_obj.scan_target_dict
+    scan_input  = scan_input_obj.scan_target_dict
 
     # Iterate over tool list
-    if module_map:
+    if scan_input:
 
-        for module_scan_inst in module_map:
+        module_arr = scan_input['scan_list']
+
+        for module_scan_inst in module_arr:
 
             # Set the input
             scan_input_obj.scan_target_dict = module_scan_inst['scan_input']
@@ -199,7 +200,7 @@ def module_scan_func(scan_input_obj):
             # Reset values
             scan_input_obj.current_tool_id = module_tool_id
 
-        scan_input_obj.scan_target_dict = module_map 
+        scan_input_obj.scan_target_dict = scan_input 
     
     return ret_val
 
@@ -208,12 +209,14 @@ def module_import(scan_input_obj):
     ret_val = True
     # Get scope
     module_tool_id = scan_input_obj.current_tool_id
-    module_map  = scan_input_obj.scan_target_dict
+    scan_input  = scan_input_obj.scan_target_dict
 
     # Iterate over tool list
-    if module_map:
+    if scan_input:
 
-        for module_scan_inst in module_map:
+        module_arr = scan_input['scan_list']
+
+        for module_scan_inst in module_arr:
 
             # Set the input
             scan_input_obj.scan_target_dict = module_scan_inst['scan_input']
@@ -243,7 +246,7 @@ def module_import(scan_input_obj):
             # Reset values
             scan_input_obj.current_tool_id = module_tool_id
 
-        scan_input_obj.scan_target_dict = module_map
+        scan_input_obj.scan_target_dict = scan_input
     
     return ret_val
 

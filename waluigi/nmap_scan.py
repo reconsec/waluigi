@@ -194,19 +194,19 @@ class NmapScan(luigi.Task):
                         if resolve_dns == True:
                             scan_obj['resolve_dns'] = True
 
-                    # Add the targets
-                    if 'ip_set' in scan_obj:
-                        ip_set = scan_obj['ip_set']
-                    else:
-                        ip_set = set()
-                        scan_obj['ip_set'] = ip_set
+                        # Add the targets
+                        if 'ip_set' in scan_obj:
+                            ip_set = scan_obj['ip_set']
+                        else:
+                            ip_set = set()
+                            scan_obj['ip_set'] = ip_set
 
-                    # Add target
-                    ip_set.add(target_str)
+                        # Add target
+                        ip_set.add(target_str)
 
-                    # Add domains
-                    domain_list = target_dict['domain_set']
-                    ip_set.update(domain_list)
+                        # Add domains
+                        domain_list = target_dict['domain_set']
+                        ip_set.update(domain_list)
 
                 # Add each to the scan list
                 nmap_scan_list.extend(list(scan_port_map.values()))

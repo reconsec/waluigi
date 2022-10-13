@@ -209,7 +209,7 @@ class NmapScan(luigi.Task):
                     ip_set.update(domain_list)
 
                 # Add each to the scan list
-                nmap_scan_list.append(scan_port_map.values())
+                nmap_scan_list.extend(list(scan_port_map.values()))
 
             # Parse into scan jobs
             # nmap_scan_port_map = {}

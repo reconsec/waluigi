@@ -185,7 +185,7 @@ class NmapScan(luigi.Task):
                         if port_int in scan_port_map:
                             scan_obj = scan_port_map[port_int]
                         else:
-                            scan_obj = {'port_list': [port_int], 'script-args' : nmap_scan_args}
+                            scan_obj = {'port_list': [str(port_int)], 'script-args' : nmap_scan_args}
                             scan_obj['resolve_dns'] = False
                             scan_port_map[port_int] = scan_obj
 

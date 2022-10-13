@@ -178,7 +178,9 @@ class ScheduledScanThread(threading.Thread):
                 return False
 
             # Skip tool if there is no input
-            if 'target_count' in scan_input and scan_input['target_count'] == 0:
+            #if 'target_count' in scan_input and scan_input['target_count'] == 0:
+            #    continue
+            if 'scan_input' in scan_input and len(scan_input['scan_input']['target_map']) == 0:
                 continue
 
             # Set the input

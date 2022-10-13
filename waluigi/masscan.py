@@ -1,7 +1,6 @@
 import json
 import os
 import subprocess
-import shutil
 import netaddr
 import xml.etree.ElementTree as ET
 import luigi
@@ -39,41 +38,44 @@ class MassScanScope(luigi.ExternalTask):
         scan_target_dict = scan_input_obj.scan_target_dict
         #print(scan_target_dict)
 
-        subnets = scan_target_dict['targets']
-        port_list = scan_target_dict['ports']
+        scan_input = scan_target_dict['scan_input']
+
+        target_map = {}
+        if 'target_map' in scan_input:
+            target_map = scan_input['target_map']
 
         # Create output file
-        masscan_config_file = None
-        masscan_ip_file = None
+        masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
+        masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
 
-        print("[+] Retrieved %d subnets from database" % len(subnets))
-        if len(subnets) > 0:
+        print("[+] Retrieved %d targets from database" % len(target_map))
+        if len(target_map) > 0:
 
-            print("[+] Retrieved %d ports from database" % len(port_list))
-
-            # Create output file
-            if len(port_list) > 0:
+            port_set = set()
+            # Write subnets to file
+            f = open(masscan_ip_file, 'w')
+            for target_key in target_map:
+                f.write(target_key + '\n')
                 
-                masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
+                # Add the port to the set
+                target_dict = target_map[target_key]
+                port_obj_map = target_dict['port_map']
+                for port_key in port_obj_map:
+                    port_set.add(port_key)
 
-                # Write subnets to file
-                f = open(masscan_ip_file, 'w')
-                for subnet in subnets:
-                    f.write(subnet + '\n')
-                f.close()
+            f.close()
 
-                # Construct ports conf line
-                port_line = "ports = "
-                for port in port_list:
-                    port_line += str(port) + ','
-                port_line.strip(',')
+            # Construct ports conf line
+            port_line = "ports = "
+            for port in port_set:
+                port_line += str(port) + ','
+            port_line.strip(',')
 
-                # Write ports to config file
-                masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
-                f = open(masscan_config_file, 'w')
-                f.write(port_line + '\n')
-                f.close()
-
+            # Write ports to config file
+            masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
+            f = open(masscan_config_file, 'w')
+            f.write(port_line + '\n')
+            f.close()
 
         masscan_inputs = {'config_path' : masscan_config_file, 'input_path': masscan_ip_file}
 
@@ -83,8 +85,6 @@ class MassScanScope(luigi.ExternalTask):
         masscan_scan_input = json.dumps(masscan_inputs)
         # Write to output file
         masscan_inputs_f.write(masscan_scan_input)
-            
-
         masscan_inputs_f.close()
 
         # Add the file to the cleanup file

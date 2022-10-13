@@ -43,8 +43,9 @@ class PyshotScope(luigi.ExternalTask):
         if scan_target_dict:
 
             # Write the output
-            scan_input = json.dumps(scan_target_dict)
-            pyshot_inputs_f.write(scan_input)            
+            if 'scan_list' in scan_target_dict:
+                scan_input = json.dumps(scan_target_dict['scan_list'])
+                pyshot_inputs_f.write(scan_input)
 
         else:
             print("[-] Nmap scan array is empted.")
@@ -115,7 +116,7 @@ class PyshotScan(luigi.Task):
             thread_list = []
             for scan_inst in scan_arr:
 
-                #print(scan_inst)
+                print(scan_inst)
                 port_id = str(scan_inst['port_id'])
                 ip_addr = scan_inst['ipv4_addr']
                 port = str(scan_inst['port'])

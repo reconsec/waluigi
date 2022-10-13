@@ -375,16 +375,21 @@ class ParseNmapOutput(luigi.Task):
                             # Get hostnames
                             hostnames = host.hostnames
                             for hostname in hostnames:
-                                hostname_str = hostname['name']
-                                domain_set.add(hostname_str)
-                                if hostname['type'] == 'user':
-                                    port_obj['hostname'] = hostname_str
+                                print(hostname)
+                                if type(hostname) is dict:
+                                    hostname_str = hostname['name']
+                                    domain_set.add(hostname_str)
+                                    if hostname['type'] == 'user':
+                                        port_obj['hostname'] = hostname_str
+                                else:
+                                    domain_set.add(hostname)
+                                    port_obj['hostname'] = hostname
 
                             # Get service details if present
                             svc = host.get_service_byid(port_service_id)
                             if svc:
 
-                                if svc.banner and len(svc.banner) > 0:                          
+                                if svc.banner and len(svc.banner) > 0:
                                     port_obj['banner'] = svc.banner
 
                                 # Set the service dictionary
@@ -440,7 +445,7 @@ class ParseNmapOutput(luigi.Task):
 
                                 # Set the service dictionary
                                 port_obj['service'] = svc_dict
-                                            
+
 
                             # Add domains
                             if len(domain_set) > 0:

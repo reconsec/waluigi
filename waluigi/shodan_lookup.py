@@ -42,18 +42,18 @@ class ShodanScope(luigi.ExternalTask):
         if scan_target_dict:
             
             # Write the output
-            subnet_list = scan_target_dict['scan_list']
+            scan_input = scan_target_dict['scan_input']
 
-            # Write urls to file
-            if len(subnet_list) > 0:
-                print("[+] Retrieved %d subnets from database" % len(subnet_list))
-
-                # Write urls to file
-                for subnet_obj in subnet_list:
-                    f.write(subnet_obj + '\n')          
+            target_map = {}
+            if 'target_map' in scan_input:
+                target_map = scan_input['target_map']
+           
+            print("[+] Retrieved %d subnets from database" % len(target_map))
+            for target_key in target_map:
+                f.write(target_key + '\n')
 
         else:
-            print("[-] Target url list is empty.")
+            print("[-] Target list is empty.")
 
         f.close()
 

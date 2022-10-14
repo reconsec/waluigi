@@ -104,7 +104,6 @@ class NmapScan(luigi.Task):
         nmap_scan_data = None
         if len(json_input) > 0:
             nmap_scan_obj = json.loads(json_input)
-            #input_nmap_scan_list = nmap_scan_obj['scan_list']
             scan_input = nmap_scan_obj['scan_input']
             nmap_scan_args = nmap_scan_obj['script_args']
 
@@ -119,9 +118,6 @@ class NmapScan(luigi.Task):
             #print(input_nmap_scan_list)
             # Output structure for scan jobs
             nmap_scan_cmd_list = []
-            #host_map = {}
-            #nmap_scan_data = {'nmap_input_map': host_map}
-
             nmap_scan_data = {'nmap_input_map': target_map}
 
             nmap_scan_list = []
@@ -132,7 +128,7 @@ class NmapScan(luigi.Task):
 
                     scan_obj = {}
                     target_dict = target_map[target_key]
-                    print(target_dict)
+                    #print(target_dict)
                     # Add target
                     target_str = target_dict['target_host']
                     target_set = set()
@@ -211,51 +207,10 @@ class NmapScan(luigi.Task):
                 # Add each to the scan list
                 nmap_scan_list.extend(list(scan_port_map.values()))
 
-            # Parse into scan jobs
-            # nmap_scan_port_map = {}
-            # for port_obj in input_nmap_scan_list:
-            #     port_str = port_obj['port']
-            #     port_id = port_obj['port_id']
-            #     host_id = port_obj['host_id']
-            #     target_arr = port_obj['target_list']
-            #     resolve_dns = port_obj['resolve_dns']
-
-                # # Create mapping to host id for IP address
-                # for target in target_arr:
-                #     if target in host_map:
-                #         host_entry_map = host_map[target]
-                #     else:
-                #         host_entry_map = { 'host_id' : host_id, 'port_map' : {} }
-                #         host_map[target] = host_entry_map
-
-                #     # Add the port to port_id map
-                #     port_map = host_entry_map['port_map']
-                #     port_map[port_str] = port_id
-
-                # # Get dict for port or create it
-                # if port_str in nmap_scan_port_map:
-                #     port_obj = nmap_scan_port_map[port_str]
-                # else:
-                #     port_obj = {'port_list': [port_str], 'script-args' : nmap_scan_args}
-                #     nmap_scan_port_map[port_str] = port_obj
-
-                # # Add the targets
-                # if 'ip_set' in port_obj:
-                #     ip_set = port_obj['ip_set']
-                # else:
-                #     ip_set = set()
-                #     port_obj['ip_set'] = ip_set
-
-                # ip_set.update(target_arr)
-
-                # # Set the DNS resolution
-                # port_obj['resolve_dns'] = resolve_dns
-
-
             # Loop through map and create nmap command array
             counter = 0            
             commands = []
-            print(nmap_scan_list)
+            #print(nmap_scan_list)
             for scan_obj in nmap_scan_list:
 
                 #scan_obj = nmap_scan_list[port_str]
@@ -407,7 +362,7 @@ class ParseNmapOutput(luigi.Task):
                 nmap_scan_obj = json.loads(json_input)
                 nmap_json_arr = nmap_scan_obj['nmap_scan_list']
                 nmap_input_map = nmap_scan_obj['nmap_input_map']
-                print(nmap_scan_obj)
+                #print(nmap_scan_obj)
 
                 for nmap_scan_entry in nmap_json_arr:
 
@@ -468,7 +423,7 @@ class ParseNmapOutput(luigi.Task):
                             # Get hostnames
                             hostnames = host.hostnames
                             for hostname in hostnames:
-                                print(hostname)
+                                #print(hostname)
                                 if type(hostname) is dict:
                                     hostname_str = hostname['name']
                                     domain_set.add(hostname_str)
@@ -554,7 +509,7 @@ class ParseNmapOutput(luigi.Task):
                         tool_obj = scan_input_obj.current_tool
                         tool_id = tool_obj.id
                         scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                        print(scan_results)
+                        #print(scan_results)
                         ret_val = recon_manager.import_ports_ext(scan_results)
 
         # Write to output file

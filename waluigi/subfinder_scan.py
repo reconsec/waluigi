@@ -7,9 +7,7 @@ import luigi
 import multiprocessing
 import traceback
 
-from datetime import date
 from luigi.util import inherits
-from waluigi import recon_manager
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
@@ -45,15 +43,14 @@ class SubfinderScope(luigi.ExternalTask):
         if scan_target_dict:
             
             # Write the output
-            url_list = scan_target_dict['scan_list']
-
-            # Write urls to file
-            if len(url_list) > 0:
-                print("[+] Retrieved %d urls from database" % len(url_list))
-
-                # Write urls to file
-                for url_obj in url_list:
-                    url_inputs_fd.write(url_obj + '\n')          
+            scan_input = scan_target_dict['scan_input']
+            target_map = {}
+            if 'target_map' in scan_input:
+                target_map = scan_input['target_map']
+           
+            print("[+] Retrieved %d urls from database" % len(target_map))
+            for target_key in target_map:
+                url_inputs_fd.write(target_key + '\n')          
 
         else:
             print("[-] Target url list is empty.")

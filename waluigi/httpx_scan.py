@@ -6,13 +6,10 @@ import luigi
 import multiprocessing
 import traceback
 
-from datetime import date
 from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
-from waluigi import recon_manager
 from waluigi import scan_utils
-from urllib.parse import urlparse
 
 
 def httpx_wrapper(cmd_args):
@@ -122,31 +119,41 @@ class HttpXScan(luigi.Task):
         if len(http_scan_data) > 0:
 
             scan_obj = json.loads(http_scan_data)
-            scan_arr = scan_obj['scan_list']
+            scan_input_data = scan_obj['scan_input']
+            #print(scan_input_data)
+
+            target_map = {}
+            if 'target_map' in scan_input_data:
+                target_map = scan_input_data['target_map']
 
             port_ip_dict = {}
             command_list = []
 
-            for scan_inst in scan_arr:
+            for target_key in target_map:
 
-                #print(scan_inst)
-                port_id = str(scan_inst['port_id'])
-                host_id = str(scan_inst['host_id'])
-                ip_addr = scan_inst['ipv4_addr']
-                port_str = str(scan_inst['port'])
+                target_dict = target_map[target_key]
+                host_id = target_dict['host_id']
+                ip_addr = target_dict['target_host']
+                domain_list = target_dict['domain_set']
 
-                # Add to port id map
-                port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id }
+                port_obj_map = target_dict['port_map']
+                for port_key in port_obj_map:
+                    port_obj = port_obj_map[port_key]
+                    port_str = str(port_obj['port'])
+                    port_id = port_obj['port_id']
+                    
+                    # Add to port id map
+                    port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id }
 
-                # Add to scan map
-                if port_str in port_ip_dict:
-                    ip_set = port_ip_dict[port_str]
-                else:
-                    ip_set = set()
-                    port_ip_dict[port_str] = ip_set
+                    # Add to scan map
+                    if port_str in port_ip_dict:
+                        ip_set = port_ip_dict[port_str]
+                    else:
+                        ip_set = set()
+                        port_ip_dict[port_str] = ip_set
 
-                # Add IP to list
-                ip_set.add(ip_addr)
+                    # Add IP to list
+                    ip_set.add(ip_addr)
 
 
             for port_str in port_ip_dict:

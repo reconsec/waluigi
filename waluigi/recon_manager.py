@@ -578,7 +578,7 @@ class ReconManager:
         try:
             content = r.json()
             data = self._decrypt_json(content)
-            print(data)
+            #print(data)
             if len(data) > 0:
                 target_obj = json.loads(data)
                 

@@ -9,11 +9,9 @@ import socket
 import random
 import tempfile
 
-from datetime import date
 from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
-from waluigi import recon_manager
 from waluigi import scan_utils
 
 def construct_url(target_str, port, secure):
@@ -21,7 +19,7 @@ def construct_url(target_str, port, secure):
     port_str = str(port).strip()
     add_port_flag = True
     url = "http"
-    if secure == 1:
+    if secure:
         url += "s"
         if port_str == '443':
             add_port_flag = False
@@ -114,7 +112,13 @@ class FeroxScan(luigi.Task):
             ferox_scan_obj = json.loads(scan_data)
             command_list = []
 
-            scan_list = ferox_scan_obj['scan_list']
+            scan_input_data = ferox_scan_obj['scan_input']
+            #print(scan_input_data)
+
+            target_map = {}
+            if 'target_map' in scan_input_data:
+                target_map = scan_input_data['target_map']
+
             wordlist_arr = ferox_scan_obj['wordlist']
             if wordlist_arr and len(wordlist_arr) > 0:
                 # Create temp file
@@ -126,58 +130,63 @@ class FeroxScan(luigi.Task):
                 f.write(output.encode())
                 f.close()
 
-                for scan_inst in scan_list:
+                #for scan_inst in scan_list:
+                for target_key in target_map:
 
-                    #print(scan_inst)
-                    port_id = scan_inst['port_id']
-                    host_id = scan_inst['host_id']
-                    ip_addr = scan_inst['ipv4_addr']
-                    port_str = scan_inst['port']
-                    secure = scan_inst['secure']
-                    domain_arr = scan_inst['domain_list']
+                    target_dict = target_map[target_key]
+                    host_id = target_dict['host_id']
+                    ip_addr = target_dict['target_host']
+                    domain_arr = target_dict['domain_set']
 
-                    if len(domain_arr) > 0:
+                    port_obj_map = target_dict['port_map']
+                    for port_key in port_obj_map:
+                        port_obj = port_obj_map[port_key]
+                        port_str = str(port_obj['port'])
+                        port_id = port_obj['port_id']
+                        secure = port_obj['secure']
 
-                        for domain_str in domain_arr:
+                        if len(domain_arr) > 0:
 
-                            # Get the IP of the TLD
-                            try:
-                                ip_str = socket.gethostbyname(domain_str).strip()
-                            except Exception:
-                                print("[-] Exception resolving domain: %s" % domain_str)
-                                continue
+                            for domain_str in domain_arr:
 
-                            #print("[*] IP %s" % ip_str )
-                            #print("[*] Domain %s" % domain_str )
-                            if ip_addr != ip_str:
-                                continue
+                                # Get the IP of the TLD
+                                try:
+                                    ip_str = socket.gethostbyname(domain_str).strip()
+                                except Exception:
+                                    print("[-] Exception resolving domain: %s" % domain_str)
+                                    continue
 
-                            # If it's an IP skip it
-                            if "*." in domain_str:
-                                continue
+                                #print("[*] IP %s" % ip_str )
+                                #print("[*] Domain %s" % domain_str )
+                                if ip_addr != ip_str:
+                                    continue
 
-                            # If it's an IP skip it
-                            try:
-                                ip_addr_check = int(netaddr.IPAddress(domain_str))
-                                continue
-                            except:
-                                pass
+                                # If it's an IP skip it
+                                if "*." in domain_str:
+                                    continue
 
-                            url_str = construct_url(domain_str, port_str, secure)
-                            rand_str = str(random.randint(1000000, 2000000))
+                                # If it's an IP skip it
+                                try:
+                                    ip_addr_check = int(netaddr.IPAddress(domain_str))
+                                    continue
+                                except:
+                                    pass
+
+                                url_str = construct_url(domain_str, port_str, secure)
+                                rand_str = str(random.randint(1000000, 2000000))
+
+                                # Add to port id map
+                                scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
+                                url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
+
+                        else:
+                            
+                            url_str = construct_url(ip_addr, port_str, secure)
+                            rand_str = str(random.randint(1000000, 2000000))      
 
                             # Add to port id map
                             scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
                             url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
-
-                    else:
-                        
-                        url_str = construct_url(ip_addr, port_str, secure)
-                        rand_str = str(random.randint(1000000, 2000000))      
-
-                        # Add to port id map
-                        scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
-                        url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
 
 
                 for target_url in url_to_id_map:

@@ -9,7 +9,6 @@ import base64
 
 from luigi.util import inherits
 from pyshot import pyshot
-from waluigi import recon_manager
 from waluigi import scan_utils
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
@@ -43,9 +42,8 @@ class PyshotScope(luigi.ExternalTask):
         if scan_target_dict:
 
             # Write the output
-            if 'scan_list' in scan_target_dict:
-                scan_input = json.dumps(scan_target_dict['scan_list'])
-                pyshot_inputs_f.write(scan_input)
+            scan_input = json.dumps(scan_target_dict)
+            pyshot_inputs_f.write(scan_input)
 
         else:
             print("[-] Nmap scan array is empted.")
@@ -109,33 +107,42 @@ class PyshotScan(luigi.Task):
 
         if len(pyshot_scan_data) > 0:
             scan_obj = json.loads(pyshot_scan_data)
-            scan_arr = scan_obj['scan_list']
+            scan_input = scan_obj['scan_input']
 
-            # print(port_obj_arr)
+            target_map = {}
+            if 'target_map' in scan_input:
+                target_map = scan_input['target_map']
+
+            #print(scan_input)
             pool = ThreadPool(processes=10)
             thread_list = []
-            for scan_inst in scan_arr:
+            #for scan_inst in scan_arr:
+            for target_key in target_map:
 
-                print(scan_inst)
-                port_id = str(scan_inst['port_id'])
-                ip_addr = scan_inst['ipv4_addr']
-                port = str(scan_inst['port'])
-                secure = str(scan_inst['secure'])
-                domain_arr = scan_inst['domain_list']
+                target_dict = target_map[target_key]
+                print(target_dict)
+                # Get target
+                target_str = target_dict['target_host']
 
-                # Setup args array
-                ssl_val = False
-                if secure == '1':
-                    ssl_val = True
-                elif port == '443':
-                    ssl_val = True
+                # Add domains
+                domain_list = target_dict['domain_set']
 
-                # Add argument without domain first
-                thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id)))
+                port_obj_map = target_dict['port_map']
+                for port_key in port_obj_map:
+                    port_obj = port_obj_map[port_key]                    
 
-                # Loop through domains - truncate to the first 20
-                for domain in domain_arr[:20]:
-                    thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, ssl_val, port_id, domain)))
+                    # print(scan_inst)
+                    port_id = str(port_obj['port_id'])
+                    ip_addr = target_str
+                    port = str(port_obj['port'])
+                    secure = port_obj['secure']
+
+                    # Add argument without domain first
+                    thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id)))
+
+                    # Loop through domains - truncate to the first 20
+                    for domain in domain_list:
+                        thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id, domain)))
 
             # Close the pool
             pool.close()

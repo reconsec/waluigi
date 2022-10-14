@@ -6,8 +6,6 @@ import xml.etree.ElementTree as ET
 import luigi
 
 from luigi.util import inherits
-from datetime import date
-from waluigi import recon_manager
 from waluigi import scan_utils
 
 TCP = 'tcp'
@@ -258,7 +256,7 @@ class ParseMasscanOutput(luigi.Task):
             tool_obj = scan_input_obj.current_tool
             tool_id = tool_obj.id
             scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-            print(scan_results)
+            #print(scan_results)
             ret_val = recon_manager.import_ports_ext(scan_results)
 
         # Write to output file

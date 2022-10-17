@@ -11,6 +11,7 @@ from waluigi import scan_cleanup
 from waluigi import shodan_lookup
 from waluigi import feroxbuster_scan
 from waluigi import subfinder_scan
+from types import SimpleNamespace
 
 waluigi_tool_map = {}
 
@@ -162,14 +163,16 @@ def module_scan_func(scan_input_obj):
 
     ret_val = True
     # Get scope
-    module_tool_id = scan_input_obj.current_tool_id
+    module_tool = scan_input_obj.current_tool
     scan_input  = scan_input_obj.scan_target_dict
 
     # Iterate over tool list
     if scan_input:
 
-        module_arr = scan_input['scan_list']
+        scan_obj = scan_input['scan_input']
+        module_arr = scan_obj['target_map']
 
+        print("[*] Iterating over modules.")
         for module_scan_inst in module_arr:
 
             # Set the input
@@ -178,11 +181,11 @@ def module_scan_func(scan_input_obj):
                 scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
 
             tool_inst = module_scan_inst['tool']
-            tool_name = tool_inst['name']
-            tool_id = tool_inst['id']
+            tool_obj = SimpleNamespace(id=tool_inst['id'])
+            scan_input_obj.current_tool = tool_obj
 
             ret = None
-            scan_input_obj.current_tool_id = tool_id
+            tool_name = tool_inst['name']
             if tool_name == 'nmap':
 
                 # Execute nmap
@@ -198,7 +201,7 @@ def module_scan_func(scan_input_obj):
                 ret_val = False
 
             # Reset values
-            scan_input_obj.current_tool_id = module_tool_id
+            scan_input_obj.current_tool = module_tool
 
         scan_input_obj.scan_target_dict = scan_input 
     
@@ -208,13 +211,14 @@ def module_import(scan_input_obj):
 
     ret_val = True
     # Get scope
-    module_tool_id = scan_input_obj.current_tool_id
+    module_tool = scan_input_obj.current_tool
     scan_input  = scan_input_obj.scan_target_dict
 
     # Iterate over tool list
     if scan_input:
 
-        module_arr = scan_input['scan_list']
+        scan_obj = scan_input['scan_input']
+        module_arr = scan_obj['target_map']
 
         for module_scan_inst in module_arr:
 
@@ -224,11 +228,13 @@ def module_import(scan_input_obj):
                 scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
 
             tool_inst = module_scan_inst['tool']
+            tool_obj = SimpleNamespace(id=tool_inst['id'])
+
             tool_name = tool_inst['name']
-            tool_id = tool_inst['id']
+            #tool_id = tool_inst['id']
 
             ret = None
-            scan_input_obj.current_tool_id = tool_id
+            scan_input_obj.current_tool = tool_obj
             if tool_name == 'nmap':
 
                 # Execute nmap
@@ -244,7 +250,7 @@ def module_import(scan_input_obj):
                 ret_val = False
 
             # Reset values
-            scan_input_obj.current_tool_id = module_tool_id
+            scan_input_obj.current_tool = module_tool
 
         scan_input_obj.scan_target_dict = scan_input
     

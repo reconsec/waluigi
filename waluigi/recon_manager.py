@@ -77,7 +77,7 @@ class ScanInput():
         self.shodan_key = None
         self.scan_target_dict = None
         self.current_step = 0
-        self.current_tool_id = None
+        self.current_tool = None
         self.selected_interface = None
 
         # Create a scan id if it does not exist
@@ -137,7 +137,7 @@ class ScheduledScanThread(threading.Thread):
         #print(sched_scan_obj.collection_tools)
         # Sort the list        
         sorted_list = sorted(sched_scan_obj.collection_tools, key=functools.cmp_to_key(tool_order_cmp))
-        #print(sorted_list)
+        print(sorted_list)
 
         for collection_tool_inst in sorted_list:
 
@@ -181,6 +181,7 @@ class ScheduledScanThread(threading.Thread):
             #if 'target_count' in scan_input and scan_input['target_count'] == 0:
             #    continue
             if 'scan_input' in scan_input and len(scan_input['scan_input']['target_map']) == 0:
+                print("[-] Scan input is empty. Skipping")
                 continue
 
             # Set the input
@@ -239,7 +240,7 @@ class ScheduledScanThread(threading.Thread):
             self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_obj.id, CollectionToolStatus.COMPLETED.value)
 
             # Reset the tool id
-            scan_input_obj.current_tool_id = None
+            scan_input_obj.current_tool = None
 
             # Increment step
             scan_input_obj.current_step += 1

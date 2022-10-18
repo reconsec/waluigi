@@ -22,7 +22,8 @@ setup(name='waluigi',
       install_requires=[
 
           'luigi',
-          'pycryptodomex'
+          'pycryptodomex',
+          'netifaces'
 
       ],
 

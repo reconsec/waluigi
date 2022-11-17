@@ -205,6 +205,11 @@ class ParsePyshotOutput(luigi.Task):
                     path = screenshot_meta['path']
                     port_id = screenshot_meta['port_id']
 
+                    if port_id == 'None':
+                        port_id_val = None
+                    else:
+                        port_id_val = int(port_id)
+
                     # Hash the image
                     image_data = b""
                     hash_alg=hashlib.sha1
@@ -217,7 +222,7 @@ class ParsePyshotOutput(luigi.Task):
 
 
                     b64_image = base64.b64encode(image_data).decode()
-                    obj_data = { 'port_id': int(port_id),
+                    obj_data = { 'port_id': port_id_val,
                                  'url': url,
                                  'path': path,
                                  'hash': str(image_hash_str),

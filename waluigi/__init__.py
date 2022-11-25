@@ -49,7 +49,7 @@ scan_tool = WaluigiTool(tool_name, scope_func=scan_pipeline.httpx_scope, scan_fu
 scan_pipeline.waluigi_tool_map[tool_name] = scan_tool
 
 # Create security trails ip lookup tool
-tool_name = 'sectrailsiplookup'
+tool_name = 'sectrails'
 scan_tool = WaluigiTool(tool_name, import_func=scan_pipeline.import_sectrailsiplookup)
 scan_pipeline.waluigi_tool_map[tool_name] = scan_tool
 

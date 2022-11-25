@@ -11,6 +11,7 @@ from waluigi import scan_cleanup
 from waluigi import shodan_lookup
 from waluigi import feroxbuster_scan
 from waluigi import subfinder_scan
+from waluigi import sectrails_ip_lookup
 from types import SimpleNamespace
 
 waluigi_tool_map = {}
@@ -129,8 +130,8 @@ def import_shodan(scan_input):
         return False
     return True
 
-def import_shodan(scan_input):
-    luigi_run_result = luigi.build([shodan_lookup.ParseShodanOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+def import_sectrailsiplookup(scan_input):
+    luigi_run_result = luigi.build([sectrails_ip_lookup.ImportSecTrailsIPLookupOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
@@ -316,8 +317,8 @@ if __name__ == '__main__':
         luigi_run_result = luigi.build([shodan_lookup.ParseShodanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'nmap':
         luigi_run_result = luigi.build([nmap_scan.ParseNmapOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    elif pipeline_name == 'dns':
-        luigi_run_result = luigi.build([crobatdns.ImportCrobatOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+    # elif pipeline_name == 'dns':
+    #     luigi_run_result = luigi.build([crobatdns.ImportCrobatOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'pyshot':
         luigi_run_result = luigi.build([pyshot_scan.ParsePyshotOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
     elif pipeline_name == 'nuclei':

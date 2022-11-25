@@ -126,16 +126,15 @@ class SecTrailsIPLookupScan(luigi.Task):
         if len(scan_input_data) > 0:
 
             scan_obj = json.loads(scan_input_data)
-            scan_input_data = scan_obj['scan_input']
-            #print(scan_input_data)
+            if 'api_key' in scan_obj:
+                api_key = scan_obj['api_key']
+                scan_input_data = scan_obj['scan_input']
+                #print(scan_input_data)
 
-            target_map = {}
-            if 'target_map' in scan_input_data:
-                target_map = scan_input_data['target_map']
+                target_map = {}
+                if 'target_map' in scan_input_data:
+                    target_map = scan_input_data['target_map']
 
-                if 'api_key' in scan_input_data:
-
-                    api_key = scan_input_data['target_map']
                     for target_key in target_map:
 
                         target_dict = target_map[target_key]
@@ -166,11 +165,9 @@ class SecTrailsIPLookupScan(luigi.Task):
                         host_dict['domains'] = ret_dict['domains']
 
                 else:
-                    print("[-] No api key in scan input")
-
+                    print("[-] No target map in scan input")            
             else:
-                print("[-] No target map in scan input")
-
+                print("[-] No api key in scan input")
         else:
             # Remove empty file
             os.remove(self.input().path)
@@ -229,7 +226,7 @@ class ImportSecTrailsIPLookupOutput(luigi.Task):
                 host_dict = ip_to_host_dict_map[ip_addr]
                 host_id = host_dict['host_id']
                 domains = host_dict['domains']
-                port_obj = {'host_id' : host_id, 'domains' : domains, 'ip' : ip_addr}
+                port_obj = {'host_id' : host_id, 'domains' : domains, 'ipv4_addr' : ip_addr}
                 port_arr.append(port_obj)
 
 

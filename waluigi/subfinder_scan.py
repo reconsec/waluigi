@@ -6,6 +6,8 @@ import socket
 import luigi
 import multiprocessing
 import traceback
+import os.path
+import yaml
 
 from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
@@ -44,6 +46,7 @@ class SubfinderScope(luigi.ExternalTask):
             
             # Write the output
             scan_input = scan_target_dict['scan_input']
+            api_keys = scan_target_dict['api_keys']
             target_map = {}
             if 'target_map' in scan_input:
                 target_map = scan_input['target_map']
@@ -59,7 +62,7 @@ class SubfinderScope(luigi.ExternalTask):
         url_inputs_fd.close()
 
         # Write the output
-        scan_dict = json.dumps({'input_path': dns_url_file})
+        scan_dict = json.dumps({'input_path': dns_url_file, 'api_keys' : api_keys})
         f_inputs.write(scan_dict)
 
         # Close output file
@@ -70,11 +73,47 @@ class SubfinderScope(luigi.ExternalTask):
 
         return luigi.LocalTarget(dns_inputs_file)
 
+def update_config_file(api_keys):
+
+    config_file_path = "/root/.config/subfinder/provider-config.yaml"
+
+    # If no file then run subfinder to generate the template
+    if os.path.isfile(config_file_path) == False:
+        subprocess.run("subfinder -h")
+
+    # Update provider config file
+    f = open(config_file_path, 'r')
+    data = yaml.safe_load(f)
+    f.close()
+
+    #print(data)
+    key_arr = []
+    if 'chaos' in api_keys:
+        key_val = api_keys['chaos']
+        key_arr.append(key_val)
+    data['chaos'] = key_arr
+
+    key_arr = []
+    if 'shodan' in api_keys:
+        key_val = api_keys['shodan']
+        key_arr.append(key_val)
+    data['shodan'] = key_arr
+
+    key_arr = []
+    if 'sectrails' in api_keys:
+        key_val = api_keys['sectrails']
+        key_arr.append(key_val)
+    data['securitytrails'] = key_arr
+
+    # Write to config file
+    with open(config_file_path, 'w') as yaml_file:
+        yaml_file.write( yaml.dump(data, default_flow_style=False))
+
 
 def dns_wrapper(domain_set):
 
     ret_list = []
-    print(domain_set)
+    #print(domain_set)
     try:
 
         # print(port_obj_arr)
@@ -89,7 +128,7 @@ def dns_wrapper(domain_set):
         pool.close()
 
         # Loop through thread function calls and update progress
-        print(thread_map)
+        #print(thread_map)
         for domain_str in thread_map:
 
             ip_domain_map = {}
@@ -166,7 +205,7 @@ class SubfinderScan(luigi.Task):
         # Read dns input files
         f = self.input().open()
         json_input = f.read()
-        print(json_input)
+        #print(json_input)
         f.close()
 
         # Ensure output folder exists
@@ -186,6 +225,10 @@ class SubfinderScan(luigi.Task):
         if len(json_input) > 0:
             dns_scan_obj = json.loads(json_input)
             subfinder_domain_list = dns_scan_obj['input_path']
+            api_keys = dns_scan_obj['api_keys']
+
+            # Set the API keys
+            update_config_file(api_keys)
 
             command = []
             if os.name != 'nt':
@@ -208,6 +251,8 @@ class SubfinderScan(luigi.Task):
             # Execute subfinder
             scan_utils.process_wrapper(command)
 
+            # Reset the API keys
+            update_config_file({})
 
             domain_set = set()
 
@@ -291,7 +336,7 @@ class SubfinderImport(luigi.Task):
 
         if len(data) > 0:
             domain_map = json.loads(data)
-            print(domain_map)
+            #print(domain_map)
 
             if 'domain_list' in domain_map:
                 domain_list = domain_map['domain_list']
@@ -334,7 +379,7 @@ class SubfinderImport(luigi.Task):
                     tool_obj = scan_input_obj.current_tool
                     tool_id = tool_obj.id
                     scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                    print(scan_results)
+                    #print(scan_results)
                     ret_val = recon_manager.import_ports_ext(scan_results)
 
                     # Write to output file

@@ -23,7 +23,8 @@ setup(name='waluigi',
 
           'luigi',
           'pycryptodomex',
-          'netifaces'
+          'netifaces',
+          'pyyaml'
 
       ],
 

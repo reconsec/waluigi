@@ -24,7 +24,10 @@ setup(name='waluigi',
           'luigi',
           'pycryptodomex',
           'netifaces',
-          'pyyaml'
+          'pyyaml',
+          'tqdm',
+          'python-libnmap',
+          'shodan'
 
       ],
 

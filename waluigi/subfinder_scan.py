@@ -79,7 +79,7 @@ def update_config_file(api_keys):
 
     # If no file then run subfinder to generate the template
     if os.path.isfile(config_file_path) == False:
-        subprocess.run("subfinder -h")
+        subprocess.run(["subfinder", "-h"])
 
     # Update provider config file
     f = open(config_file_path, 'r')

@@ -204,6 +204,7 @@ class ParsePyshotOutput(luigi.Task):
                     url = screenshot_meta['url']
                     path = screenshot_meta['path']
                     port_id = screenshot_meta['port_id']
+                    status_code = screenshot_meta['status_code']
 
                     if port_id == 'None':
                         port_id_val = None
@@ -226,7 +227,8 @@ class ParsePyshotOutput(luigi.Task):
                                  'url': url,
                                  'path': path,
                                  'hash': str(image_hash_str),
-                                 'data': b64_image}
+                                 'data': b64_image,
+                                 'status_code' : status_code}
 
 
                     if 'domain' in screenshot_meta:

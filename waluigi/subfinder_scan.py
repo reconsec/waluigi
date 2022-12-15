@@ -73,13 +73,14 @@ class SubfinderScope(luigi.ExternalTask):
 
         return luigi.LocalTarget(dns_inputs_file)
 
-def update_config_file(api_keys):
+def update_config_file(api_keys, my_env):
 
     config_file_path = "/root/.config/subfinder/provider-config.yaml"
 
     # If no file then run subfinder to generate the template
     if os.path.isfile(config_file_path) == False:
-        subprocess.run(["subfinder", "-h"])
+        subprocess.run(["subfinder", "-d","localhost","-timeout", "1"],env=my_env)
+        subprocess.run(["subfinder", "-h"],env=my_env)
 
     # Update provider config file
     f = open(config_file_path, 'r')
@@ -227,12 +228,16 @@ class SubfinderScan(luigi.Task):
             subfinder_domain_list = dns_scan_obj['input_path']
             api_keys = dns_scan_obj['api_keys']
 
-            # Set the API keys
-            update_config_file(api_keys)
+            # Add env variables for HOME
+            my_env = os.environ.copy()
+            command = [] 
 
-            command = []
             if os.name != 'nt':
+                my_env["HOME"] = "/root"
                 command.append("sudo")
+
+            # Set the API keys
+            update_config_file(api_keys, my_env)
 
             command_arr = [
                 "subfinder",
@@ -249,7 +254,7 @@ class SubfinderScan(luigi.Task):
             #command.extend(option_arr)
 
             # Execute subfinder
-            scan_utils.process_wrapper(command)
+            scan_utils.process_wrapper(command, my_env=my_env)
 
             # Reset the API keys
             update_config_file({})

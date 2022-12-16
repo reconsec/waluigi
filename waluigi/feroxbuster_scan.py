@@ -8,11 +8,15 @@ import traceback
 import socket
 import random
 import tempfile
+import re
 
+from json import JSONDecoder, JSONDecodeError
 from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+
+NOT_WHITESPACE = re.compile(r'\S')
 
 def construct_url(target_str, port, secure):
     
@@ -315,35 +319,53 @@ class ImportFeroxOutput(luigi.Task):
                     f.close()
 
                     if len(scan_data) > 0:
+
+                        decoder=JSONDecoder()
+                        pos = 0
+
+                        while True:
+
+                            # Find the next character that's not a whitespace
+                            match = NOT_WHITESPACE.search(scan_data, pos)
+                            if not match:
+                                break
+                            pos = match.start()
+
+
+                            try:
+                                web_result, pos = decoder.raw_decode(scan_data, pos)
+                            except JSONDecodeError:
+                                break
                         #print(scan_data)
-                        json_blobs = scan_data.split("\n")
-                        for blob in json_blobs:
-                            blob_trimmed = blob.strip()
-                            if len(blob_trimmed) > 0:
-                                web_result = json.loads(blob_trimmed)
+                        #json_blobs = scan_data.split("\n")
+                        #for blob in json_blobs:
+                        #    blob_trimmed = blob.strip()
+                        #    if len(blob_trimmed) > 0:
+                        #        web_result = json.loads(blob_trimmed)
 
-                                if 'type' in web_result:
-                                    result_type = web_result['type']
+                            if 'type' in web_result:
+                                result_type = web_result['type']
 
-                                    # Get the port object that maps to this url
-                                    if result_type == "response":
-                                        if 'status' in web_result:
-                                            result_status = web_result['status']
-                                            endpoint_url = None
+                                # Get the port object that maps to this url
+                                if result_type == "response":
 
-                                            if 'url' in web_result:
-                                                endpoint_url = web_result['url']
+                                    if 'status' in web_result:
+                                        result_status = web_result['status']
+                                        endpoint_url = None
 
-                                            # # Show the endpoint that was referenced in the 301
-                                            # if result_status == 301 or result_status == 302:
-                                            #     print(web_result)
-                                            #     if 'headers' in web_result:
-                                            #         headers = web_result['headers']
-                                            #         if 'location' in headers:
-                                            #             endpoint_url = headers['location']
+                                        if 'url' in web_result:
+                                            endpoint_url = web_result['url']
 
-                                            port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'status' : result_status}
-                                            port_arr.append(port_inst)
+                                        # # Show the endpoint that was referenced in the 301
+                                        # if result_status == 301 or result_status == 302:
+                                        #     print(web_result)
+                                        #     if 'headers' in web_result:
+                                        #         headers = web_result['headers']
+                                        #         if 'location' in headers:
+                                        #             endpoint_url = headers['location']
+
+                                        port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'status' : result_status}
+                                        port_arr.append(port_inst)
 
             
             #port_id, status, domain, web_path

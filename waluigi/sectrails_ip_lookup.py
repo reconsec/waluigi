@@ -4,11 +4,20 @@ import multiprocessing
 import traceback
 import os
 import json
+import time
 from tqdm import tqdm
 
 from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+
+proxies = None
+
+# Comment out if not using a proxy like Burp, etc
+#proxies = {
+# 'http': 'http://127.0.0.1:8080',
+# 'https': 'http://127.0.0.1:8080',
+# }
 
 def request_wrapper(ip_addr, api_key):
 
@@ -16,12 +25,22 @@ def request_wrapper(ip_addr, api_key):
     ret_str = {'ip_addr' : ip_addr}
     multiprocessing.log_to_stderr()
 
-    headers = {'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko", "Content-Type": "application/json", "apikey" : api_key}
+    headers = {'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko", 
+               'Content-Type': "application/json", 
+               "apikey" : api_key}
     ip_dict =  { "ipv4": ip_addr }
     try:
-        r = requests.post('https://api.securitytrails.com/v1/search/list', headers=headers, json={"filter": ip_dict}, verify=False)
-        if r.status_code != 200:
-            raise RuntimeError("[-] Error importing ports to manager server.")
+
+        while True:
+            r = requests.post('https://api.securitytrails.com/v1/search/list', headers=headers, json={"filter": ip_dict}, verify=False, proxies=proxies)
+            if r.status_code == 429:
+                time.sleep(1)
+                continue
+            elif r.status_code != 200:
+                print("[-] Status code: %d" % r.status_code)
+                print(r.text)
+                raise RuntimeError("[-] Error getting securitytrails output.")
+            break
 
         # Parse output
         content = r.json()

@@ -8,15 +8,11 @@ import traceback
 import socket
 import random
 import tempfile
-import re
 
-from json import JSONDecoder, JSONDecodeError
 from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
-
-NOT_WHITESPACE = re.compile(r'\S')
 
 def construct_url(target_str, port, secure):
     
@@ -312,60 +308,33 @@ class ImportFeroxOutput(luigi.Task):
                 output_file = obj_data['output_file']
                 port_id = obj_data['port_id']
                 host_id = obj_data['host_id']
-                
-                if os.path.exists(output_file):
-                    f = open(output_file, 'r')
-                    scan_data = f.read()
-                    f.close()
 
-                    if len(scan_data) > 0:
+                obj_arr = scan_utils.parse_json_blob_file(output_file)
+                for web_result in obj_arr:                
 
-                        decoder=JSONDecoder()
-                        pos = 0
+                    if 'type' in web_result:
+                        result_type = web_result['type']
 
-                        while True:
+                        # Get the port object that maps to this url
+                        if result_type == "response":
 
-                            # Find the next character that's not a whitespace
-                            match = NOT_WHITESPACE.search(scan_data, pos)
-                            if not match:
-                                break
-                            pos = match.start()
+                            if 'status' in web_result:
+                                result_status = web_result['status']
+                                endpoint_url = None
 
+                                if 'url' in web_result:
+                                    endpoint_url = web_result['url']
 
-                            try:
-                                web_result, pos = decoder.raw_decode(scan_data, pos)
-                            except JSONDecodeError:
-                                break
-                        #print(scan_data)
-                        #json_blobs = scan_data.split("\n")
-                        #for blob in json_blobs:
-                        #    blob_trimmed = blob.strip()
-                        #    if len(blob_trimmed) > 0:
-                        #        web_result = json.loads(blob_trimmed)
+                                # # Show the endpoint that was referenced in the 301
+                                # if result_status == 301 or result_status == 302:
+                                #     print(web_result)
+                                #     if 'headers' in web_result:
+                                #         headers = web_result['headers']
+                                #         if 'location' in headers:
+                                #             endpoint_url = headers['location']
 
-                            if 'type' in web_result:
-                                result_type = web_result['type']
-
-                                # Get the port object that maps to this url
-                                if result_type == "response":
-
-                                    if 'status' in web_result:
-                                        result_status = web_result['status']
-                                        endpoint_url = None
-
-                                        if 'url' in web_result:
-                                            endpoint_url = web_result['url']
-
-                                        # # Show the endpoint that was referenced in the 301
-                                        # if result_status == 301 or result_status == 302:
-                                        #     print(web_result)
-                                        #     if 'headers' in web_result:
-                                        #         headers = web_result['headers']
-                                        #         if 'location' in headers:
-                                        #             endpoint_url = headers['location']
-
-                                        port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'status' : result_status}
-                                        port_arr.append(port_inst)
+                                port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'status' : result_status}
+                                port_arr.append(port_inst)
 
             
             #port_id, status, domain, web_path

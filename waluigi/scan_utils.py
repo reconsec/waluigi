@@ -1,8 +1,14 @@
 import os
 import subprocess
+import re
+
+from json import JSONDecoder, JSONDecodeError
 from threading  import Thread
 from queue import Queue
 from enum import Enum
+
+
+NOT_WHITESPACE = re.compile(r'\S')
 
 class ProcessStreamReader(Thread):
 
@@ -83,3 +89,39 @@ def add_file_to_cleanup(scan_id, file_path):
     f = open(all_inputs_file, 'a')
     f.write(file_path + '\n')
     f.close()
+
+# Parse a file that contains multiple JSON blogs and return a list of objects
+def parse_json_blob_file(output_file):
+    
+    obj_arr = []
+
+    if os.path.exists(output_file):
+
+        # Open the file and read all the data
+        f = open(output_file, 'r')
+        data = f.read()
+        f.close()
+
+        if len(data) > 0:
+
+            decoder=JSONDecoder()
+            pos = 0
+
+            while True:
+
+                # Find the next character that's not a whitespace
+                match = NOT_WHITESPACE.search(data, pos)
+                if not match:
+                    break
+                pos = match.start()
+
+                try:
+                    obj, pos = decoder.raw_decode(data, pos)
+                except JSONDecodeError:
+                    print("[-] JSON decoding error")
+                    break
+
+                # Add object
+                obj_arr.append(obj)
+
+    return obj_arr

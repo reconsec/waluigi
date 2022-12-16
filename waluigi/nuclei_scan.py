@@ -5,8 +5,6 @@ import traceback
 import errno
 
 from luigi.util import inherits
-from datetime import date
-from waluigi import recon_manager
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
 from waluigi import scan_utils
@@ -279,42 +277,25 @@ class ImportNucleiOutput(luigi.Task):
         if len(data) > 0:
             scan_data_dict = json.loads(data)
 
-            # Get data and map
-            # nuclei_scan_obj = scan_data_dict['nuclei_scan_obj']
-
-            # if nuclei_scan_obj and 'scan_list' in nuclei_scan_obj:
-            #     scan_list = nuclei_scan_obj['scan_list']
-            #     for scan_inst in scan_list:
-                
-                    # Get endpoint to port map
-                    # if 'endpoint_port_obj_map' in scan_inst:
-
             endpoint_port_obj_map = scan_data_dict['endpoint_port_obj_map']
 
             #if 'output_file_path' in scan_data_dict:
             output_file_path = scan_data_dict['output_file_path']                    
 
             # Read nuclei output
-            if output_file_path and os.path.exists(output_file_path):
-                f = open(output_file_path)
-                data = f.read()
-                f.close()
+            if output_file_path:
 
-                #scan_arr = []
-                json_blobs = data.split("\n")
-                for blob in json_blobs:
-                    blob_trimmed = blob.strip()
-                    if len(blob_trimmed) > 0:
-                        nuclei_scan_result = json.loads(blob)
+                obj_arr = scan_utils.parse_json_blob_file(output_file_path)
+                for nuclei_scan_result in obj_arr:
+              
+                    if 'host' in nuclei_scan_result:
+                        endpoint = nuclei_scan_result['host']
 
-                        if 'host' in nuclei_scan_result:
-                            endpoint = nuclei_scan_result['host']
-
-                            # Get the port object that maps to this url
-                            if endpoint in endpoint_port_obj_map:
-                                port_obj = endpoint_port_obj_map[endpoint]
-                                port_obj['nuclei_script_results'] = nuclei_scan_result
-                                port_arr.append(port_obj)
+                        # Get the port object that maps to this url
+                        if endpoint in endpoint_port_obj_map:
+                            port_obj = endpoint_port_obj_map[endpoint]
+                            port_obj['nuclei_script_results'] = nuclei_scan_result
+                            port_arr.append(port_obj)
 
         # Import the nuclei scans
         if len(port_arr) > 0:

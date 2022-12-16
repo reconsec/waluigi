@@ -145,7 +145,7 @@ def dns_wrapper(domain_set):
             except Exception as e:
                 print(e)
                 continue
-                
+
             # print("IP: %s" % ip_str)
             if ip_str and len(ip_str) > 0:
 
@@ -221,7 +221,7 @@ class SubfinderScan(luigi.Task):
         # Write out meta data file
         output_fd = open(meta_file_path, 'w')
         ret_list = []
-        
+
         #load input file
         if len(json_input) > 0:
             dns_scan_obj = json.loads(json_input)
@@ -257,7 +257,7 @@ class SubfinderScan(luigi.Task):
             scan_utils.process_wrapper(command, my_env=my_env)
 
             # Reset the API keys
-            update_config_file({})
+            update_config_file({}, my_env)
 
             domain_set = set()
 
@@ -298,7 +298,7 @@ class SubfinderScan(luigi.Task):
         else:
             # Remove empty file
             os.remove(self.input().path)
-        
+
         output_fd.write(json.dumps({'domain_list': ret_list}))
         output_fd.close()
 

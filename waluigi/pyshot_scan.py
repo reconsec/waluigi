@@ -232,8 +232,8 @@ class ParsePyshotOutput(luigi.Task):
                                     'data': b64_image,
                                     'status_code' : status_code}
 
-
-                        if 'domain' in screenshot_meta:
+                        # Domain key exists and is not None
+                        if 'domain' in screenshot_meta and screenshot_meta['domain']:
                             domain = screenshot_meta['domain']
                             u = urlparse(url)
                             host = u.netloc

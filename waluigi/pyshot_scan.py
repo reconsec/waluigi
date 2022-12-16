@@ -198,58 +198,64 @@ class ParsePyshotOutput(luigi.Task):
             count = 0
             for line in lines:
 
-                screenshot_meta = json.loads(line)
-                filename = screenshot_meta['file']
-                if exists(filename):
-                    url = screenshot_meta['url']
-                    path = screenshot_meta['path']
-                    port_id = screenshot_meta['port_id']
-                    status_code = screenshot_meta['status_code']
+                try:
 
-                    if port_id == 'None':
-                        port_id_val = None
-                    else:
-                        port_id_val = int(port_id)
+                    screenshot_meta = json.loads(line)
+                    filename = screenshot_meta['file_path']
+                    if filename and exists(filename):
+                        url = screenshot_meta['url']
+                        path = screenshot_meta['path']
+                        port_id = screenshot_meta['port_id']
+                        status_code = screenshot_meta['status_code']
 
-                    # Hash the image
-                    image_data = b""
-                    hash_alg=hashlib.sha1
-                    with open(filename, "rb") as rf:
-                        image_data = rf.read()
-                        hashobj = hash_alg()
-                        hashobj.update(image_data)
-                        image_hash = hashobj.digest()
-                        image_hash_str = binascii.hexlify(image_hash).decode()
+                        if port_id == 'None':
+                            port_id_val = None
+                        else:
+                            port_id_val = int(port_id)
 
-
-                    b64_image = base64.b64encode(image_data).decode()
-                    obj_data = { 'port_id': port_id_val,
-                                 'url': url,
-                                 'path': path,
-                                 'hash': str(image_hash_str),
-                                 'data': b64_image,
-                                 'status_code' : status_code}
+                        # Hash the image
+                        image_data = b""
+                        hash_alg=hashlib.sha1
+                        with open(filename, "rb") as rf:
+                            image_data = rf.read()
+                            hashobj = hash_alg()
+                            hashobj.update(image_data)
+                            image_hash = hashobj.digest()
+                            image_hash_str = binascii.hexlify(image_hash).decode()
 
 
-                    if 'domain' in screenshot_meta:
-                        domain = screenshot_meta['domain']
-                        u = urlparse(url)
-                        host = u.netloc
-                        port = ''
-                        if ":" in host:
-                            host_arr = host.split(":")
-                            port = ":" + host_arr[1]
-
-                        res = ParseResult(scheme=u.scheme, netloc=domain + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
-                        url = res.geturl()
-
-                        # Update the url and set domain
-                        obj_data['domain'] = domain
-                        obj_data['url'] = url
+                        b64_image = base64.b64encode(image_data).decode()
+                        obj_data = { 'port_id': port_id_val,
+                                    'url': url,
+                                    'path': path,
+                                    'hash': str(image_hash_str),
+                                    'data': b64_image,
+                                    'status_code' : status_code}
 
 
-                    ret_val = recon_manager.import_screenshot(obj_data)
-                    count += 1
+                        if 'domain' in screenshot_meta:
+                            domain = screenshot_meta['domain']
+                            u = urlparse(url)
+                            host = u.netloc
+                            port = ''
+                            if ":" in host:
+                                host_arr = host.split(":")
+                                port = ":" + host_arr[1]
+
+                            res = ParseResult(scheme=u.scheme, netloc=domain + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
+                            url = res.geturl()
+
+                            # Update the url and set domain
+                            obj_data['domain'] = domain
+                            obj_data['url'] = url
+
+
+                        ret_val = recon_manager.import_screenshot(obj_data)
+                        count += 1
+
+                except Exception as e:
+                    print(e)
+                    print(traceback.format_exc())
 
             print("[+] Imported %d screenshots to manager." % (count))
 

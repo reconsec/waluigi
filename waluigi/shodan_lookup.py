@@ -209,7 +209,11 @@ class ShodanScan(luigi.Task):
 
         # Get the shodan key
         print("[*] Retrieving Shodan data")
-        shodan_key = scan_input_obj.shodan_key
+
+        # Write the output
+        scan_target_dict = scan_input_obj.scan_target_dict
+        shodan_key = scan_target_dict['scan_input']
+        #api_key = scan_input_obj.shodan_key
         if shodan_key:
 
             pool = ThreadPool(processes=10)

@@ -74,7 +74,7 @@ class ScanInput():
         self.scheduled_scan = scheduled_scan
         self.scan_id = None
         self.scan_target = None
-        self.shodan_key = None
+        #self.shodan_key = None
         self.scan_target_dict = None
         self.current_step = 0
         self.current_tool = None
@@ -97,7 +97,7 @@ class ScanInput():
 
         # Get the shodan key
         #print("[*] Retrieving Shodan data")
-        self.shodan_key = self.scan_thread.recon_manager.get_shodan_key()
+        #self.shodan_key = self.scan_thread.recon_manager.get_shodan_key()
 
         # Get the selected interface
         self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
@@ -589,23 +589,23 @@ class ReconManager:
 
         return target_obj
 
-    def get_shodan_key(self):
+    # def get_shodan_key(self):
 
-        shodan_key = None
-        r = requests.get('%s/api/integrations/shodan/key' % (self.manager_url), headers=self.headers, verify=False)
-        if r.status_code == 404:
-            return subnets
-        if r.status_code != 200:
-            print("[-] Unknown Error")
-            return subnets
+    #     shodan_key = None
+    #     r = requests.get('%s/api/integrations/shodan/key' % (self.manager_url), headers=self.headers, verify=False)
+    #     if r.status_code == 404:
+    #         return subnets
+    #     if r.status_code != 200:
+    #         print("[-] Unknown Error")
+    #         return subnets
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        if data:
-            shodan_key_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
-            shodan_key = shodan_key_obj.key
+    #     content = r.json()
+    #     data = self._decrypt_json(content)
+    #     if data:
+    #         shodan_key_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+    #         shodan_key = shodan_key_obj.key
 
-        return shodan_key
+    #     return shodan_key
 
     def get_collector_interface(self):
 

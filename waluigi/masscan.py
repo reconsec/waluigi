@@ -42,6 +42,11 @@ class MassScanScope(luigi.ExternalTask):
         if 'target_map' in scan_input:
             target_map = scan_input['target_map']
 
+        tool_args = []
+        if 'tool_args' in scan_target_dict:
+            tool_args = scan_target_dict['tool_args']
+
+
         # Create output file
         masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
         masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
@@ -75,7 +80,7 @@ class MassScanScope(luigi.ExternalTask):
             f.write(port_line + '\n')
             f.close()
 
-        masscan_inputs = {'config_path' : masscan_config_file, 'input_path': masscan_ip_file}
+        masscan_inputs = {'config_path' : masscan_config_file, 'input_path': masscan_ip_file, 'tool_args' : tool_args}
 
         # Create output file
         masscan_inputs_f = open(masscan_inputs_file, 'w')
@@ -133,6 +138,7 @@ class MasscanScan(luigi.Task):
             #print(scan_json)
             conf_file_path = scan_json['config_path']
             ips_file_path = scan_json['input_path']
+            tool_args = scan_json['tool_args']
 
             if conf_file_path and ips_file_path:
 
@@ -142,9 +148,7 @@ class MasscanScan(luigi.Task):
 
                 command_arr = [
                     "masscan",
-                    "--open",
-                    "--rate",
-                    "1000",
+                    "--open",                   
                     "-oX",
                     masscan_output_file_path,
                     "-c",
@@ -157,6 +161,10 @@ class MasscanScan(luigi.Task):
                 if selected_interface:
                     int_name = selected_interface.name.strip()
                     command_arr.extend(['-e', int_name])
+
+                # Add tool args
+                if tool_args and len(tool_args) > 0:
+                    command_arr.extend(tool_args)
 
                 command.extend(command_arr)
 

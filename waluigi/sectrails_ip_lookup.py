@@ -11,6 +11,7 @@ from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
+tool_name = 'sectrails'
 proxies = None
 
 # Comment out if not using a proxy like Burp, etc
@@ -69,12 +70,8 @@ class SecTrailsIPLookupScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-         # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "sectrails-ip-lookup-inputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to input file
         inputs_file = dir_path + os.path.sep + "sectrails-ip-lookup_" + scan_id
@@ -97,9 +94,6 @@ class SecTrailsIPLookupScope(luigi.ExternalTask):
 
         inputs_file_fd.close()
 
-        # Path to scan inputs
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
         return luigi.LocalTarget(inputs_file)
 
 @inherits(SecTrailsIPLookupScope)
@@ -115,20 +109,14 @@ class SecTrailsIPLookupScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "sectrails-ip-lookup-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
         http_outputs_file = dir_path + os.path.sep + "sectrails-ip-lookup-outputs-" + scan_id
         return luigi.LocalTarget(http_outputs_file)
 
     def run(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
 
         scan_input_file = self.input()
         f = scan_input_file.open()
@@ -137,9 +125,7 @@ class SecTrailsIPLookupScan(luigi.Task):
 
         # Get output file path
         output_file_path = self.output().path
-        output_dir = os.path.dirname(output_file_path)
 
-        output_file_list = []
         ip_to_host_dict_map = {}
 
         if len(scan_input_data) > 0:
@@ -198,9 +184,6 @@ class SecTrailsIPLookupScan(luigi.Task):
         f.write(json.dumps(results_dict))
         f.close()            
 
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, output_dir)
-
 
 @inherits(SecTrailsIPLookupScan)
 class ImportSecTrailsIPLookupOutput(luigi.Task):
@@ -214,11 +197,8 @@ class ImportSecTrailsIPLookupOutput(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "sectrails-ip-lookup-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         out_file = dir_path + os.path.sep + "sec_trails_ip_lookup_import_complete"
 

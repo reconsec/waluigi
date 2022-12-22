@@ -10,6 +10,7 @@ from tqdm import tqdm
 from waluigi import scan_utils
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
+tool_name = 'nuclei'
 
 class NucleiScope(luigi.ExternalTask):
 
@@ -21,12 +22,8 @@ class NucleiScope(luigi.ExternalTask):
         scan_id = scan_input_obj.scan_id
         scan_step = str(scan_input_obj.current_step)
 
-        # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nuclei-inputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to input file
         nuclei_inputs_file = dir_path + os.path.sep + ("nuclei_inputs_%s_%s" % (scan_step, scan_id))
@@ -46,9 +43,6 @@ class NucleiScope(luigi.ExternalTask):
         # Close file
         nuclei_inputs_f.close()
 
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
         return luigi.LocalTarget(nuclei_inputs_file)
 
 
@@ -65,12 +59,8 @@ class NucleiScan(luigi.Task):
         scan_id = scan_input_obj.scan_id
         scan_step = str(scan_input_obj.current_step)
 
-        # Get screenshot directory
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nuclei-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         nuclei_outputs_file = dir_path + os.path.sep + ("nuclei_outputs_%s_%s" % (scan_step, scan_id))
         return luigi.LocalTarget(nuclei_outputs_file)
@@ -79,7 +69,7 @@ class NucleiScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        
         scan_step = str(scan_input_obj.current_step)
 
         # Make sure template path exists        
@@ -235,9 +225,6 @@ class NucleiScan(luigi.Task):
         f.write(json.dumps(results_dict))
         f.close()  
 
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, output_dir)
-
 
 @inherits(NucleiScan)
 class ImportNucleiOutput(luigi.Task):
@@ -252,12 +239,8 @@ class ImportNucleiOutput(luigi.Task):
         scan_id = scan_input_obj.scan_id
         scan_step = str(scan_input_obj.current_step)
 
-        # Get screenshot directory
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nuclei-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         out_file = dir_path + os.path.sep + ("nuclei_import_complete_%s_%s" % (scan_step, scan_id))
         return luigi.LocalTarget(out_file)

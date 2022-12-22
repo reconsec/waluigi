@@ -53,6 +53,18 @@ class ProcessStreamReader(Thread):
 
         return output_str
 
+
+def init_tool_folder(tool_name, desc, scan_id):
+
+    # Create directory if it doesn't exist
+    cwd = os.getcwd()
+    dir_path = cwd + os.path.sep + scan_id + os.path.sep + "%s-%s" % (tool_name, desc)
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path)
+        os.chmod(dir_path, 0o777)
+
+    return dir_path
+
 def process_wrapper(cmd_args, use_shell=False, my_env=None):
 
     ret_value = True
@@ -76,19 +88,19 @@ def process_wrapper(cmd_args, use_shell=False, my_env=None):
 
     return ret_value
 
-def get_cleanup_file_path(scan_id):
+# def get_cleanup_file_path(scan_id):
 
-    return "%s%sall_outputs_%s.txt" % (os.getcwd(), os.path.sep, scan_id)
+#     return "%s%sall_outputs_%s.txt" % (os.getcwd(), os.path.sep, scan_id)
 
-def add_file_to_cleanup(scan_id, file_path):
+# def add_file_to_cleanup(scan_id, file_path):
 
-    # Path to scan outputs log
-    all_inputs_file = get_cleanup_file_path(scan_id)
+#     # Path to scan outputs log
+#     all_inputs_file = get_cleanup_file_path(scan_id)
 
-    # Write output file to final input file for cleanup
-    f = open(all_inputs_file, 'a')
-    f.write(file_path + '\n')
-    f.close()
+#     # Write output file to final input file for cleanup
+#     f = open(all_inputs_file, 'a')
+#     f.write(file_path + '\n')
+#     f.close()
 
 # Parse a file that contains multiple JSON blogs and return a list of objects
 def parse_json_blob_file(output_file):

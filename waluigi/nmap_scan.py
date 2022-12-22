@@ -12,6 +12,7 @@ from libnmap.parser import NmapParser
 from waluigi import scan_utils
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
+tool_name = 'nmap'
 
 class NmapScope(luigi.ExternalTask):
 
@@ -22,14 +23,9 @@ class NmapScope(luigi.ExternalTask):
         # Get a hash of the inputs
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        
-        # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-inputs-" + scan_id
 
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         scan_step = str(scan_input_obj.current_step)
         nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + scan_step
@@ -52,9 +48,6 @@ class NmapScope(luigi.ExternalTask):
         # Close the file
         nmap_inputs_f.close()
 
-        # Add file to output file to be removed at cleanup
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
         return luigi.LocalTarget(nmap_inputs_file)
 
 
@@ -72,8 +65,8 @@ class NmapScan(luigi.Task):
         scan_id = scan_input_obj.scan_id
         scan_step = str(scan_input_obj.current_step)
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ scan_step +".meta"
 
         return luigi.LocalTarget(meta_file_path)
@@ -81,7 +74,7 @@ class NmapScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        
         scan_step = str(scan_input_obj.current_step)
         selected_interface = scan_input_obj.selected_interface
 
@@ -96,9 +89,6 @@ class NmapScan(luigi.Task):
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
 
         #load input file
         nmap_scan_data = None
@@ -308,9 +298,6 @@ class NmapScan(luigi.Task):
             f.write(json.dumps(nmap_scan_data))
         f.close()
 
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
 
 def remove_dups_from_dict(dict_array):
     ret_arr = []
@@ -328,7 +315,7 @@ def remove_dups_from_dict(dict_array):
 
 
 @inherits(NmapScan)
-class ParseNmapOutput(luigi.Task):
+class ImportNmapOutput(luigi.Task):
 
     def requires(self):
         # Requires MassScan Task to be run prior
@@ -340,8 +327,8 @@ class ParseNmapOutput(luigi.Task):
         scan_id = scan_input_obj.scan_id
         scan_step = str(scan_input_obj.current_step)
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "nmap-outputs-" + scan_id
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "nmap_import_" + scan_step +"_complete"
 
         return luigi.LocalTarget(out_file)

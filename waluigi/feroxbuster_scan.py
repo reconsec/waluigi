@@ -14,6 +14,8 @@ from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
+tool_name = 'feroxbuster'
+
 def construct_url(target_str, port, secure):
     
     port_str = str(port).strip()
@@ -41,12 +43,8 @@ class FeroxScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-         # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "ferox-inputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init input directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to input file
         scan_inputs_file = dir_path + os.path.sep + "ferox-" + scan_id
@@ -65,9 +63,6 @@ class FeroxScope(luigi.ExternalTask):
             
         scan_inputs_fd.close()
 
-        # Path to scan inputs
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
         return luigi.LocalTarget(scan_inputs_file)
 
 
@@ -84,11 +79,8 @@ class FeroxScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "ferox-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         scan_outputs_file = dir_path + os.path.sep + "ferox_outputs_" + scan_id
         return luigi.LocalTarget(scan_outputs_file)
@@ -259,9 +251,6 @@ class FeroxScan(luigi.Task):
         f.write(json.dumps(results_dict))
         f.close()            
 
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, output_dir)
-
 
 @inherits(FeroxScan)
 class ImportFeroxOutput(luigi.Task):
@@ -275,12 +264,8 @@ class ImportFeroxOutput(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "ferox-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "ferox_import_complete"
 
         return luigi.LocalTarget(out_file)

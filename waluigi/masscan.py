@@ -11,6 +11,8 @@ from waluigi import scan_utils
 TCP = 'tcp'
 UDP = 'udp'
 
+tool_name = 'masscan'
+
 class MassScanScope(luigi.ExternalTask):
 
     scan_input = luigi.Parameter(default=None)
@@ -21,11 +23,8 @@ class MassScanScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "masscan-inputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to each input file
         masscan_inputs_file = dir_path + os.path.sep + "mass_inputs_" + scan_id
@@ -90,9 +89,6 @@ class MassScanScope(luigi.ExternalTask):
         masscan_inputs_f.write(masscan_scan_input)
         masscan_inputs_f.close()
 
-        # Add the file to the cleanup file
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
         return luigi.LocalTarget(masscan_inputs_file)
 
 @inherits(MassScanScope)
@@ -107,13 +103,8 @@ class MasscanScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Returns masscan output file
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "masscan-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
+        # Init output directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "mass_out_" + scan_id
 
         return luigi.LocalTarget(out_file)
@@ -183,13 +174,8 @@ class MasscanScan(luigi.Task):
             f_output.close()
 
 
-        # Add the file to the cleanup file
-        output_dir = os.path.dirname(self.output().path)
-        scan_utils.add_file_to_cleanup(scan_id, output_dir)
-
-
 @inherits(MasscanScan)
-class ParseMasscanOutput(luigi.Task):
+class ImportMasscanOutput(luigi.Task):
 
 
     def requires(self):
@@ -201,12 +187,8 @@ class ParseMasscanOutput(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "masscan-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
+        # Init output directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "mass_import_complete"
 
         return luigi.LocalTarget(out_file)

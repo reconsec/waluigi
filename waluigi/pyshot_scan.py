@@ -15,6 +15,7 @@ from multiprocessing.pool import ThreadPool
 from urllib.parse import urlparse, ParseResult
 from os.path import exists
 
+tool_name = 'pyshot'
 
 class PyshotScope(luigi.ExternalTask):
     scan_input = luigi.Parameter()
@@ -24,12 +25,8 @@ class PyshotScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "pyshot-inputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         pyshot_inputs_file = dir_path + os.path.sep + "pyshot_inputs_" + scan_id
         if os.path.isfile(pyshot_inputs_file):
@@ -46,12 +43,9 @@ class PyshotScope(luigi.ExternalTask):
             pyshot_inputs_f.write(scan_input)
 
         else:
-            print("[-] Nmap scan array is empted.")
+            print("[-] Pyshot input array is empty.")
 
         pyshot_inputs_f.close()
-
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(pyshot_inputs_file)
 
@@ -84,21 +78,19 @@ class PyshotScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Get screenshot directory
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "pyshot-outputs-" + scan_id
-        return luigi.LocalTarget(dir_path)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
+
+        # Meta file when complete
+        meta_file = '%s%s%s' % (dir_path, os.path.sep, 'screenshots.meta' )
+
+        return luigi.LocalTarget(meta_file)
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
 
         # Ensure output folder exists
         dir_path = self.output().path
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
 
         pyshot_input_file = self.input()
         f = pyshot_input_file.open()
@@ -113,14 +105,13 @@ class PyshotScan(luigi.Task):
             if 'target_map' in scan_input:
                 target_map = scan_input['target_map']
 
-            #print(scan_input)
             pool = ThreadPool(processes=10)
             thread_list = []
             #for scan_inst in scan_arr:
             for target_key in target_map:
 
                 target_dict = target_map[target_key]
-                print(target_dict)
+                #print(target_dict)
                 # Get target
                 target_str = target_dict['target_host']
 
@@ -154,12 +145,9 @@ class PyshotScan(luigi.Task):
                     print(output)
                     #raise RuntimeError("[-] Input file is empty")
 
-            # Path to scan outputs log
-            scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
 
 @inherits(PyshotScan)
-class ParsePyshotOutput(luigi.Task):
+class ImportPyshotOutput(luigi.Task):
 
     def requires(self):
         # Requires PyshotScan Task to be run prior
@@ -170,12 +158,8 @@ class ParsePyshotOutput(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "pyshot-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "pyshot_import_complete"
 
         return luigi.LocalTarget(out_file)
@@ -186,7 +170,6 @@ class ParsePyshotOutput(luigi.Task):
         scan_input_obj = self.scan_input
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
-        #print("[*] Converted screenshot image files.")
         # Read meta data file
         meta_file = '%s%s%s' % (pyshot_output_dir, os.path.sep, 'screenshots.meta' )
         if os.path.exists(meta_file):
@@ -258,6 +241,10 @@ class ParsePyshotOutput(luigi.Task):
                     print(traceback.format_exc())
 
             print("[+] Imported %d screenshots to manager." % (count))
+
+        else:
+
+            print("[-] Pyshot meta file does not exist.")
 
         # Write to output file
         f = open(self.output().path, 'w')

@@ -29,7 +29,7 @@ def masscan_scan(scan_input):
     return True
 
 def masscan_import(scan_input):
-    luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    luigi_run_result = luigi.build([masscan.ImportMasscanOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
@@ -65,7 +65,7 @@ def nmap_scan_func(scan_input ):
     return True
 
 def nmap_import(scan_input):
-    luigi_run_result = luigi.build([nmap_scan.ParseNmapOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    luigi_run_result = luigi.build([nmap_scan.ImportNmapOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
@@ -101,7 +101,7 @@ def pyshot_scan_func(scan_input):
     return True
 
 def pyshot_import(scan_input):
-    luigi_run_result = luigi.build([pyshot_scan.ParsePyshotOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    luigi_run_result = luigi.build([pyshot_scan.ImportPyshotOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
@@ -125,7 +125,7 @@ def nuclei_import(scan_input):
     return True
 
 def import_shodan(scan_input):
-    luigi_run_result = luigi.build([shodan_lookup.ParseShodanOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    luigi_run_result = luigi.build([shodan_lookup.ImportShodanOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
@@ -291,40 +291,40 @@ def import_func(scan_input):
     return ret_val
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--scan_id", help = "Scan Id", required = True)
-    parser.add_argument("-t", "--token", help = "Collector Token", required = True)
-    parser.add_argument("-u", "--manager_url", help = "Manager URL", required = True)
-    parser.add_argument("-p", "--pipeline", help = "Pipeline Name", required = True)
-    args = parser.parse_args()
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("-s", "--scan_id", help = "Scan Id", required = True)
+#     parser.add_argument("-t", "--token", help = "Collector Token", required = True)
+#     parser.add_argument("-u", "--manager_url", help = "Manager URL", required = True)
+#     parser.add_argument("-p", "--pipeline", help = "Pipeline Name", required = True)
+#     args = parser.parse_args()
 
-    # Set some globals
-    scan_id = args.scan_id
-    token = args.token
-    manager_url = args.manager_url
-    pipeline_name = args.pipeline
-    luigi_run_result = None
+#     # Set some globals
+#     scan_id = args.scan_id
+#     token = args.token
+#     manager_url = args.manager_url
+#     pipeline_name = args.pipeline
+#     luigi_run_result = None
 
-    # scan_input = {'scan_id':scan_id,
-    #               'token':token,
-    #               'manager':manager_url}
+#     # scan_input = {'scan_id':scan_id,
+#     #               'token':token,
+#     #               'manager':manager_url}
 
-    if pipeline_name == 'masscan':
-        luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    elif pipeline_name == 'shodan':
-        luigi_run_result = luigi.build([shodan_lookup.ParseShodanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    elif pipeline_name == 'nmap':
-        luigi_run_result = luigi.build([nmap_scan.ParseNmapOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    # elif pipeline_name == 'dns':
-    #     luigi_run_result = luigi.build([crobatdns.ImportCrobatOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    elif pipeline_name == 'pyshot':
-        luigi_run_result = luigi.build([pyshot_scan.ParsePyshotOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    elif pipeline_name == 'nuclei':
-        luigi_run_result = luigi.build([nuclei_scan.ParseNucleiOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
-    elif pipeline_name == 'cleanup':
-        luigi_run_result = luigi.build([scan_cleanup.ScanCleanup(scan_id=scan_id)], local_scheduler=True, detailed_summary=True)
+#     if pipeline_name == 'masscan':
+#         luigi_run_result = luigi.build([masscan.ParseMasscanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+#     elif pipeline_name == 'shodan':
+#         luigi_run_result = luigi.build([shodan_lookup.ParseShodanOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+#     elif pipeline_name == 'nmap':
+#         luigi_run_result = luigi.build([nmap_scan.ParseNmapOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+#     # elif pipeline_name == 'dns':
+#     #     luigi_run_result = luigi.build([crobatdns.ImportCrobatOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+#     elif pipeline_name == 'pyshot':
+#         luigi_run_result = luigi.build([pyshot_scan.ParsePyshotOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+#     elif pipeline_name == 'nuclei':
+#         luigi_run_result = luigi.build([nuclei_scan.ParseNucleiOutput(scan_id=scan_id, token=token, manager_url=manager_url)], local_scheduler=True, detailed_summary=True)
+#     elif pipeline_name == 'cleanup':
+#         luigi_run_result = luigi.build([scan_cleanup.ScanCleanup(scan_id=scan_id)], local_scheduler=True, detailed_summary=True)
 
-    if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
-        sys.exit(1)
+#     if luigi_run_result and luigi_run_result.status == luigi.execution_summary.LuigiStatusCode.FAILED:
+#         sys.exit(1)

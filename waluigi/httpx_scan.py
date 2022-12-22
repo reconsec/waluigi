@@ -11,6 +11,7 @@ from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
+tool_name = 'httpx'
 
 def httpx_wrapper(cmd_args):
 
@@ -41,12 +42,8 @@ class HttpXScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-         # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "httpx-inputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to input file
         http_inputs_file = dir_path + os.path.sep + "httpx" + scan_id
@@ -69,9 +66,6 @@ class HttpXScope(luigi.ExternalTask):
 
         http_inputs_f.close()
 
-        # Path to scan inputs
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
         return luigi.LocalTarget(http_inputs_file)
 
 
@@ -88,12 +82,8 @@ class HttpXScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Get screenshot directory
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "httpx-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
         http_outputs_file = dir_path + os.path.sep + "httpx_outputs_" + scan_id
@@ -223,9 +213,6 @@ class HttpXScan(luigi.Task):
         f.write(json.dumps(results_dict))
         f.close()            
 
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, output_dir)
-
 
 @inherits(HttpXScan)
 class ImportHttpXOutput(luigi.Task):
@@ -239,12 +226,8 @@ class ImportHttpXOutput(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "httpx-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "httpx_import_complete"
 
         return luigi.LocalTarget(out_file)
@@ -275,7 +258,7 @@ class ImportHttpXOutput(luigi.Task):
                     f.close()
 
                     if len(scan_data) > 0:
-                        scan_arr = []
+                        
                         json_blobs = scan_data.split("\n")
                         for blob in json_blobs:
                             blob_trimmed = blob.strip()

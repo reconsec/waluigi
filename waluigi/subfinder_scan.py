@@ -13,6 +13,7 @@ from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
+tool_name = 'subfinder'
 
 class SubfinderScope(luigi.ExternalTask):
 
@@ -23,12 +24,8 @@ class SubfinderScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-         # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "subfinder-inputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to each input file
         dns_inputs_file = dir_path + os.path.sep + "subfinder_inputs_" + scan_id
@@ -67,9 +64,6 @@ class SubfinderScope(luigi.ExternalTask):
 
         # Close output file
         f_inputs.close()
-
-        # Path to scan inputs
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
 
         return luigi.LocalTarget(dns_inputs_file)
 
@@ -187,12 +181,8 @@ class SubfinderScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Get screenshot directory
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "subfinder-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
         dns_outputs_file = dir_path + os.path.sep + "subfinder_outputs_" + scan_id
@@ -212,10 +202,6 @@ class SubfinderScan(luigi.Task):
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
         scan_output_file_path = dir_path + os.path.sep + "subfinder_results"
 
         # Write out meta data file
@@ -288,9 +274,6 @@ class SubfinderScan(luigi.Task):
         output_fd.write(json.dumps({'domain_list': ret_list}))
         output_fd.close()
 
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, dir_path)
-
 
 @inherits(SubfinderScan)
 class SubfinderImport(luigi.Task):
@@ -304,11 +287,8 @@ class SubfinderImport(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "subfinder-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         out_file = dir_path + os.path.sep + "subfinder_import_complete"
 

@@ -9,12 +9,11 @@ import multiprocessing
 import traceback
 
 from luigi.util import inherits
-from waluigi import recon_manager
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
-
+tool_name = 'shodan'
 
 class ShodanScope(luigi.ExternalTask):
 
@@ -25,15 +24,11 @@ class ShodanScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Create input directory if it doesn't exist
-        cwd = os.getcwd()
-        shodan_inputs_dir = cwd + os.path.sep + "shodan-inputs-" + scan_id
-        if not os.path.isdir(shodan_inputs_dir):
-            os.mkdir(shodan_inputs_dir)
-            os.chmod(shodan_inputs_dir, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to each input file
-        shodan_ip_file = shodan_inputs_dir + os.path.sep + "shodan_ips_" + scan_id
+        shodan_ip_file = dir_path + os.path.sep + "shodan_ips_" + scan_id
         if os.path.isfile(shodan_ip_file):
             return luigi.LocalTarget(shodan_ip_file)
 
@@ -56,9 +51,6 @@ class ShodanScope(luigi.ExternalTask):
             print("[-] Target list is empty.")
 
         f.close()
-
-        # Path to scan outputs log
-        scan_utils.add_file_to_cleanup(scan_id, shodan_inputs_dir)
 
         return luigi.LocalTarget(shodan_ip_file)
 
@@ -177,13 +169,8 @@ class ShodanScan(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Returns shodan output file
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "shodan-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
-
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "shodan_out_" + scan_id
 
         return luigi.LocalTarget(out_file)
@@ -191,7 +178,6 @@ class ShodanScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
 
         # Read shodan input files
         shodan_input_file = self.input()
@@ -213,7 +199,7 @@ class ShodanScan(luigi.Task):
         # Write the output
         scan_target_dict = scan_input_obj.scan_target_dict
         shodan_key = scan_target_dict['scan_input']
-        #api_key = scan_input_obj.shodan_key
+        
         if shodan_key:
 
             pool = ThreadPool(processes=10)
@@ -254,17 +240,13 @@ class ShodanScan(luigi.Task):
 
             # Close the file
             f_out.close()
-
-            # Path to scan outputs log
-            output_dir = os.path.dirname(self.output().path)
-            scan_utils.add_file_to_cleanup(scan_id, output_dir)
             
         else:
             print("[-] No shodan API key provided.")
 
 
 @inherits(ShodanScan)
-class ParseShodanOutput(luigi.Task):
+class ImportShodanOutput(luigi.Task):
 
     def requires(self):
         # Requires MassScan Task to be run prior
@@ -275,11 +257,8 @@ class ParseShodanOutput(luigi.Task):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        cwd = os.getcwd()
-        dir_path = cwd + os.path.sep + "shodan-outputs-" + scan_id
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
-            os.chmod(dir_path, 0o777)
+        # Init directory
+        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         out_file = dir_path + os.path.sep + "shodan_import_complete"
 

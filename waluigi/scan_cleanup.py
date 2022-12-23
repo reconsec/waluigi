@@ -2,6 +2,7 @@ import os
 import shutil
 import luigi
 import traceback
+import shutil
 
 from datetime import date
 
@@ -20,13 +21,27 @@ class ScanCleanup(luigi.ExternalTask):
             # Delete all the files defined in the cleanup file
             if os.path.isdir(dir_path):
                 try:
-                    #i = 0
+                    # Ensure archive dir exists
+                    archive_dir =  cwd + os.path.sep + "archive"
+                    if not os.path.isdir(archive_dir):
+                        os.makedirs(archive_dir)
+                        os.chmod(archive_dir, 0o777)
+
+                    # Convert date to str
+                    today = date.today()
+                    date_str = today.strftime("%Y%m%d%H%M%S")
+                    archive_zip_file = archive_dir + os.path.sep + self.scan_id + "_" + date_str
+
+                    # Create zip archive
+                    shutil.make_archive(archive_zip_file, 'zip', dir_path)
+
+                    # Remove scan dir
                     shutil.rmtree(dir_path)
+
                 except Exception as e:
                     print("[-] Error deleting output directory: %s" % str(e))
                     pass
             else:
-                #print("[-] Scan cleanup file does not exist: %s" % all_inputs_file)
                 print("[-] Scan directory does not exist: %s" % dir_path)
 
 

@@ -285,7 +285,7 @@ class NmapScan(luigi.Task):
                 counter += 1
 
             # Run threaded
-            print(commands)
+            #print(commands)
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 executor.map(subprocess.run, commands)
 

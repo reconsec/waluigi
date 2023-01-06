@@ -145,8 +145,8 @@ class NucleiScan(luigi.Task):
                             endpoint_port_obj_map[endpoint] = port_obj_instance
                             total_endpoint_set.add(endpoint)
 
-                        # Add endpoint per domain
-                        for domain_str in domain_list:
+                        # Add endpoint per domain - Truncate to top 20
+                        for domain_str in domain_list[:20]:
 
                             endpoint = prefix + domain_str + ":" + port_str
                             # print("[*] Endpoint: %s" % endpoint)

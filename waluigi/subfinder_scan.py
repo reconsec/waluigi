@@ -12,8 +12,26 @@ import yaml
 from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+from tqdm import tqdm
+
 
 tool_name = 'subfinder'
+
+def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
+
+    ret_list = []
+    # Call subfinder process
+    error_flag = scan_utils.process_wrapper(command, use_shell, my_env)
+    #print("[+] Process returned")
+    # Parse the output
+    obj_arr = scan_utils.parse_json_blob_file(scan_output_file_path)
+    for domain_entry in obj_arr:
+        domain_name = domain_entry['host']
+        ip_str = domain_entry['ip']
+        ret_list.append({'ip' : ip_str, 'domain' : domain_name})
+
+    return ret_list
+
 
 class SubfinderScope(luigi.ExternalTask):
 
@@ -69,7 +87,8 @@ class SubfinderScope(luigi.ExternalTask):
 
 def update_config_file(api_keys, my_env):
 
-    config_file_path = "/root/.config/subfinder/provider-config.yaml"
+    home_dir = os.path.expanduser('~')
+    config_file_path = "%s/.config/subfinder/provider-config.yaml" % home_dir
 
     # If no file then run subfinder to generate the template
     if os.path.isfile(config_file_path) == False:
@@ -216,41 +235,18 @@ class SubfinderScan(luigi.Task):
 
             # Add env variables for HOME
             my_env = os.environ.copy()
-            command = [] 
-
+            
+            use_shell = False
             if os.name != 'nt':
-                my_env["HOME"] = "/root"
-                command.append("sudo")
+                home_dir = os.path.expanduser('~')
+                my_env["HOME"] = home_dir
 
             # Set the API keys
             update_config_file(api_keys, my_env)
 
-            command_arr = [
-                "subfinder",
-                "-json",
-                "-dL",
-                subfinder_domain_list,
-                "-o",
-                scan_output_file_path
-            ]
-
-            command.extend(command_arr)
-
-            # Add optional arguments
-            #command.extend(option_arr)
-
-            # Execute subfinder
-            scan_utils.process_wrapper(command, my_env=my_env)
-
-            # Reset the API keys
-            update_config_file({}, my_env)
-
-            domain_set = set()
-
-            obj_arr = scan_utils.parse_json_blob_file(scan_output_file_path)
-            for domain_entry in obj_arr:
-                domain_name = domain_entry['host']
-                domain_set.add(domain_name)
+            # Add threads for large targets
+            pool = ThreadPool(processes=10)
+            thread_list = []
 
             # Add the domains from the wildcards
             f = open(subfinder_domain_list, 'r')
@@ -258,18 +254,57 @@ class SubfinderScan(luigi.Task):
             f.close()   
 
             # Add the lines
+            domain_set = set()
             if len(sub_lines) > 0:
                 for line in sub_lines:
-                    line_str = line.strip()
-                    if len(line_str) > 0:
-                        domain_set.add(line_str)
+                    domain_str = line.strip()
+                    if len(domain_str) > 0:
 
+                        domain_set.add(domain_str)
+
+                        command = [] 
+                        command_arr = [
+                            "subfinder",
+                            "-json",
+                            "-d",
+                            domain_str,
+                            "-o",
+                            scan_output_file_path,
+                            "-active",
+                            "-ip"
+                        ]
+
+                        command.extend(command_arr)
+
+                        # Add optional arguments
+                        #command.extend(option_arr)
+
+                        thread_list.append(pool.apply_async(subfinder_wrapper, (scan_output_file_path, command, use_shell, my_env)))
+
+                # Close the pool
+                pool.close()
+
+                # Loop through thread function calls and update progress
+                for thread_obj in tqdm(thread_list):
+                    temp_list = thread_obj.get()
+                    #print(temp_list)
+                    ret_list.extend( temp_list )
+
+            # Reset the API keys
+            update_config_file({}, my_env)
+
+
+            print("[*] Before: ")
+            print(domain_set)
             if len(domain_set) > 0:
-                ret_list = dns_wrapper(domain_set)
+                ret_list.extend( dns_wrapper(domain_set) )
 
         else:
             # Remove empty file
             os.remove(self.input().path)
+
+        print("[*] After: ")
+        print(ret_list)
 
         output_fd.write(json.dumps({'domain_list': ret_list}))
         output_fd.close()
@@ -313,6 +348,7 @@ class SubfinderImport(luigi.Task):
                 domain_list = domain_map['domain_list']
 
                 ip_map = {}
+
                 #Convert from domain to ip map to ip to domain map
                 for domain_entry in domain_list:
 

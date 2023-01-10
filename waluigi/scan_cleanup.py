@@ -28,8 +28,8 @@ class ScanCleanup(luigi.ExternalTask):
                         os.chmod(archive_dir, 0o777)
 
                     # Convert date to str
-                    today = date.today()
-                    date_str = today.strftime("%Y%m%d%H%M%S")
+                    now_time = date.now()
+                    date_str = now_time.strftime("%Y%m%d%H%M%S")
                     archive_zip_file = archive_dir + os.path.sep + self.scan_id + "_" + date_str
 
                     # Create zip archive

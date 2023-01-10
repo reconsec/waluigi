@@ -4,7 +4,7 @@ import luigi
 import traceback
 import shutil
 
-from datetime import date
+from datetime import datetime
 
 class ScanCleanup(luigi.ExternalTask):
 
@@ -28,7 +28,7 @@ class ScanCleanup(luigi.ExternalTask):
                         os.chmod(archive_dir, 0o777)
 
                     # Convert date to str
-                    now_time = date.now()
+                    now_time = datetime.now()
                     date_str = now_time.strftime("%Y%m%d%H%M%S")
                     archive_zip_file = archive_dir + os.path.sep + self.scan_id + "_" + date_str
 

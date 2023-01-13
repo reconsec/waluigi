@@ -24,6 +24,13 @@ requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
 
 def tool_order_cmp(x, y):
+
+    if x.collection_tool.scan_order is None:
+        return -1
+
+    if y.collection_tool.scan_order is None:
+        return 1
+
     if x.collection_tool.scan_order > y.collection_tool.scan_order:
         return 1
     elif x.collection_tool.scan_order < y.collection_tool.scan_order:
@@ -135,14 +142,16 @@ class ScheduledScanThread(threading.Thread):
         self.recon_manager.set_current_target(self.connection_manager, target_id)
 
         #print(sched_scan_obj.collection_tools)
-        # Sort the list        
+        # Sort the list
         sorted_list = sorted(sched_scan_obj.collection_tools, key=functools.cmp_to_key(tool_order_cmp))
         print(sorted_list)
 
         for collection_tool_inst in sorted_list:
 
             tool_obj = collection_tool_inst.collection_tool
-            
+            # Skip any tools that don't have a scan order
+            if tool_obj.scan_order == None:
+                continue
             # Set the tool id
             scan_input_obj.current_tool = tool_obj
 

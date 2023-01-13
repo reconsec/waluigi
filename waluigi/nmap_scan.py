@@ -107,7 +107,7 @@ class NmapScan(luigi.Task):
         if len(json_input) > 0:
             nmap_scan_obj = json.loads(json_input)
             scan_input = nmap_scan_obj['scan_input']
-            nmap_scan_args = nmap_scan_obj['script_args']
+            nmap_scan_args = nmap_scan_obj['tool_args']
 
             target_map = {}
             if 'target_map' in scan_input:
@@ -235,8 +235,8 @@ class NmapScan(luigi.Task):
                     f.write(ip + "\n")
                 f.close()
 
-                if 'script-args' in scan_obj:
-                    script_args = scan_obj['script-args']
+                if 'tool_args' in scan_obj:
+                    script_args = scan_obj['tool_args']
 
                 # Nmap command args
                 nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_"+ str(counter) + mod_str

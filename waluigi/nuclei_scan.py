@@ -123,7 +123,7 @@ class NucleiScan(luigi.Task):
                 thread_list = []
                 
                 scan_input_data = nuclei_scan_obj['scan_input']
-                template_path_list = nuclei_scan_obj['template_path_list']
+                template_path_list = nuclei_scan_obj['tool_args']
                 #print(scan_input_data)
 
                 target_map = {}

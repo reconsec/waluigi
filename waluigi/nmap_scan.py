@@ -27,8 +27,14 @@ class NmapScope(luigi.ExternalTask):
         # Init directory
         dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
-        scan_step = str(scan_input_obj.current_step)
-        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs_" + scan_step
+        scan_target_dict = scan_input_obj.scan_target_dict
+        mod_str = ''
+        if 'module_id' in scan_target_dict:
+            module_id = str(scan_target_dict['module_id'])
+            mod_str = "_" + module_id
+
+        #scan_step = str(scan_input_obj.current_step)
+        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs" + mod_str
         if os.path.isfile(nmap_inputs_file):
             return luigi.LocalTarget(nmap_inputs_file)
 
@@ -63,11 +69,17 @@ class NmapScan(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        scan_step = str(scan_input_obj.current_step)
+        #scan_step = str(scan_input_obj.current_step)
+
+        scan_target_dict = scan_input_obj.scan_target_dict
+        mod_str = ''
+        if 'module_id' in scan_target_dict:
+            module_id = str(scan_target_dict['module_id'])
+            mod_str = "_" + module_id
 
         # Init directory
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ scan_step +".meta"
+        meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ scan_id + mod_str + ".meta"
 
         return luigi.LocalTarget(meta_file_path)
 
@@ -75,7 +87,7 @@ class NmapScan(luigi.Task):
 
         scan_input_obj = self.scan_input
         
-        scan_step = str(scan_input_obj.current_step)
+        #scan_step = str(scan_input_obj.current_step)
         selected_interface = scan_input_obj.selected_interface
 
         # Read input file
@@ -95,15 +107,17 @@ class NmapScan(luigi.Task):
         if len(json_input) > 0:
             nmap_scan_obj = json.loads(json_input)
             scan_input = nmap_scan_obj['scan_input']
-            nmap_scan_args = nmap_scan_obj['script_args']
+            nmap_scan_args = nmap_scan_obj['tool_args']
 
             target_map = {}
             if 'target_map' in scan_input:
                 target_map = scan_input['target_map']
 
             module_id = None
+            mod_str = ''
             if 'module_id' in nmap_scan_obj:
                 module_id = nmap_scan_obj['module_id']
+                mod_str = "_" + module_id
 
             #print(input_nmap_scan_list)
             # Output structure for scan jobs
@@ -209,7 +223,7 @@ class NmapScan(luigi.Task):
                 script_args = None
                 port_list = scan_obj['port_list']
                 port_comma_list = ','.join(port_list)
-                ip_list_path = dir_path + os.path.sep + "nmap_in_%s_%s" % (counter, scan_step)
+                ip_list_path = dir_path + os.path.sep + "nmap_in_" + str(counter) + mod_str
 
                 # Write IPs to a file
                 ip_list = scan_obj['ip_set']
@@ -221,11 +235,11 @@ class NmapScan(luigi.Task):
                     f.write(ip + "\n")
                 f.close()
 
-                if 'script-args' in scan_obj:
-                    script_args = scan_obj['script-args']
+                if 'tool_args' in scan_obj:
+                    script_args = scan_obj['tool_args']
 
                 # Nmap command args
-                nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_%s_%s" % (counter, scan_step)
+                nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_"+ str(counter) + mod_str
 
                 # Add sudo if on linux based system
                 command = []
@@ -325,11 +339,17 @@ class ImportNmapOutput(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        scan_step = str(scan_input_obj.current_step)
+        #scan_step = str(scan_input_obj.current_step)
+
+        scan_target_dict = scan_input_obj.scan_target_dict
+        mod_str = ''
+        if 'module_id' in scan_target_dict:
+            module_id = str(scan_target_dict['module_id'])
+            mod_str = "_" + module_id
 
         # Init directory
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        out_file = dir_path + os.path.sep + "nmap_import_" + scan_step +"_complete"
+        out_file = dir_path + os.path.sep + "nmap_import_complete" + mod_str
 
         return luigi.LocalTarget(out_file)
 

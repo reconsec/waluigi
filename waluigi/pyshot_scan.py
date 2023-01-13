@@ -90,7 +90,7 @@ class PyshotScan(luigi.Task):
 
 
         # Ensure output folder exists
-        dir_path = self.output().path
+        dir_path = os.path.dirname(self.output().path)
 
         pyshot_input_file = self.input()
         f = pyshot_input_file.open()
@@ -120,7 +120,7 @@ class PyshotScan(luigi.Task):
 
                 port_obj_map = target_dict['port_map']
                 for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]                    
+                    port_obj = port_obj_map[port_key]
 
                     # print(scan_inst)
                     port_id = str(port_obj['port_id'])
@@ -166,12 +166,14 @@ class ImportPyshotOutput(luigi.Task):
 
     def run(self):
 
-        pyshot_output_dir = self.input().path
+
+        meta_file = self.input().path
+        #pyshot_output_dir = self.input().path
         scan_input_obj = self.scan_input
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
         # Read meta data file
-        meta_file = '%s%s%s' % (pyshot_output_dir, os.path.sep, 'screenshots.meta' )
+        #meta_file = '%s%s%s' % (pyshot_output_dir, os.path.sep, 'screenshots.meta' )
         if os.path.exists(meta_file):
 
             f = open(meta_file, 'r')

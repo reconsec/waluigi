@@ -222,14 +222,19 @@ class ScheduledScanThread(threading.Thread):
                     if self.connection_manager:
                         # Release the lock after scan
                         self.connection_manager.free_connection_lock(lock_val)
-           
-            # Connect to extender to import results
-            if self.connection_manager:
 
-                lock_val = self.connection_manager.connect_to_extender()
-                if not lock_val:
-                    print("[-] Failed connecting to extender")
-                    return False
+                        lock_val = self.connection_manager.connect_to_extender()
+                        if not lock_val:
+                            print("[-] Failed connecting to extender")
+                            return False
+           
+            # # Connect to extender to import results
+            # if self.connection_manager:
+
+            #     lock_val = self.connection_manager.connect_to_extender()
+            #     if not lock_val:
+            #         print("[-] Failed connecting to extender")
+            #         return False
 
             try:
         
@@ -270,34 +275,39 @@ class ScheduledScanThread(threading.Thread):
         self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.RUNNING.value)
 
         # Execute scan jobs
-        ret_val = self.execute_scan_jobs(sched_scan_obj, scan_input_obj)
-
-        # Set status
-        if self.connection_manager:
-            # Connect to extender to remove scheduled scan and update scan status
-            lock_val = self.connection_manager.connect_to_extender()
-            if not lock_val:
-                print("[-] Failed connecting to extender")
-                return False
-
         try:
+            ret_val = self.execute_scan_jobs(sched_scan_obj, scan_input_obj)
 
-            scan_status = ScanStatus.ERROR.value
-            if ret_val == True:
-                # Remove scheduled scan
-                self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
-
-                # Update scan status
-                scan_status = ScanStatus.COMPLETED.value
-            
-            # Update scan status
-            self.recon_manager.update_scan_status(scan_input_obj.scan_id, scan_status)
-
-        finally:
+            # Set status
             if self.connection_manager:
-                # Free the lock
-                self.connection_manager.free_connection_lock(lock_val)
+                # Connect to extender to remove scheduled scan and update scan status
+                lock_val = self.connection_manager.connect_to_extender()
+                if not lock_val:
+                    print("[-] Failed connecting to extender")
+                    return False
 
+            try:
+
+                scan_status = ScanStatus.ERROR.value
+                if ret_val == True:
+                    # Remove scheduled scan
+                    self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
+
+                    # Update scan status
+                    scan_status = ScanStatus.COMPLETED.value
+                
+                # Update scan status
+                self.recon_manager.update_scan_status(scan_input_obj.scan_id, scan_status)
+
+            finally:
+                if self.connection_manager:
+                    # Free the lock
+                    self.connection_manager.free_connection_lock(lock_val)
+
+        except Exception as e:
+            # Update scan status
+            self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.ERROR.value)
+            print(traceback.format_exc())
        
         return
 

@@ -311,6 +311,8 @@ class ImportHttpXOutput(luigi.Task):
                 #print(scan_results)
                 ret_val = recon_manager.import_ports_ext(scan_results)
                 print("[+] Imported httpx scan to manager.")
+            else:
+                print("[*] No ports to import to manager")
 
             # Write to output file
             f = open(self.output().path, 'w')

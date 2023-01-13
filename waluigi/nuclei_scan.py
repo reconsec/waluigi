@@ -20,13 +20,19 @@ class NucleiScope(luigi.ExternalTask):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        scan_step = str(scan_input_obj.current_step)
+        #scan_step = str(scan_input_obj.current_step)
 
         # Init directory
         dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
+        scan_target_dict = scan_input_obj.scan_target_dict
+        mod_str = ''
+        if 'module_id' in scan_target_dict:
+            module_id = str(scan_target_dict['module_id'])
+            mod_str = "_" + module_id
+
         # path to input file
-        nuclei_inputs_file = dir_path + os.path.sep + ("nuclei_inputs_%s_%s" % (scan_step, scan_id))
+        nuclei_inputs_file = dir_path + os.path.sep + "nuclei_inputs_" +  scan_id + mod_str
         if os.path.isfile(nuclei_inputs_file):
             return luigi.LocalTarget(nuclei_inputs_file)
 
@@ -57,12 +63,18 @@ class NucleiScan(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        scan_step = str(scan_input_obj.current_step)
+        #scan_step = str(scan_input_obj.current_step)
 
         # Init directory
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
-        nuclei_outputs_file = dir_path + os.path.sep + ("nuclei_outputs_%s_%s" % (scan_step, scan_id))
+        scan_target_dict = scan_input_obj.scan_target_dict
+        mod_str = ''
+        if 'module_id' in scan_target_dict:
+            module_id = str(scan_target_dict['module_id'])
+            mod_str = "_" + module_id
+
+        nuclei_outputs_file = dir_path + os.path.sep + "nuclei_outputs_" + scan_id + mod_str
         return luigi.LocalTarget(nuclei_outputs_file)
 
 
@@ -70,7 +82,7 @@ class NucleiScan(luigi.Task):
 
         scan_input_obj = self.scan_input
         
-        scan_step = str(scan_input_obj.current_step)
+        #scan_step = str(scan_input_obj.current_step)
 
         # Make sure template path exists        
         my_env = os.environ.copy()
@@ -174,14 +186,20 @@ class NucleiScan(luigi.Task):
                 counter = 0
                 if len(total_endpoint_set) > 0:
 
-                    nuclei_scan_input_file_path = (output_dir + os.path.sep + "nuclei_scan_in_" + scan_step).strip()
+                    scan_target_dict = scan_input_obj.scan_target_dict
+                    mod_str = ''
+                    if 'module_id' in scan_target_dict:
+                        module_id = str(scan_target_dict['module_id'])
+                        mod_str = "_" + module_id
+
+                    nuclei_scan_input_file_path = (output_dir + os.path.sep + "nuclei_scan_in" + mod_str).strip()
                     f = open(nuclei_scan_input_file_path, 'w')
                     for endpoint in total_endpoint_set:
                         f.write(endpoint + '\n')
                     f.close()
 
                     # Nmap command args
-                    nuclei_output_file = output_dir + os.path.sep + "nuclei_scan_out_" + scan_step + "_" + str(counter)
+                    nuclei_output_file = output_dir + os.path.sep + "nuclei_scan_out" + mod_str + "_" + str(counter)
 
                     command = []
                     if os.name != 'nt':
@@ -237,12 +255,18 @@ class ImportNucleiOutput(luigi.Task):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        scan_step = str(scan_input_obj.current_step)
+        #scan_step = str(scan_input_obj.current_step)
 
         # Init directory
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
-        out_file = dir_path + os.path.sep + ("nuclei_import_complete_%s_%s" % (scan_step, scan_id))
+        scan_target_dict = scan_input_obj.scan_target_dict
+        mod_str = ''
+        if 'module_id' in scan_target_dict: 
+            module_id = str(scan_target_dict['module_id'])
+            mod_str = "_" + module_id
+
+        out_file = dir_path + os.path.sep + "nuclei_import_complete_" + scan_id + mod_str
         return luigi.LocalTarget(out_file)
 
     def run(self):

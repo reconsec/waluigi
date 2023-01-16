@@ -81,9 +81,7 @@ class ScanInput():
         self.scheduled_scan = scheduled_scan
         self.scan_id = None
         self.scan_target = None
-        #self.shodan_key = None
         self.scan_target_dict = None
-        self.current_step = 0
         self.current_tool = None
         self.selected_interface = None
 
@@ -101,10 +99,6 @@ class ScanInput():
         self.scan_target = self.scan_thread.recon_manager.get_target(self.scan_id)
         if self.scan_target is None:
             raise RuntimeError("[-] No scan target returned for scan.")
-
-        # Get the shodan key
-        #print("[*] Retrieving Shodan data")
-        #self.shodan_key = self.scan_thread.recon_manager.get_shodan_key()
 
         # Get the selected interface
         self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
@@ -137,6 +131,7 @@ class ScheduledScanThread(threading.Thread):
 
     def execute_scan_jobs(self, sched_scan_obj, scan_input_obj):
 
+        ret_val = True
         # Set connection target in connection manager to this target 
         target_id = scan_input_obj.scheduled_scan.target_id
         self.recon_manager.set_current_target(self.connection_manager, target_id)
@@ -144,125 +139,130 @@ class ScheduledScanThread(threading.Thread):
         #print(sched_scan_obj.collection_tools)
         # Sort the list
         sorted_list = sorted(sched_scan_obj.collection_tools, key=functools.cmp_to_key(tool_order_cmp))
-        print(sorted_list)
 
-        for collection_tool_inst in sorted_list:
-
-            tool_obj = collection_tool_inst.collection_tool
-            # Skip any tools that don't have a scan order
-            if tool_obj.scan_order == None:
-                continue
-            # Set the tool id
-            scan_input_obj.current_tool = tool_obj
-
-            # Connect to extender to see if scan has been cancelled and get tool scope
-            if self.connection_manager:
-                lock_val = self.connection_manager.connect_to_extender()
-                if not lock_val:
-                    print("[-] Failed connecting to extender")
-                    return False
-
-            scan_input = None
-            try:
-                # Check if scan is cancelled
-                scan = self.recon_manager.get_scan(scan_input_obj.scan_id)
-                if scan and scan.status_int == ScanStatus.CANCELLED.value:
-                    print("[-] Scan cancelled. Returning.")
-                    return False
-
-                # Check if load balanced
-                skip_load_balance_ports = self.recon_manager.is_load_balanced() 
-
-                # Get scope
-                scan_input  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, tool_obj.id, skip_load_balance_ports)
-                    
-            finally:
-
-                if self.connection_manager:
-                    # Free the lock
-                    self.connection_manager.free_connection_lock(lock_val)
-
-            # Return if there was an error getting the scope
-            if scan_input is None:
+        # Connect to extender to see if scan has been cancelled and get tool scope
+        if self.connection_manager:
+            lock_val = self.connection_manager.connect_to_extender()
+            if not lock_val:
+                print("[-] Failed connecting to extender")
                 return False
 
-            # Skip tool if there is no input
-            #if 'target_count' in scan_input and scan_input['target_count'] == 0:
-            #    continue
-            if 'scan_input' in scan_input and len(scan_input['scan_input']['target_map']) == 0:
-                print("[-] Scan input is empty. Skipping")
-                continue
+        # Surround in try block to make sure the lock is released
+        try:
 
-            # Set the input
-            scan_input_obj.scan_target_dict = scan_input
+            for collection_tool_inst in sorted_list:
 
-            # If the tool is active then connect to the target and run the scan
-            if tool_obj.tool_type == 2:
+                # Return value for tool
+                tool_ret = True
 
-                if self.connection_manager:
-                    # Connect to synack target
-                    con = self.connection_manager.connect_to_target()
-                    if not con:
-                        print("[-] Failed connecting to target")
-                        return False
+                tool_obj = collection_tool_inst.collection_tool
+                # Skip any tools that don't have a scan order
+                if tool_obj.scan_order == None:
+                    continue
 
-                    # Obtain the lock before we start a scan
-                    lock_val = self.connection_manager.get_connection_lock()
+                # Set the tool obj
+                scan_input_obj.current_tool = tool_obj
 
+
+                # Check if tool instance is already completed
+                tool_status = self.recon_manager.get_tool_status(collection_tool_inst.id)
+                #print("[*] %s tool status: %d" %(tool_obj.name, tool_status))
+                if tool_status == CollectionToolStatus.COMPLETED.value:
+                    print("[*] %s tool complete,  skipping." % tool_obj.name)
+                    continue
+                
+                
+                scan_input = None
                 try:
-                    
-                    # Execute appropriate tool
-                    ret = scan_pipeline.scan_func(scan_input_obj)
-                    if not ret:
-                        self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_obj.id, CollectionToolStatus.ERROR.value)
-                        print("[-] Scan Failed")
+                    # Check if scan is cancelled
+                    scan = self.recon_manager.get_scan(scan_input_obj.scan_id)
+                    if scan and scan.status_int == ScanStatus.CANCELLED.value:
+                        print("[-] Scan cancelled. Returning.")
                         return False
+
+                    # Check if load balanced
+                    skip_load_balance_ports = self.recon_manager.is_load_balanced() 
+
+                    # Get scope
+                    scan_input  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, collection_tool_inst.id, skip_load_balance_ports)
 
                 finally:
+
                     if self.connection_manager:
-                        # Release the lock after scan
+                        # Free the lock
                         self.connection_manager.free_connection_lock(lock_val)
 
-                        lock_val = self.connection_manager.connect_to_extender()
-                        if not lock_val:
-                            print("[-] Failed connecting to extender")
+                # Return if there was an error getting the scope
+                if scan_input is None:
+                    return False
+
+                # Skip tool if there is no input
+                if 'scan_input' in scan_input and len(scan_input['scan_input']['target_map']) == 0:
+                    print("[-] Scan input is empty. Skipping")
+                    continue
+
+                # Set the input
+                scan_input_obj.scan_target_dict = scan_input
+
+                # If the tool is active then connect to the target and run the scan
+                if tool_obj.tool_type == 2:
+
+                    if self.connection_manager:
+                        # Connect to synack target
+                        con = self.connection_manager.connect_to_target()
+                        if not con:
+                            print("[-] Failed connecting to target")
                             return False
-           
-            # # Connect to extender to import results
-            # if self.connection_manager:
 
-            #     lock_val = self.connection_manager.connect_to_extender()
-            #     if not lock_val:
-            #         print("[-] Failed connecting to extender")
-            #         return False
+                        # Obtain the lock before we start a scan
+                        lock_val = self.connection_manager.get_connection_lock()
 
-            try:
-        
+                    try:
+                        
+                        # Execute appropriate tool
+                        ret = scan_pipeline.scan_func(scan_input_obj)
+                        if not ret:
+                            tool_ret = False
+
+                    finally:
+
+                        if self.connection_manager:
+                            # Release the lock after scan
+                            self.connection_manager.free_connection_lock(lock_val)
+
+                            lock_val = self.connection_manager.connect_to_extender()
+                            if not lock_val:
+                                print("[-] Failed connecting to extender")
+                                return False
+            
                 # Import results
                 ret = scan_pipeline.import_func(scan_input_obj)
                 if not ret:
-                    self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_obj.id, CollectionToolStatus.ERROR.value)
-                    print("[-] Import Failed")
-                    return False
+                    tool_ret = False
 
-            finally:
-                if self.connection_manager:
-                    # Free the lock
-                    self.connection_manager.free_connection_lock(lock_val)
+                # Set status for the tool
+                if tool_ret:
+                    self.recon_manager.update_tool_status( collection_tool_inst.id, CollectionToolStatus.COMPLETED.value)
+                else:
+                    # Set error code and break
+                    self.recon_manager.update_tool_status( collection_tool_inst.id, CollectionToolStatus.ERROR.value)
+                    ret_val = False
+                    break
+                
+                    
+                # Reset the tool id
+                scan_input_obj.current_tool = None
 
-            # Update scan status
-            self.recon_manager.update_tool_status(scan_input_obj.scan_id, scan_input_obj.current_step, tool_obj.id, CollectionToolStatus.COMPLETED.value)
+        finally:
 
-            # Reset the tool id
-            scan_input_obj.current_tool = None
-
-            # Increment step
-            scan_input_obj.current_step += 1
+            if self.connection_manager:
+                # Free the lock
+                self.connection_manager.free_connection_lock(lock_val)
         
         # Cleanup files
         ret = scan_pipeline.scan_cleanup_func(scan_input_obj.scan_id)
 
-        return True
+        return ret_val
 
 
     def process_scan_obj(self, sched_scan_obj):
@@ -812,17 +812,35 @@ class ReconManager:
 
         return True
 
-    def update_tool_status(self, scan_id, scan_step, tool_id, status, status_message=''):
+    def get_tool_status(self, tool_id):
+
+        status = None
+        r = requests.get('%s/api/tool/status/%s' % (self.manager_url, tool_id), headers=self.headers, verify=False)
+        if r.status_code == 404:
+            return status
+        if r.status_code != 200:
+            print("[-] Unknown Error")
+            return status
+
+        content = r.json()
+        data = self._decrypt_json(content)
+        if data:
+            tool_inst = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+            status = tool_inst.status
+
+        return status
+
+    def update_tool_status(self, tool_id, status, status_message=''):
 
         # Import the data to the manager
-        status_dict = {'scan_step' : scan_step, 'status': status, 'status_message': status_message}
+        status_dict = { 'status': status, 'status_message': status_message}
         json_data = json.dumps(status_dict).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
         
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/scan/%s/tool/%s' % (self.manager_url, scan_id, tool_id), headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/tool/%s' % (self.manager_url, tool_id), headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating tool status.")
 

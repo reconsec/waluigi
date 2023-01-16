@@ -11,8 +11,6 @@ from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
-tool_name = 'httpx'
-
 def httpx_wrapper(cmd_args):
 
     ret_value = True
@@ -33,7 +31,7 @@ def httpx_wrapper(cmd_args):
 
     return ret_value
 
-class HttpXScope(luigi.ExternalTask):
+class HttpXScan(luigi.Task):
 
     scan_input = luigi.Parameter()
 
@@ -43,46 +41,7 @@ class HttpXScope(luigi.ExternalTask):
         scan_id = scan_input_obj.scan_id
 
         # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
-
-        # path to input file
-        http_inputs_file = dir_path + os.path.sep + "httpx" + scan_id
-        if os.path.isfile(http_inputs_file):
-            return luigi.LocalTarget(http_inputs_file) 
-
-        # Create output file
-        http_inputs_f = open(http_inputs_file, 'w')
-        
-        scan_target_dict = scan_input_obj.scan_target_dict
-        if scan_target_dict:
-
-            # Write the output
-            scan_input = json.dumps(scan_target_dict)
-            http_inputs_f.write(scan_input)            
-
-        else:
-            print("[-] HTTPx scan array is empted.")
-            
-
-        http_inputs_f.close()
-
-        return luigi.LocalTarget(http_inputs_file)
-
-
-@inherits(HttpXScope)
-class HttpXScan(luigi.Task):
-
-
-    def requires(self):
-        # Requires HttpXScope Task to be run prior
-        return HttpXScope(scan_input=self.scan_input)
-
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
@@ -92,12 +51,14 @@ class HttpXScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        #scan_id = scan_input_obj.scan_id
 
-        http_input_file = self.input()
-        f = http_input_file.open()
-        http_scan_data = f.read()
-        f.close()
+        # http_input_file = self.input()
+        # f = http_input_file.open()
+        # http_scan_data = f.read()
+        # f.close()
+
+        scan_obj = scan_input_obj.scan_target_dict        
 
         # Get output file path
         output_file_path = self.output().path
@@ -106,11 +67,13 @@ class HttpXScan(luigi.Task):
         output_file_list = []
         port_to_id_map = {}
 
-        if len(http_scan_data) > 0:
+        #if len(http_scan_data) > 0:
+        print(scan_obj)
+        if scan_obj:
 
-            scan_obj = json.loads(http_scan_data)
+            #scan_obj = json.loads(http_scan_data)
             scan_input_data = scan_obj['scan_input']
-            #print(scan_input_data)
+            print(scan_input_data)
 
             target_map = {}
             if 'target_map' in scan_input_data:
@@ -221,17 +184,6 @@ class ImportHttpXOutput(luigi.Task):
         # Requires HttpScan Task to be run prior
         return HttpXScan(scan_input=self.scan_input)
 
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        out_file = dir_path + os.path.sep + "httpx_import_complete"
-
-        return luigi.LocalTarget(out_file)
-
     def run(self):
 
         scan_input_obj = self.scan_input
@@ -313,8 +265,3 @@ class ImportHttpXOutput(luigi.Task):
                 print("[+] Imported httpx scan to manager.")
             else:
                 print("[*] No ports to import to manager")
-
-            # Write to output file
-            f = open(self.output().path, 'w')
-            f.write("complete")
-            f.close()

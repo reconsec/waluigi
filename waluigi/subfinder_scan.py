@@ -14,9 +14,6 @@ from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 from tqdm import tqdm
 
-
-tool_name = 'subfinder'
-
 def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
 
     ret_list = []
@@ -32,58 +29,40 @@ def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
 
     return ret_list
 
+def get_subfinder_input(scan_input_obj):    
 
-class SubfinderScope(luigi.ExternalTask):
+    scan_id = scan_input_obj.scan_id
 
-    scan_input = luigi.Parameter()
+    # Init directory
+    tool_name = scan_input_obj.current_tool.name
+    dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
+    
+    dns_url_file = dir_path + os.path.sep + "dns_urls_" + scan_id
+    url_inputs_fd = open(dns_url_file, 'w')
 
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
-
-        # path to each input file
-        dns_inputs_file = dir_path + os.path.sep + "subfinder_inputs_" + scan_id
-        if os.path.isfile(dns_inputs_file):
-            return luigi.LocalTarget(dns_inputs_file) 
-
-        # Create output file
-        f_inputs = open(dns_inputs_file, 'w')
+    scan_target_dict = scan_input_obj.scan_target_dict
+    if scan_target_dict:
         
-        dns_url_file = dir_path + os.path.sep + "dns_urls_" + scan_id
-        url_inputs_fd = open(dns_url_file, 'w')
-
-        scan_target_dict = scan_input_obj.scan_target_dict
-        if scan_target_dict:
-            
-            # Write the output
-            scan_input = scan_target_dict['scan_input']
-            api_keys = scan_target_dict['api_keys']
-            target_map = {}
-            if 'target_map' in scan_input:
-                target_map = scan_input['target_map']
-           
-            print("[+] Retrieved %d urls from database" % len(target_map))
-            for target_key in target_map:
-                url_inputs_fd.write(target_key + '\n')          
-
-        else:
-            print("[-] Target url list is empty.")
-
-        # Close urls inputs file
-        url_inputs_fd.close()
-
         # Write the output
-        scan_dict = json.dumps({'input_path': dns_url_file, 'api_keys' : api_keys})
-        f_inputs.write(scan_dict)
+        scan_input = scan_target_dict['scan_input']
+        api_keys = scan_target_dict['api_keys']
+        target_map = {}
+        if 'target_map' in scan_input:
+            target_map = scan_input['target_map']
+        
+        print("[+] Retrieved %d urls from database" % len(target_map))
+        for target_key in target_map:
+            url_inputs_fd.write(target_key + '\n')          
 
-        # Close output file
-        f_inputs.close()
+    else:
+        print("[-] Target url list is empty.")
 
-        return luigi.LocalTarget(dns_inputs_file)
+    # Close urls inputs file
+    url_inputs_fd.close()
+
+    # Write the output
+    scan_dict = {'input_path': dns_url_file, 'api_keys' : api_keys}
+    return scan_dict
 
 def update_config_file(api_keys, my_env):
 
@@ -127,10 +106,8 @@ def update_config_file(api_keys, my_env):
 def dns_wrapper(domain_set):
 
     ret_list = []
-    #print(domain_set)
     try:
 
-        # print(port_obj_arr)
         thread_map = {}
         pool = ThreadPool(processes=20)
 
@@ -187,13 +164,9 @@ def dns_wrapper(domain_set):
     return ret_list
 
 
-@inherits(SubfinderScope)
 class SubfinderScan(luigi.Task):
 
-
-    def requires(self):
-        # Requires subfinderScope Task to be run prior
-        return SubfinderScope(scan_input=self.scan_input)
+    scan_input = luigi.Parameter()
 
     def output(self):
 
@@ -201,6 +174,7 @@ class SubfinderScan(luigi.Task):
         scan_id = scan_input_obj.scan_id
 
         # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
@@ -210,13 +184,7 @@ class SubfinderScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Read dns input files
-        f = self.input().open()
-        json_input = f.read()
-        #print(json_input)
-        f.close()
+        dns_scan_obj = get_subfinder_input(scan_input_obj)
 
         # Ensure output folder exists
         meta_file_path = self.output().path
@@ -227,85 +195,74 @@ class SubfinderScan(luigi.Task):
         output_fd = open(meta_file_path, 'w')
         ret_list = []
 
-        #load input file
-        if len(json_input) > 0:
-            dns_scan_obj = json.loads(json_input)
-            subfinder_domain_list = dns_scan_obj['input_path']
-            api_keys = dns_scan_obj['api_keys']
+        subfinder_domain_list = dns_scan_obj['input_path']
+        api_keys = dns_scan_obj['api_keys']
 
-            # Add env variables for HOME
-            my_env = os.environ.copy()
-            
-            use_shell = False
-            if os.name != 'nt':
-                home_dir = os.path.expanduser('~')
-                my_env["HOME"] = home_dir
+        # Add env variables for HOME
+        my_env = os.environ.copy()
+        
+        use_shell = False
+        if os.name != 'nt':
+            home_dir = os.path.expanduser('~')
+            my_env["HOME"] = home_dir
 
-            # Set the API keys
-            update_config_file(api_keys, my_env)
+        # Set the API keys
+        update_config_file(api_keys, my_env)
 
-            # Add threads for large targets
-            pool = ThreadPool(processes=10)
-            thread_list = []
+        # Add threads for large targets
+        pool = ThreadPool(processes=10)
+        thread_list = []
 
-            # Add the domains from the wildcards
-            f = open(subfinder_domain_list, 'r')
-            sub_lines = f.readlines()
-            f.close()   
+        # Add the domains from the wildcards
+        f = open(subfinder_domain_list, 'r')
+        sub_lines = f.readlines()
+        f.close()   
 
-            # Add the lines
-            domain_set = set()
-            if len(sub_lines) > 0:
-                for line in sub_lines:
-                    domain_str = line.strip()
-                    if len(domain_str) > 0:
+        # Add the lines
+        domain_set = set()
+        if len(sub_lines) > 0:
+            for line in sub_lines:
+                domain_str = line.strip()
+                if len(domain_str) > 0:
 
-                        domain_set.add(domain_str)
+                    domain_set.add(domain_str)
 
-                        command = [] 
-                        command_arr = [
-                            "subfinder",
-                            "-json",
-                            "-d",
-                            domain_str,
-                            "-o",
-                            scan_output_file_path,
-                            "-active",
-                            "-ip"
-                        ]
+                    command = [] 
+                    command_arr = [
+                        "subfinder",
+                        "-json",
+                        "-d",
+                        domain_str,
+                        "-o",
+                        scan_output_file_path,
+                        "-active",
+                        "-ip"
+                    ]
 
-                        command.extend(command_arr)
+                    command.extend(command_arr)
 
-                        # Add optional arguments
-                        #command.extend(option_arr)
+                    # Add optional arguments
+                    #command.extend(option_arr)
 
-                        thread_list.append(pool.apply_async(subfinder_wrapper, (scan_output_file_path, command, use_shell, my_env)))
+                    thread_list.append(pool.apply_async(subfinder_wrapper, (scan_output_file_path, command, use_shell, my_env)))
 
-                # Close the pool
-                pool.close()
+            # Close the pool
+            pool.close()
 
-                # Loop through thread function calls and update progress
-                for thread_obj in tqdm(thread_list):
-                    temp_list = thread_obj.get()
-                    #print(temp_list)
-                    ret_list.extend( temp_list )
+            # Loop through thread function calls and update progress
+            for thread_obj in tqdm(thread_list):
+                temp_list = thread_obj.get()
+                #print(temp_list)
+                ret_list.extend( temp_list )
 
-            # Reset the API keys
-            update_config_file({}, my_env)
+        # Reset the API keys
+        update_config_file({}, my_env)
 
+        #print(domain_set)
+        if len(domain_set) > 0:
+            ret_list.extend( dns_wrapper(domain_set) )
 
-            print("[*] Before: ")
-            print(domain_set)
-            if len(domain_set) > 0:
-                ret_list.extend( dns_wrapper(domain_set) )
-
-        else:
-            # Remove empty file
-            os.remove(self.input().path)
-
-        print("[*] After: ")
-        print(ret_list)
-
+        #print(ret_list)
         output_fd.write(json.dumps({'domain_list': ret_list}))
         output_fd.close()
 
@@ -316,18 +273,6 @@ class SubfinderImport(luigi.Task):
     def requires(self):
         # Requires subfinderScan Task to be run prior
         return SubfinderScan(scan_input=self.scan_input)
-
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-
-        out_file = dir_path + os.path.sep + "subfinder_import_complete"
-
-        return luigi.LocalTarget(out_file)
 
     def run(self):
 
@@ -380,16 +325,8 @@ class SubfinderImport(luigi.Task):
 
                 if len(port_arr) > 0:
 
-                    # Import the ports to the manager
-                    #ret_val = recon_manager.import_ports(port_arr)
-
                     tool_obj = scan_input_obj.current_tool
                     tool_id = tool_obj.id
                     scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
                     #print(scan_results)
                     ret_val = recon_manager.import_ports_ext(scan_results)
-
-                    # Write to output file
-                    f = open(self.output().path, 'w')
-                    f.write("complete")
-                    f.close()

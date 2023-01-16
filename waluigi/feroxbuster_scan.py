@@ -14,8 +14,6 @@ from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
-tool_name = 'feroxbuster'
-
 def construct_url(target_str, port, secure):
     
     port_str = str(port).strip()
@@ -34,7 +32,7 @@ def construct_url(target_str, port, secure):
 
     return url
 
-class FeroxScope(luigi.ExternalTask):
+class FeroxScan(luigi.Task):
 
     scan_input = luigi.Parameter()
 
@@ -43,43 +41,8 @@ class FeroxScope(luigi.ExternalTask):
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
 
-        # Init input directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
-
-        # path to input file
-        scan_inputs_file = dir_path + os.path.sep + "ferox-" + scan_id
-        if os.path.isfile(scan_inputs_file):
-            return luigi.LocalTarget(scan_inputs_file) 
-
-        scan_target_dict = scan_input_obj.scan_target_dict
-
-        # Create output file
-        scan_inputs_fd = open(scan_inputs_file, 'w')
-        if scan_target_dict:
-            # Dump array to JSON
-            http_scan_input = json.dumps(scan_target_dict)
-            # Write to output file
-            scan_inputs_fd.write(http_scan_input)
-            
-        scan_inputs_fd.close()
-
-        return luigi.LocalTarget(scan_inputs_file)
-
-
-@inherits(FeroxScope)
-class FeroxScan(luigi.Task):
-
-
-    def requires(self):
-        # Requires HttpXScope Task to be run prior
-        return FeroxScope(scan_input=self.scan_input)
-
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
         # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         scan_outputs_file = dir_path + os.path.sep + "ferox_outputs_" + scan_id
@@ -88,161 +51,152 @@ class FeroxScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        scan_input_file = self.input()
-        f = scan_input_file.open()
-        scan_data = f.read()
-        f.close()
 
         # Get output file path
         output_file_path = self.output().path
         output_dir = os.path.dirname(output_file_path)
 
         url_to_id_map = {}
-        if len(scan_data) > 0:
-            ferox_scan_obj = json.loads(scan_data)
-            command_list = []
+        scan_target_dict = scan_input_obj.scan_target_dict
+        command_list = []
 
-            scan_input_data = ferox_scan_obj['scan_input']
-            #print(scan_input_data)
+        scan_input_data = scan_target_dict['scan_input']
+        #print(scan_input_data)
 
-            target_map = {}
-            if 'target_map' in scan_input_data:
-                target_map = scan_input_data['target_map']
+        target_map = {}
+        if 'target_map' in scan_input_data:
+            target_map = scan_input_data['target_map']
 
-            wordlist_arr = ferox_scan_obj['wordlist']
-            if wordlist_arr and len(wordlist_arr) > 0:
-                # Create temp file
-                scan_wordlist_obj = tempfile.NamedTemporaryFile()
-                scan_wordlist = scan_wordlist_obj.name
+        wordlist_arr = scan_target_dict['wordlist']
+        if wordlist_arr and len(wordlist_arr) > 0:
+            # Create temp file
+            scan_wordlist_obj = tempfile.NamedTemporaryFile()
+            scan_wordlist = scan_wordlist_obj.name
 
-                output = "\n".join(wordlist_arr)
-                f = open(scan_wordlist, 'wb')
-                f.write(output.encode())
-                f.close()
+            output = "\n".join(wordlist_arr)
+            f = open(scan_wordlist, 'wb')
+            f.write(output.encode())
+            f.close()
 
-                #for scan_inst in scan_list:
-                for target_key in target_map:
+            #for scan_inst in scan_list:
+            for target_key in target_map:
 
-                    target_dict = target_map[target_key]
-                    host_id = target_dict['host_id']
-                    ip_addr = target_dict['target_host']
-                    domain_arr = target_dict['domain_set']
+                target_dict = target_map[target_key]
+                host_id = target_dict['host_id']
+                ip_addr = target_dict['target_host']
+                domain_arr = target_dict['domain_set']
 
-                    port_obj_map = target_dict['port_map']
-                    for port_key in port_obj_map:
-                        port_obj = port_obj_map[port_key]
-                        port_str = str(port_obj['port'])
-                        port_id = port_obj['port_id']
-                        secure = port_obj['secure']
+                port_obj_map = target_dict['port_map']
+                for port_key in port_obj_map:
+                    port_obj = port_obj_map[port_key]
+                    port_str = str(port_obj['port'])
+                    port_id = port_obj['port_id']
+                    secure = port_obj['secure']
 
-                        if len(domain_arr) > 0:
+                    #if len(domain_arr) > 0:
+                    # NEED TO REWORK THIS TO DETERMINE THIS BEST DOMAIN TO USE. SENDING FOR ALL DOMAINS BE EXCESSIVE
 
-                            for domain_str in domain_arr:
+                    for domain_str in domain_arr:
 
-                                # Get the IP of the TLD
-                                try:
-                                    ip_str = socket.gethostbyname(domain_str).strip()
-                                except Exception:
-                                    print("[-] Exception resolving domain: %s" % domain_str)
-                                    continue
+                        # Get the IP of the TLD
+                        try:
+                            ip_str = socket.gethostbyname(domain_str).strip()
+                        except Exception:
+                            print("[-] Exception resolving domain: %s" % domain_str)
+                            continue
 
-                                #print("[*] IP %s" % ip_str )
-                                #print("[*] Domain %s" % domain_str )
-                                if ip_addr != ip_str:
-                                    continue
+                        #print("[*] IP %s" % ip_str )
+                        #print("[*] Domain %s" % domain_str )
+                        if ip_addr != ip_str:
+                            continue
 
-                                # If it's an IP skip it
-                                if "*." in domain_str:
-                                    continue
+                        # If it's an IP skip it
+                        if "*." in domain_str:
+                            continue
 
-                                # If it's an IP skip it
-                                try:
-                                    ip_addr_check = int(netaddr.IPAddress(domain_str))
-                                    continue
-                                except:
-                                    pass
+                        # If it's an IP skip it
+                        try:
+                            ip_addr_check = int(netaddr.IPAddress(domain_str))
+                            continue
+                        except:
+                            pass
 
-                                url_str = construct_url(domain_str, port_str, secure)
-                                rand_str = str(random.randint(1000000, 2000000))
+                        url_str = construct_url(domain_str, port_str, secure)
+                        rand_str = str(random.randint(1000000, 2000000))
 
-                                # Add to port id map
-                                scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
-                                url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
+                        # Add to port id map
+                        scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
+                        url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
 
-                        else:
-                            
-                            url_str = construct_url(ip_addr, port_str, secure)
-                            rand_str = str(random.randint(1000000, 2000000))      
+                    #else:
+                        
+                    # ADD FOR IP
+                    url_str = construct_url(ip_addr, port_str, secure)
+                    rand_str = str(random.randint(1000000, 2000000))      
 
-                            # Add to port id map
-                            scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
-                            url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
+                    # Add to port id map
+                    scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
+                    url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
 
 
-                for target_url in url_to_id_map:
+            for target_url in url_to_id_map:
 
-                    # Get output file
-                    scan_output_file_path = url_to_id_map[url_str]['output_file']
+                # Get output file
+                scan_output_file_path = url_to_id_map[url_str]['output_file']
 
-                    command = []
-                    if os.name != 'nt':
-                        command.append("sudo")
+                command = []
+                if os.name != 'nt':
+                    command.append("sudo")
 
-                    command_arr = [
-                        "feroxbuster",
-                        "--json",
-                        "-k", # Disable cert validation
-                        #"-q", # Quiet
-                        "-A", # Random User Agent
-                        "-n", # No recursion
-                        #"--thorough", # Collects words, extensions, and links in content
-                        #"--auto-tune", # Resets speed based on errors
-                        "--auto-bail", # Quits after too many errors
-                        "--rate-limit", # Rate limit
-                        "50",
-                        "-s", #Status codes to include
-                        "200", 
-                        "-u",
-                        target_url,
-                        "-w",
-                        scan_wordlist,
-                        "-o",
-                        scan_output_file_path
-                    ]
+                command_arr = [
+                    "feroxbuster",
+                    "--json",
+                    "-k", # Disable cert validation
+                    #"-q", # Quiet
+                    "-A", # Random User Agent
+                    "-n", # No recursion
+                    #"--thorough", # Collects words, extensions, and links in content
+                    #"--auto-tune", # Resets speed based on errors
+                    "--auto-bail", # Quits after too many errors
+                    "--rate-limit", # Rate limit
+                    "50",
+                    "-s", #Status codes to include
+                    "200", 
+                    "-u",
+                    target_url,
+                    "-w",
+                    scan_wordlist,
+                    "-o",
+                    scan_output_file_path
+                ]
 
-                    command.extend(command_arr)
+                command.extend(command_arr)
 
-                    # Add optional arguments
-                    #command.extend(option_arr)
+                # Add optional arguments
+                #command.extend(option_arr)
 
-                    # Add process dict to process array
-                    command_list.append(command)
+                # Add process dict to process array
+                command_list.append(command)
 
-                # Print for debug
-                print(command_list)
+            # Print for debug
+            print(command_list)
 
-                # Run threaded
-                pool = ThreadPool(processes=5)
-                thread_list = []
+            # Run threaded
+            pool = ThreadPool(processes=5)
+            thread_list = []
 
-                for command_args in command_list:
-                    thread_list.append(pool.apply_async(scan_utils.process_wrapper, (command_args,)))
+            for command_args in command_list:
+                thread_list.append(pool.apply_async(scan_utils.process_wrapper, (command_args,)))
 
-                # Close the pool
-                pool.close()
+            # Close the pool
+            pool.close()
 
-                # Loop through thread function calls and update progress
-                for thread_obj in tqdm(thread_list):
-                    thread_obj.get()
-                    
-            else:
-                print("[-] No wordlist set. Aborting")
-
+            # Loop through thread function calls and update progress
+            for thread_obj in tqdm(thread_list):
+                thread_obj.get()
+                
         else:
-            # Remove empty file
-            os.remove(self.input().path)
+            print("[-] No wordlist set. Aborting")
 
         results_dict = {'url_to_id_map': url_to_id_map}
 
@@ -258,17 +212,6 @@ class ImportFeroxOutput(luigi.Task):
     def requires(self):
         # Requires HttpScan Task to be run prior
         return FeroxScan(scan_input=self.scan_input)
-
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        out_file = dir_path + os.path.sep + "ferox_import_complete"
-
-        return luigi.LocalTarget(out_file)
 
     def run(self):
 
@@ -333,8 +276,3 @@ class ImportFeroxOutput(luigi.Task):
                 #print(scan_results)
                 ret_val = recon_manager.import_ports_ext(scan_results)
                 print("[+] Imported ferox scan to manager.")
-
-            # Write to output file
-            f = open(self.output().path, 'w')
-            f.write("complete")
-            f.close()

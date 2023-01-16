@@ -11,97 +11,73 @@ from waluigi import scan_utils
 TCP = 'tcp'
 UDP = 'udp'
 
-tool_name = 'masscan'
+# Setup the inputs for masscan from the scan data
+def get_masscan_input(scan_input_obj):
 
-class MassScanScope(luigi.ExternalTask):
+    masscan_conf = {}
+    scan_id = scan_input_obj.scan_id
+    tool_name = scan_input_obj.current_tool.name
 
-    scan_input = luigi.Parameter(default=None)
+    # Get the scan inputs
+    scan_target_dict = scan_input_obj.scan_target_dict
+    # Init directory
+    dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
-    def output(self):
+    # Get scan data
+    scan_input = scan_target_dict['scan_input']
+    target_map = {}
+    if 'target_map' in scan_input:
+        target_map = scan_input['target_map']
 
-        # Create input directory if it doesn't exist
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+    tool_args = []
+    if 'tool_args' in scan_target_dict:
+        tool_args = scan_target_dict['tool_args']
 
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
+    # Create config files
+    masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
+    masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
 
-        # path to each input file
-        masscan_inputs_file = dir_path + os.path.sep + "mass_inputs_" + scan_id
-        if os.path.isfile(masscan_inputs_file):
-            return luigi.LocalTarget(masscan_inputs_file)
+    print("[+] Retrieved %d targets from database" % len(target_map))
+    if len(target_map) > 0:
 
-        # Get the scan inputs
-        scan_target_dict = scan_input_obj.scan_target_dict
-        #print(scan_target_dict)
+        port_set = set()
+        # Write subnets to file
+        f = open(masscan_ip_file, 'w')
+        for target_key in target_map:
+            f.write(target_key + '\n')
+            
+            # Add the port to the set
+            target_dict = target_map[target_key]
+            port_obj_map = target_dict['port_map']
+            for port_key in port_obj_map:
+                port_set.add(port_key)
 
-        scan_input = scan_target_dict['scan_input']
+        f.close()
 
-        target_map = {}
-        if 'target_map' in scan_input:
-            target_map = scan_input['target_map']
+        # Construct ports conf line
+        port_line = "ports = "
+        for port in port_set:
+            port_line += str(port) + ','
+        port_line.strip(',')
 
-        tool_args = []
-        if 'tool_args' in scan_target_dict:
-            tool_args = scan_target_dict['tool_args']
+        # Write ports to config file
+        f = open(masscan_config_file, 'w')
+        f.write(port_line + '\n')
+        f.close()
+
+    masscan_conf = {'config_path' : masscan_config_file, 'input_path': masscan_ip_file, 'tool_args' : tool_args}
+    return masscan_conf
 
 
-        # Create output file
-        masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
-        masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
-
-        print("[+] Retrieved %d targets from database" % len(target_map))
-        if len(target_map) > 0:
-
-            port_set = set()
-            # Write subnets to file
-            f = open(masscan_ip_file, 'w')
-            for target_key in target_map:
-                f.write(target_key + '\n')
-                
-                # Add the port to the set
-                target_dict = target_map[target_key]
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_set.add(port_key)
-
-            f.close()
-
-            # Construct ports conf line
-            port_line = "ports = "
-            for port in port_set:
-                port_line += str(port) + ','
-            port_line.strip(',')
-
-            # Write ports to config file
-            masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
-            f = open(masscan_config_file, 'w')
-            f.write(port_line + '\n')
-            f.close()
-
-        masscan_inputs = {'config_path' : masscan_config_file, 'input_path': masscan_ip_file, 'tool_args' : tool_args}
-
-        # Create output file
-        masscan_inputs_f = open(masscan_inputs_file, 'w')
-        # Dump array to JSON
-        masscan_scan_input = json.dumps(masscan_inputs)
-        # Write to output file
-        masscan_inputs_f.write(masscan_scan_input)
-        masscan_inputs_f.close()
-
-        return luigi.LocalTarget(masscan_inputs_file)
-
-@inherits(MassScanScope)
 class MasscanScan(luigi.Task):
 
-    def requires(self):
-        # Requires the target scope
-        return MassScanScope(scan_input=self.scan_input)
-
+    scan_input = luigi.Parameter(default=None)
+    
     def output(self):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
+        tool_name = scan_input_obj.current_tool.name
 
         # Init output directory
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
@@ -112,24 +88,17 @@ class MasscanScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        # scan_id = scan_input_obj.scan_id
         selected_interface = scan_input_obj.selected_interface
-
         masscan_output_file_path = self.output().path
 
-        masscan_input_file = self.input()
-        f = masscan_input_file.open()
-        masscan_scan_data = f.read()
-        f.close()
-
-
-        if len(masscan_scan_data) > 0:
-            scan_json = json.loads(masscan_scan_data)
+        scan_config_dict = get_masscan_input(scan_input_obj)
+        if scan_config_dict:
 
             #print(scan_json)
-            conf_file_path = scan_json['config_path']
-            ips_file_path = scan_json['input_path']
-            tool_args = scan_json['tool_args']
+            conf_file_path = scan_config_dict['config_path']
+            ips_file_path = scan_config_dict['input_path']
+            tool_args = scan_config_dict['tool_args']
 
             if conf_file_path and ips_file_path:
 
@@ -181,17 +150,6 @@ class ImportMasscanOutput(luigi.Task):
     def requires(self):
         # Requires MassScan Task to be run prior
         return MasscanScan(scan_input=self.scan_input)
-
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init output directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        out_file = dir_path + os.path.sep + "mass_import_complete"
-
-        return luigi.LocalTarget(out_file)
 
     def run(self):
         
@@ -248,8 +206,3 @@ class ImportMasscanOutput(luigi.Task):
             scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
             #print(scan_results)
             ret_val = recon_manager.import_ports_ext(scan_results)
-
-        # Write to output file
-        f = open(self.output().path, 'w')
-        f.write("complete")
-        f.close()

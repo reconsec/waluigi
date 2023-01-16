@@ -15,41 +15,6 @@ from multiprocessing.pool import ThreadPool
 from urllib.parse import urlparse, ParseResult
 from os.path import exists
 
-tool_name = 'pyshot'
-
-class PyshotScope(luigi.ExternalTask):
-    scan_input = luigi.Parameter()
-
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
-
-        pyshot_inputs_file = dir_path + os.path.sep + "pyshot_inputs_" + scan_id
-        if os.path.isfile(pyshot_inputs_file):
-            return luigi.LocalTarget(pyshot_inputs_file)
-
-        # open input file
-        pyshot_inputs_f = open(pyshot_inputs_file, 'w')
-
-        scan_target_dict = scan_input_obj.scan_target_dict
-        if scan_target_dict:
-
-            # Write the output
-            scan_input = json.dumps(scan_target_dict)
-            pyshot_inputs_f.write(scan_input)
-
-        else:
-            print("[-] Pyshot input array is empty.")
-
-        pyshot_inputs_f.close()
-
-        return luigi.LocalTarget(pyshot_inputs_file)
-
-
 def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
 
     ret_msg = ""
@@ -66,12 +31,9 @@ def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
     return ret_msg
 
 
-@inherits(PyshotScope)
 class PyshotScan(luigi.Task):
 
-    def requires(self):
-        # Requires PyshotScope Task to be run prior
-        return PyshotScope(scan_input=self.scan_input)
+    scan_input = luigi.Parameter()
 
     def output(self):
 
@@ -79,6 +41,7 @@ class PyshotScan(luigi.Task):
         scan_id = scan_input_obj.scan_id
 
         # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # Meta file when complete
@@ -92,57 +55,52 @@ class PyshotScan(luigi.Task):
         # Ensure output folder exists
         dir_path = os.path.dirname(self.output().path)
 
-        pyshot_input_file = self.input()
-        f = pyshot_input_file.open()
-        pyshot_scan_data = f.read()
-        f.close()
+        scan_input_obj = self.scan_input
+        scan_target_dict = scan_input_obj.scan_target_dict
+        scan_input = scan_target_dict['scan_input']
 
-        if len(pyshot_scan_data) > 0:
-            scan_obj = json.loads(pyshot_scan_data)
-            scan_input = scan_obj['scan_input']
+        target_map = {}
+        if 'target_map' in scan_input:
+            target_map = scan_input['target_map']
 
-            target_map = {}
-            if 'target_map' in scan_input:
-                target_map = scan_input['target_map']
+        pool = ThreadPool(processes=10)
+        thread_list = []
+        #for scan_inst in scan_arr:
+        for target_key in target_map:
 
-            pool = ThreadPool(processes=10)
-            thread_list = []
-            #for scan_inst in scan_arr:
-            for target_key in target_map:
+            target_dict = target_map[target_key]
+            #print(target_dict)
+            # Get target
+            target_str = target_dict['target_host']
 
-                target_dict = target_map[target_key]
-                #print(target_dict)
-                # Get target
-                target_str = target_dict['target_host']
+            # Add domains
+            domain_list = target_dict['domain_set']
 
-                # Add domains
-                domain_list = target_dict['domain_set']
+            port_obj_map = target_dict['port_map']
+            for port_key in port_obj_map:
+                port_obj = port_obj_map[port_key]
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]
+                # print(scan_inst)
+                port_id = str(port_obj['port_id'])
+                ip_addr = target_str
+                port = str(port_obj['port'])
+                secure = port_obj['secure']
 
-                    # print(scan_inst)
-                    port_id = str(port_obj['port_id'])
-                    ip_addr = target_str
-                    port = str(port_obj['port'])
-                    secure = port_obj['secure']
+                # Add argument without domain first
+                thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id)))
 
-                    # Add argument without domain first
-                    thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id)))
+                # Loop through domains - truncate to the first 20
+                for domain in domain_list[:20]:
+                    thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id, domain)))
 
-                    # Loop through domains - truncate to the first 20
-                    for domain in domain_list[:20]:
-                        thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id, domain)))
+        # Close the pool
+        pool.close()
 
-            # Close the pool
-            pool.close()
-
-            # Loop through thread function calls and update progress
-            for thread_obj in tqdm(thread_list):
-                output = thread_obj.get()
-                if len(output) > 0:
-                    print(output)
+        # Loop through thread function calls and update progress
+        for thread_obj in tqdm(thread_list):
+            output = thread_obj.get()
+            if len(output) > 0:
+                print(output)
                     #raise RuntimeError("[-] Input file is empty")
 
 
@@ -153,19 +111,7 @@ class ImportPyshotOutput(luigi.Task):
         # Requires PyshotScan Task to be run prior
         return PyshotScan(scan_input=self.scan_input)
 
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        out_file = dir_path + os.path.sep + "pyshot_import_complete"
-
-        return luigi.LocalTarget(out_file)
-
     def run(self):
-
 
         meta_file = self.input().path
         #pyshot_output_dir = self.input().path
@@ -248,8 +194,4 @@ class ImportPyshotOutput(luigi.Task):
 
             print("[-] Pyshot meta file does not exist.")
 
-        # Write to output file
-        f = open(self.output().path, 'w')
-        f.write("complete")
-        f.close()
 

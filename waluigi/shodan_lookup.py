@@ -13,8 +13,6 @@ from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 
-tool_name = 'shodan'
-
 class ShodanScope(luigi.ExternalTask):
 
     scan_input = luigi.Parameter()
@@ -25,6 +23,7 @@ class ShodanScope(luigi.ExternalTask):
         scan_id = scan_input_obj.scan_id
 
         # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to each input file
@@ -170,6 +169,7 @@ class ShodanScan(luigi.Task):
         scan_id = scan_input_obj.scan_id
 
         # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "shodan_out_" + scan_id
 
@@ -252,18 +252,6 @@ class ImportShodanOutput(luigi.Task):
         # Requires MassScan Task to be run prior
         return ShodanScan(scan_input=self.scan_input)
 
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-
-        out_file = dir_path + os.path.sep + "shodan_import_complete"
-
-        return luigi.LocalTarget(out_file)
-
     def run(self):
 
         scan_input_obj = self.scan_input
@@ -282,9 +270,4 @@ class ImportShodanOutput(luigi.Task):
                 #print(json_data)
                 print("Entries: %d" % len(json_data))
                 ret_val = recon_manager.import_shodan_data(scan_id, json_data)
-
-        # Write to output file
-        f = open(self.output().path, 'w')
-        f.write("complete")
-        f.close()
 

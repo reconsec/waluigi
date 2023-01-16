@@ -12,7 +12,6 @@ from libnmap.parser import NmapParser
 from waluigi import scan_utils
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
-tool_name = 'nmap'
 
 class NmapScope(luigi.ExternalTask):
 
@@ -25,6 +24,7 @@ class NmapScope(luigi.ExternalTask):
         scan_id = scan_input_obj.scan_id
 
         # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         scan_target_dict = scan_input_obj.scan_target_dict
@@ -33,7 +33,6 @@ class NmapScope(luigi.ExternalTask):
             module_id = str(scan_target_dict['module_id'])
             mod_str = "_" + module_id
 
-        #scan_step = str(scan_input_obj.current_step)
         nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs" + mod_str
         if os.path.isfile(nmap_inputs_file):
             return luigi.LocalTarget(nmap_inputs_file)
@@ -57,19 +56,18 @@ class NmapScope(luigi.ExternalTask):
         return luigi.LocalTarget(nmap_inputs_file)
 
 
-@inherits(NmapScope)
+#@inherits(NmapScope)
 class NmapScan(luigi.Task):
     
-
-    def requires(self):
-        # Requires the target scope
-        return NmapScope(scan_input=self.scan_input)
+    scan_input = luigi.Parameter()
+    # def requires(self):
+    #     # Requires the target scope
+    #     return NmapScope(scan_input=self.scan_input)
 
     def output(self):
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
-        #scan_step = str(scan_input_obj.current_step)
 
         scan_target_dict = scan_input_obj.scan_target_dict
         mod_str = ''
@@ -78,6 +76,7 @@ class NmapScan(luigi.Task):
             mod_str = "_" + module_id
 
         # Init directory
+        tool_name = scan_input_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ scan_id + mod_str + ".meta"
 
@@ -85,226 +84,227 @@ class NmapScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        
-        #scan_step = str(scan_input_obj.current_step)
+        scan_input_obj = self.scan_input        
         selected_interface = scan_input_obj.selected_interface
 
         # Read input file
-        nmap_input_file = self.input()                
+        #nmap_input_file = self.input()                
         #print("[*] Input file: %s" % nmap_input_file.path)
 
-        f = nmap_input_file.open()
-        json_input = f.read()
-        f.close()
+        # f = nmap_input_file.open()
+        # json_input = f.read()
+        # f.close()
 
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
 
+        scan_target_dict = scan_input_obj.scan_target_dict
+        print(scan_target_dict)
+
         #load input file
         nmap_scan_data = None
-        if len(json_input) > 0:
-            nmap_scan_obj = json.loads(json_input)
-            scan_input = nmap_scan_obj['scan_input']
-            nmap_scan_args = nmap_scan_obj['tool_args']
+        # if len(json_input) > 0:
+    #     nmap_scan_obj = json.loads(json_input)
+        scan_input = scan_target_dict['scan_input']
+        nmap_scan_args = scan_target_dict['tool_args']
 
-            target_map = {}
-            if 'target_map' in scan_input:
-                target_map = scan_input['target_map']
+        target_map = {}
+        if 'target_map' in scan_input:
+            target_map = scan_input['target_map']
 
-            module_id = None
-            mod_str = ''
-            if 'module_id' in nmap_scan_obj:
-                module_id = nmap_scan_obj['module_id']
-                mod_str = "_" + module_id
+        module_id = None
+        mod_str = ''
+        if 'module_id' in scan_target_dict:
+            module_id = scan_target_dict['module_id']
+            mod_str = "_" + module_id
 
-            #print(input_nmap_scan_list)
-            # Output structure for scan jobs
-            nmap_scan_cmd_list = []
-            nmap_scan_data = {'nmap_input_map': target_map}
+        #print(input_nmap_scan_list)
+        # Output structure for scan jobs
+        nmap_scan_cmd_list = []
+        nmap_scan_data = {'nmap_input_map': target_map}
 
-            nmap_scan_list = []
-            if len(target_map) < 20:
+        nmap_scan_list = []
+        if len(target_map) < 20:
 
-                print("[*] Dividing NMAP jobs by target")                
-                for target_key in target_map:
+            print("[*] Dividing NMAP jobs by target")                
+            for target_key in target_map:
 
-                    scan_obj = {}
-                    target_dict = target_map[target_key]
-                    #print(target_dict)
+                scan_obj = {}
+                target_dict = target_map[target_key]
+                #print(target_dict)
+                # Add target
+                target_str = target_dict['target_host']
+                target_set = set()
+                target_set.add(target_str)
+
+                # Add domains
+                domain_list = target_dict['domain_set']
+                if len(domain_list) > 0:
+                    target_set.update(domain_list)
+
+                scan_obj['ip_set'] = target_set
+
+                scan_obj['tool_args'] = nmap_scan_args
+                scan_obj['resolve_dns'] = False
+
+                port_list = []
+                port_obj_map = target_dict['port_map']
+                for port_key in port_obj_map:
+                    port_obj = port_obj_map[port_key]
+                    port_int = port_obj['port']
+                    resolve_dns = port_obj['resolve_dns']
+                    # If any ports require DNS resolution then flip the flag for the scan
+                    if resolve_dns == True:
+                        scan_obj['resolve_dns'] = True
+
+                    port_list.append(str(port_int))
+                    
+                scan_obj['port_list'] = port_list
+
+                # Add the scan
+                nmap_scan_list.append(scan_obj)
+
+        else:
+
+            print("[*] Dividing NMAP jobs by port")
+            scan_port_map = {}
+            for target_key in target_map:
+
+                # Add target
+                target_dict = target_map[target_key]
+                target_str = target_dict['target_host']
+
+                port_obj_map = target_dict['port_map']
+                for port_key in port_obj_map:
+
+                    port_obj = port_obj_map[port_key]
+                    port_int = port_obj['port']
+
+                    # Get dict for port or create it
+                    if port_int in scan_port_map:
+                        scan_obj = scan_port_map[port_int]
+                    else:
+                        scan_obj = {'port_list': [str(port_int)], 'tool_args' : nmap_scan_args}
+                        scan_obj['resolve_dns'] = False
+                        scan_port_map[port_int] = scan_obj
+
+                    resolve_dns = port_obj['resolve_dns']
+                    # If any ports require DNS resolution then flip the flag for the scan
+                    if resolve_dns == True:
+                        scan_obj['resolve_dns'] = True
+
+                    # Add the targets
+                    if 'ip_set' in scan_obj:
+                        ip_set = scan_obj['ip_set']
+                    else:
+                        ip_set = set()
+                        scan_obj['ip_set'] = ip_set
+
                     # Add target
-                    target_str = target_dict['target_host']
-                    target_set = set()
-                    target_set.add(target_str)
+                    ip_set.add(target_str)
 
                     # Add domains
                     domain_list = target_dict['domain_set']
-                    if len(domain_list) > 0:
-                        target_set.update(domain_list)
+                    ip_set.update(domain_list)
 
-                    scan_obj['ip_set'] = target_set
+            # Add each to the scan list
+            nmap_scan_list.extend(list(scan_port_map.values()))
 
-                    scan_obj['script-args'] = nmap_scan_args
-                    scan_obj['resolve_dns'] = False
+        # Loop through map and create nmap command array
+        counter = 0            
+        commands = []
+        #print(nmap_scan_list)
+        for scan_obj in nmap_scan_list:
 
-                    port_list = []
-                    port_obj_map = target_dict['port_map']
-                    for port_key in port_obj_map:
-                        port_obj = port_obj_map[port_key]
-                        port_int = port_obj['port']
-                        resolve_dns = port_obj['resolve_dns']
-                        # If any ports require DNS resolution then flip the flag for the scan
-                        if resolve_dns == True:
-                            scan_obj['resolve_dns'] = True
+            #scan_obj = nmap_scan_list[port_str]
 
-                        port_list.append(str(port_int))
-                        
-                    scan_obj['port_list'] = port_list
+            nmap_scan_inst = {}
+            script_args = None
+            port_list = scan_obj['port_list']
+            port_comma_list = ','.join(port_list)
+            ip_list_path = dir_path + os.path.sep + "nmap_in_" + str(counter) + mod_str
 
-                    # Add the scan
-                    nmap_scan_list.append(scan_obj)
+            # Write IPs to a file
+            ip_list = scan_obj['ip_set']
+            if len(ip_list) == 0:
+                continue
 
-            else:
+            f = open(ip_list_path, 'w')
+            for ip in ip_list:                
+                f.write(ip + "\n")
+            f.close()
 
-                print("[*] Dividing NMAP jobs by port")
-                scan_port_map = {}
-                for target_key in target_map:
+            if 'tool_args' in scan_obj:
+                script_args = scan_obj['tool_args']
 
-                    # Add target
-                    target_dict = target_map[target_key]
-                    target_str = target_dict['target_host']
+            # Nmap command args
+            nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_"+ str(counter) + mod_str
 
-                    port_obj_map = target_dict['port_map']
-                    for port_key in port_obj_map:
+            # Add sudo if on linux based system
+            command = []
+            if os.name != 'nt':
+                command.append("sudo")
 
-                        port_obj = port_obj_map[port_key]
-                        port_int = port_obj['port']
+            command_arr = [
+                "nmap",
+                "-v",
+                "-Pn",
+                "--open",
+                "--host-timeout",
+                "30m",
+                "--script-timeout",
+                "2m",
+                "--script-args",
+                'http.useragent="%s"' % custom_user_agent,
+                "-sT",
+                "-p",
+                port_comma_list,
+                "-oX",
+                nmap_output_xml_file,
+                "-iL",
+                ip_list_path
 
-                        # Get dict for port or create it
-                        if port_int in scan_port_map:
-                            scan_obj = scan_port_map[port_int]
-                        else:
-                            scan_obj = {'port_list': [str(port_int)], 'script-args' : nmap_scan_args}
-                            scan_obj['resolve_dns'] = False
-                            scan_port_map[port_int] = scan_obj
+            ]
 
-                        resolve_dns = port_obj['resolve_dns']
-                        # If any ports require DNS resolution then flip the flag for the scan
-                        if resolve_dns == True:
-                            scan_obj['resolve_dns'] = True
+            # Add the specific interface to scan from if its selected
+            if selected_interface:
+                int_name = selected_interface.name.strip()
+                command_arr.extend(['-e', int_name])
+            
+            # Add base arguments
+            command.extend(command_arr)
 
-                        # Add the targets
-                        if 'ip_set' in scan_obj:
-                            ip_set = scan_obj['ip_set']
-                        else:
-                            ip_set = set()
-                            scan_obj['ip_set'] = ip_set
+            # Should do DNS lookup (HTTP assets)
+            resolve_dns = scan_obj['resolve_dns']
+            if resolve_dns == False:
+                command.append("-n")
 
-                        # Add target
-                        ip_set.add(target_str)
+            # Add script args
+            if script_args and len(script_args) > 0:
+                command.extend(script_args)
 
-                        # Add domains
-                        domain_list = target_dict['domain_set']
-                        ip_set.update(domain_list)
+            # Add to meta data
+            nmap_scan_inst['nmap_command'] = command
+            nmap_scan_inst['output_file'] = nmap_output_xml_file
 
-                # Add each to the scan list
-                nmap_scan_list.extend(list(scan_port_map.values()))
+            # Add module id if it exists
+            if module_id:
+                nmap_scan_inst['module_id'] = module_id
 
-            # Loop through map and create nmap command array
-            counter = 0            
-            commands = []
-            #print(nmap_scan_list)
-            for scan_obj in nmap_scan_list:
+            nmap_scan_cmd_list.append(nmap_scan_inst)
 
-                #scan_obj = nmap_scan_list[port_str]
+            #print(command)
+            commands.append(command)
+            counter += 1
 
-                nmap_scan_inst = {}
-                script_args = None
-                port_list = scan_obj['port_list']
-                port_comma_list = ','.join(port_list)
-                ip_list_path = dir_path + os.path.sep + "nmap_in_" + str(counter) + mod_str
+        # Run threaded
+        #print(commands)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            executor.map(subprocess.run, commands)
 
-                # Write IPs to a file
-                ip_list = scan_obj['ip_set']
-                if len(ip_list) == 0:
-                    continue
-
-                f = open(ip_list_path, 'w')
-                for ip in ip_list:                
-                    f.write(ip + "\n")
-                f.close()
-
-                if 'tool_args' in scan_obj:
-                    script_args = scan_obj['tool_args']
-
-                # Nmap command args
-                nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_"+ str(counter) + mod_str
-
-                # Add sudo if on linux based system
-                command = []
-                if os.name != 'nt':
-                    command.append("sudo")
-
-                command_arr = [
-                    "nmap",
-                    "-v",
-                    "-Pn",
-                    "--open",
-                    "--host-timeout",
-                    "30m",
-                    "--script-timeout",
-                    "2m",
-                    "--script-args",
-                    'http.useragent="%s"' % custom_user_agent,
-                    "-sT",
-                    "-p",
-                    port_comma_list,
-                    "-oX",
-                    nmap_output_xml_file,
-                    "-iL",
-                    ip_list_path
-
-                ]
-
-                # Add the specific interface to scan from if its selected
-                if selected_interface:
-                    int_name = selected_interface.name.strip()
-                    command_arr.extend(['-e', int_name])
-                
-                # Add base arguments
-                command.extend(command_arr)
-
-                # Should do DNS lookup (HTTP assets)
-                resolve_dns = scan_obj['resolve_dns']
-                if resolve_dns == False:
-                    command.append("-n")
-
-                # Add script args
-                if script_args and len(script_args) > 0:
-                    command.extend(script_args)
-
-                # Add to meta data
-                nmap_scan_inst['nmap_command'] = command
-                nmap_scan_inst['output_file'] = nmap_output_xml_file
-
-                # Add module id if it exists
-                if module_id:
-                    nmap_scan_inst['module_id'] = module_id
-
-                nmap_scan_cmd_list.append(nmap_scan_inst)
-
-                #print(command)
-                commands.append(command)
-                counter += 1
-
-            # Run threaded
-            #print(commands)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                executor.map(subprocess.run, commands)
-
-            # Add the command list to the output file
-            nmap_scan_data['nmap_scan_list'] = nmap_scan_cmd_list
+        # Add the command list to the output file
+        nmap_scan_data['nmap_scan_list'] = nmap_scan_cmd_list
 
         # Write out meta data file
         f = open(meta_file_path, 'w')
@@ -334,24 +334,6 @@ class ImportNmapOutput(luigi.Task):
     def requires(self):
         # Requires MassScan Task to be run prior
         return NmapScan(scan_input=self.scan_input)
-
-    def output(self):
-
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        #scan_step = str(scan_input_obj.current_step)
-
-        scan_target_dict = scan_input_obj.scan_target_dict
-        mod_str = ''
-        if 'module_id' in scan_target_dict:
-            module_id = str(scan_target_dict['module_id'])
-            mod_str = "_" + module_id
-
-        # Init directory
-        dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        out_file = dir_path + os.path.sep + "nmap_import_complete" + mod_str
-
-        return luigi.LocalTarget(out_file)
 
     def run(self):
 
@@ -519,11 +501,6 @@ class ImportNmapOutput(luigi.Task):
                         scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
                         #print(scan_results)
                         ret_val = recon_manager.import_ports_ext(scan_results)
-
-        # Write to output file
-        f = open(self.output().path, 'w')
-        f.write("complete")
-        f.close()
 
         print("[+] Updated ports database with Nmap results.")
 

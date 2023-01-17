@@ -260,7 +260,8 @@ class ScheduledScanThread(threading.Thread):
                 self.connection_manager.free_connection_lock(lock_val)
         
         # Cleanup files
-        ret = scan_pipeline.scan_cleanup_func(scan_input_obj.scan_id)
+        if ret_val:
+            ret = scan_pipeline.scan_cleanup_func(scan_input_obj.scan_id)
 
         return ret_val
 

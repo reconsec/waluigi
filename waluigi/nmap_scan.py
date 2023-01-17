@@ -116,7 +116,7 @@ class NmapScan(luigi.Task):
         module_id = None
         mod_str = ''
         if 'module_id' in scan_target_dict:
-            module_id = scan_target_dict['module_id']
+            module_id = str(scan_target_dict['module_id'])
             mod_str = "_" + module_id
 
         #print(input_nmap_scan_list)

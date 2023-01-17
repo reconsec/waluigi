@@ -182,7 +182,7 @@ def module_scan_func(scan_input_obj):
                 scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
 
             tool_inst = module_scan_inst['tool']
-            tool_obj = SimpleNamespace(id=tool_inst['id'])
+            tool_obj = SimpleNamespace(id=tool_inst['id'], name=tool_inst['name'])
             scan_input_obj.current_tool = tool_obj
 
             ret = None
@@ -229,7 +229,7 @@ def module_import(scan_input_obj):
                 scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
 
             tool_inst = module_scan_inst['tool']
-            tool_obj = SimpleNamespace(id=tool_inst['id'])
+            tool_obj = SimpleNamespace(id=tool_inst['id'], name=tool_inst['name'])
 
             tool_name = tool_inst['name']
             #tool_id = tool_inst['id']

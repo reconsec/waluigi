@@ -180,7 +180,7 @@ class ImportBadSecretsOutput(luigi.Task):
                 for entry in output_list:
                     output = entry['output']
                     if output and len(output) > 0:
-
+                        print(output)
 
             #         f = open(output_file, 'r')
             #         scan_data = f.read()

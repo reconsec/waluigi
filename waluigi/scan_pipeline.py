@@ -12,15 +12,16 @@ from waluigi import shodan_lookup
 from waluigi import feroxbuster_scan
 from waluigi import subfinder_scan
 from waluigi import sectrails_ip_lookup
+from waluigi import badsecrets_scan
 from types import SimpleNamespace
 
 waluigi_tool_map = {}
 
-def masscan_scope(scan_input):
-    luigi_run_result = luigi.build([masscan.MassScanScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-        return False
-    return True
+# def masscan_scope(scan_input):
+#     luigi_run_result = luigi.build([masscan.MassScanScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
 
 def masscan_scan(scan_input):
     luigi_run_result = luigi.build([masscan.MasscanScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
@@ -34,11 +35,11 @@ def masscan_import(scan_input):
         return False
     return True
 
-def httpx_scope(scan_input):
-    luigi_run_result = luigi.build([httpx_scan.HttpXScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-        return False
-    return True
+# def httpx_scope(scan_input):
+#     luigi_run_result = luigi.build([httpx_scan.HttpXScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
 
 def httpx_scan_func(scan_input):
     luigi_run_result = luigi.build([httpx_scan.HttpXScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
@@ -52,11 +53,23 @@ def httpx_import(scan_input):
         return False
     return True
 
-def nmap_scope(scan_input):
-    luigi_run_result = luigi.build([nmap_scan.NmapScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+def badsecrets_scan_func(scan_input):
+    luigi_run_result = luigi.build([badsecrets_scan.BadSecretsScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True
+
+def badsecrets_import(scan_input):
+    luigi_run_result = luigi.build([badsecrets_scan.ImportBadSecretsOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+# def nmap_scope(scan_input):
+#     luigi_run_result = luigi.build([nmap_scan.NmapScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
 
 def nmap_scan_func(scan_input ):
     luigi_run_result = luigi.build([nmap_scan.NmapScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
@@ -70,11 +83,11 @@ def nmap_import(scan_input):
         return False
     return True
 
-def subfinder_scope(scan_input):
-    luigi_run_result = luigi.build([subfinder_scan.SubfinderScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-        return False
-    return True
+# def subfinder_scope(scan_input):
+#     luigi_run_result = luigi.build([subfinder_scan.SubfinderScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
 
 def subfinder_lookup(scan_input):
     luigi_run_result = luigi.build([subfinder_scan.SubfinderScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
@@ -88,11 +101,11 @@ def subfinder_import(scan_input):
         return False
     return True
 
-def pyshot_scope(scan_input):
-    luigi_run_result = luigi.build([pyshot_scan.PyshotScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-        return False
-    return True
+# def pyshot_scope(scan_input):
+#     luigi_run_result = luigi.build([pyshot_scan.PyshotScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
 
 def pyshot_scan_func(scan_input):
     luigi_run_result = luigi.build([pyshot_scan.PyshotScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
@@ -106,11 +119,11 @@ def pyshot_import(scan_input):
         return False
     return True
 
-def nuclei_scope(scan_input):
-    luigi_run_result = luigi.build([nuclei_scan.NucleiScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-        return False
-    return True
+# def nuclei_scope(scan_input):
+#     luigi_run_result = luigi.build([nuclei_scan.NucleiScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
 
 def nuclei_scan_func(scan_input):
     luigi_run_result = luigi.build([nuclei_scan.NucleiScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
@@ -136,11 +149,11 @@ def import_sectrailsiplookup(scan_input):
         return False
     return True
 
-def feroxbuster_scope(scan_input):
-    luigi_run_result = luigi.build([feroxbuster_scan.FeroxScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
-    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-        return False
-    return True
+# def feroxbuster_scope(scan_input):
+#     luigi_run_result = luigi.build([feroxbuster_scan.FeroxScope(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+#     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+#         return False
+#     return True
 
 def feroxbuster_scan_func(scan_input):
     luigi_run_result = luigi.build([feroxbuster_scan.FeroxScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)

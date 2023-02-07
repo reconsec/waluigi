@@ -51,13 +51,6 @@ class HttpXScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        #scan_id = scan_input_obj.scan_id
-
-        # http_input_file = self.input()
-        # f = http_input_file.open()
-        # http_scan_data = f.read()
-        # f.close()
-
         scan_obj = scan_input_obj.scan_target_dict        
 
         # Get output file path
@@ -164,10 +157,6 @@ class HttpXScan(luigi.Task):
             # Loop through thread function calls and update progress
             for thread_obj in tqdm(thread_list):
                 thread_obj.get()
-
-        else:
-            # Remove empty file
-            os.remove(self.input().path)
 
         results_dict = {'port_to_id_map': port_to_id_map, 'output_file_list': output_file_list}
 

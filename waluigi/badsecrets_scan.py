@@ -163,71 +163,34 @@ class ImportBadSecretsOutput(luigi.Task):
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
         http_output_file = self.input().path
-        f = open(http_output_file, 'r')
-        data = f.read()
-        f.close()
+        # f = open(http_output_file, 'r')
+        # data = f.read()
+        # f.close()
+
+        data = '''[{'secret': 'validationKey: 32CBA563F26041EE5B5FE9581076C40618DCC1218F5F447634EDE8624508A129 validationAlgo: SHA1', 'details': None, 'type': 'SecretFound', 'source': '/wEPDwUJNTUzODE0MjEwD2QWAmYPZBYCZg9kFgQCBw9kFgQCAw8PFgIeC05hdmlnYXRlVXJsBSZodHRwOi8vY2RuLmFtZWRkLmFybXkubWlsL0dPTElOSy8/aWQ9NmRkAgUPDxYCHwAFJ2h0dHA6Ly9jZG4uYW1lZGQuYXJteS5taWwvR09MSU5LLz9pZD01OWRkAgsPZBYCAgMPZBYCAgEPZBYCAgEPZBYCAgMPZBYCAgEPZBYCZg9kFgQCAw8PFgIfAAVzaHR0cHM6Ly9hcGhjYXV0aC5hbWVkZC5hcm15Lm1pbC9jZXJ0cGFzcz9Tb3VyY2VVcmw9aHR0cHM6Ly9lcGhjLmFtZWRkLmFybXkubWlsL1hUUkFIb21lL0NlcnRMb2dpbi5hc3B4JTNmUmV0dXJuVXJsPWRkAgcPDxYCHwAFASNkZGRkIjW7idkpjOuysLme+AdRXFUI4w==', 'description': {'Product': 'ASP.NET Viewstate', 'Secret': 'ASP.NET MachineKey'}, 'detecting_module': 'ASPNET_Viewstate'}]'''
 
         if len(data) > 0:
+
+
             scan_data_dict = json.loads(data)            
             port_arr = []
             print(scan_data_dict)
 
             # Get data and map
-            # port_to_id_map = scan_data_dict['port_to_id_map']
             output_list = scan_data_dict['output_list']
             if len(output_list) > 0:
 
+                # Parse the output
                 for entry in output_list:
+                    
                     output = entry['output']
+                    http_endpoint_id = entry['http_endpoint_id']
+
                     if output and len(output) > 0:
-                        print(output)
-
-            #         f = open(output_file, 'r')
-            #         scan_data = f.read()
-            #         f.close()
-
-            #         if len(scan_data) > 0:
-                        
-            #             json_blobs = scan_data.split("\n")
-            #             for blob in json_blobs:
-            #                 blob_trimmed = blob.strip()
-            #                 if len(blob_trimmed) > 0:
-            #                     httpx_scan = json.loads(blob)
-            #                     if 'host' in httpx_scan and 'port' in httpx_scan:
-
-            #                         # Attempt to get the port id
-            #                         host = httpx_scan['host']
-            #                         port_str = httpx_scan['port']
-
-            #                         # Get IP from DNS if host
-            #                         ip_str = None
-            #                         try:
-            #                             ip_str = str(netaddr.IPAddress(host))
-            #                         except:
-            #                             if 'a' in httpx_scan:
-            #                                 dns_ips = httpx_scan['a']
-            #                                 if len(dns_ips) > 0:
-            #                                     ip = dns_ips[0]
-            #                                     ip_str = str(netaddr.IPAddress(ip))
-
-            #                         # If we have an IP
-            #                         if ip_str:
-            #                             host_key = '%s:%s' % (ip_str, port_str)
-
-            #                             if host_key in port_to_id_map:
-            #                                 port_id_dict = port_to_id_map[host_key]
-
-            #                                 port_id = port_id_dict['port_id']
-            #                                 if port_id == 'None':
-            #                                     port_id = None
-
-            #                                 host_id = port_id_dict['host_id']
-            #                                 if host_id == 'None':
-            #                                     host_id = None
-
-            #                                 port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan, 'ip' : ip_str, 'port' : port_str}
-            #                                 port_arr.append(port_obj)
-            
+                        for finding in output:
+                            finding_type = finding['type']
+                            if finding_type == 'SecretFound':
+                                port_arr.append({'http_endpoint_id' : http_endpoint_id, 'secret' : finding })        
 
             if len(port_arr) > 0:
                 #print(port_arr)
@@ -239,6 +202,7 @@ class ImportBadSecretsOutput(luigi.Task):
                 
                 #print(scan_results)
                 ret_val = recon_manager.import_ports_ext(scan_results)
-                print("[+] Imported httpx scan to manager.")
+                print("[+] Imported badsecrets scan to manager.")
+
             else:
                 print("[*] No ports to import to manager")

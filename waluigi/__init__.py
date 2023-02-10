@@ -62,3 +62,8 @@ scan_pipeline.waluigi_tool_map[tool_name] = scan_tool
 tool_name = 'badsecrets'
 scan_tool = WaluigiTool(tool_name, scan_func=scan_pipeline.badsecrets_scan_func, import_func=scan_pipeline.badsecrets_import)
 scan_pipeline.waluigi_tool_map[tool_name] = scan_tool
+
+# Create divvycloud tool
+tool_name = 'divvycloud'
+scan_tool = WaluigiTool(tool_name, import_func=scan_pipeline.divvycloud_import)
+scan_pipeline.waluigi_tool_map[tool_name] = scan_tool

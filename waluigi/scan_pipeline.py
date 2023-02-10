@@ -13,6 +13,7 @@ from waluigi import feroxbuster_scan
 from waluigi import subfinder_scan
 from waluigi import sectrails_ip_lookup
 from waluigi import badsecrets_scan
+from waluigi import divvycloud_lookup
 from types import SimpleNamespace
 
 waluigi_tool_map = {}
@@ -61,6 +62,12 @@ def badsecrets_scan_func(scan_input):
 
 def badsecrets_import(scan_input):
     luigi_run_result = luigi.build([badsecrets_scan.ImportBadSecretsOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+def divvycloud_import(scan_input):
+    luigi_run_result = luigi.build([divvycloud_lookup.ImportDivyCloudOutput(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
     if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
         return False
     return True

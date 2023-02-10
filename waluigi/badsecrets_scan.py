@@ -146,7 +146,7 @@ class BadSecretsScan(luigi.Task):
         # Write output file
         f = open(output_file_path, 'w')
         f.write(json.dumps(results_dict))
-        f.close()            
+        f.close()
 
 
 @inherits(BadSecretsScan)
@@ -163,16 +163,13 @@ class ImportBadSecretsOutput(luigi.Task):
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
         http_output_file = self.input().path
-        # f = open(http_output_file, 'r')
-        # data = f.read()
-        # f.close()
-
-        data = '''[{'secret': 'validationKey: 32CBA563F26041EE5B5FE9581076C40618DCC1218F5F447634EDE8624508A129 validationAlgo: SHA1', 'details': None, 'type': 'SecretFound', 'source': '/wEPDwUJNTUzODE0MjEwD2QWAmYPZBYCZg9kFgQCBw9kFgQCAw8PFgIeC05hdmlnYXRlVXJsBSZodHRwOi8vY2RuLmFtZWRkLmFybXkubWlsL0dPTElOSy8/aWQ9NmRkAgUPDxYCHwAFJ2h0dHA6Ly9jZG4uYW1lZGQuYXJteS5taWwvR09MSU5LLz9pZD01OWRkAgsPZBYCAgMPZBYCAgEPZBYCAgEPZBYCAgMPZBYCAgEPZBYCZg9kFgQCAw8PFgIfAAVzaHR0cHM6Ly9hcGhjYXV0aC5hbWVkZC5hcm15Lm1pbC9jZXJ0cGFzcz9Tb3VyY2VVcmw9aHR0cHM6Ly9lcGhjLmFtZWRkLmFybXkubWlsL1hUUkFIb21lL0NlcnRMb2dpbi5hc3B4JTNmUmV0dXJuVXJsPWRkAgcPDxYCHwAFASNkZGRkIjW7idkpjOuysLme+AdRXFUI4w==', 'description': {'Product': 'ASP.NET Viewstate', 'Secret': 'ASP.NET MachineKey'}, 'detecting_module': 'ASPNET_Viewstate'}]'''
+        f = open(http_output_file, 'r')
+        data = f.read()
+        f.close()
 
         if len(data) > 0:
 
-
-            scan_data_dict = json.loads(data)            
+            scan_data_dict = json.loads(data)
             port_arr = []
             print(scan_data_dict)
 
@@ -182,10 +179,11 @@ class ImportBadSecretsOutput(luigi.Task):
 
                 # Parse the output
                 for entry in output_list:
-                    
+
                     output = entry['output']
                     http_endpoint_id = entry['http_endpoint_id']
 
+                    output = json.loads(output)
                     if output and len(output) > 0:
                         for finding in output:
                             finding_type = finding['type']
@@ -199,7 +197,7 @@ class ImportBadSecretsOutput(luigi.Task):
                 tool_obj = scan_input_obj.current_tool
                 tool_id = tool_obj.id
                 scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                
+
                 #print(scan_results)
                 ret_val = recon_manager.import_ports_ext(scan_results)
                 print("[+] Imported badsecrets scan to manager.")

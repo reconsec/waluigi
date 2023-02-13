@@ -128,6 +128,7 @@ class HttpXScan(luigi.Task):
                     "httpx",
                     "-json",
                     "-tls-probe",
+                    "-favicon",
                     "-td",
                     "-t",
                     "100",

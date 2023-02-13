@@ -101,6 +101,10 @@ class HttpXScan(luigi.Task):
                     # Add IP to list
                     ip_set.add(ip_addr)
 
+                    # Add domains
+                    for domain in domain_list:
+                        ip_set.add(domain)
+
 
             for port_str in port_ip_dict:
 

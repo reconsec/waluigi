@@ -109,7 +109,7 @@ def get_dnszone_resource_ids(base_url, headers):
 
 def get_dns_for_resource_id(base_url, resource_id, headers): 
 
-    ret_dict = None
+    ret_dict_list = []
     record_dict = dns_records(base_url, resource_id, headers)
     if record_dict:
         records = record_dict['dnsrecords']
@@ -129,7 +129,7 @@ def get_dns_for_resource_id(base_url, resource_id, headers):
                         net_inst = netaddr.IPAddress(ip_addr.strip())
                         dns_data = ip_addr
                     except:
-                        msg = str(traceback.format_exc())
+                        #msg = str(traceback.format_exc())
                         #print("[-] Error resolving %s: %s" % (dns_name, msg))
                         continue
 
@@ -137,7 +137,7 @@ def get_dns_for_resource_id(base_url, resource_id, headers):
                 if net_inst.is_private():
                     continue
 
-                ret_dict = {'domain' : dns_name , 'ip_addr' : dns_data}
+                ret_dict_list.append({'domain' : dns_name , 'ip_addr' : dns_data})
 
             elif dns_type == 'CNAME':
 
@@ -148,7 +148,7 @@ def get_dns_for_resource_id(base_url, resource_id, headers):
                     ip_addr = socket.gethostbyname(dns_name)
                     net_inst = netaddr.IPAddress(ip_addr.strip())
                 except:
-                    msg = str(traceback.format_exc())
+                    #msg = str(traceback.format_exc())
                     #print("[-] Error resolving %s: %s" % (dns_name, msg))
                     continue
 
@@ -157,9 +157,11 @@ def get_dns_for_resource_id(base_url, resource_id, headers):
                     #print("[*] IP %s is private. Skipping" % ip_addr)
                     continue
 
-                ret_dict = {'domain' : dns_name , 'ip_addr' : ip_addr}
-
-    return ret_dict
+                ret_dict_list.append({'domain' : dns_name , 'ip_addr' : ip_addr})
+    else:
+        print("[-] No records for resource %s" % resource_id)
+        
+    return ret_dict_list
     
 
 class DivyCloudLookup(luigi.Task):
@@ -247,9 +249,9 @@ class DivyCloudLookup(luigi.Task):
 
                 # Loop through thread function calls and update progress
                 for thread_obj in tqdm(thread_list):
-                    ret_obj = thread_obj.get()
-                    if ret_obj:
-                        output_file_list.append(ret_obj)
+                    ret_list = thread_obj.get()
+                    if len(ret_list) > 0:
+                        output_file_list.extend(ret_list)
 
 
         results_dict = {'output_list': output_file_list}

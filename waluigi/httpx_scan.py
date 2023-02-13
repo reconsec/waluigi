@@ -86,7 +86,7 @@ class HttpXScan(luigi.Task):
                     port_id = port_obj['port_id']
                     
                     # Add to port id map
-                    port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id }
+                    port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id, 'ip_addr': ip_addr }
 
                     # Add to scan map
                     if port_str in port_ip_dict:
@@ -103,7 +103,7 @@ class HttpXScan(luigi.Task):
                         ip_set.add(domain)
 
                         # Add to port id map
-                        port_to_id_map[domain+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id }
+                        port_to_id_map[domain+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id, 'ip_addr': ip_addr }
 
 
             for port_str in port_ip_dict:
@@ -206,12 +206,12 @@ class ImportHttpXOutput(luigi.Task):
                         if 'input' in httpx_scan and 'port' in httpx_scan:
 
                             # Attempt to get the port id
-                            ip_str = httpx_scan['input']
+                            target_str = httpx_scan['input']
                             port_str = httpx_scan['port']
 
                             # If we have an IP
-                            if ip_str:
-                                host_key = '%s:%s' % (ip_str, port_str)
+                            if target_str:
+                                host_key = '%s:%s' % (target_str, port_str)
 
                                 if host_key in port_to_id_map:
                                     port_id_dict = port_to_id_map[host_key]
@@ -223,6 +223,10 @@ class ImportHttpXOutput(luigi.Task):
                                     host_id = port_id_dict['host_id']
                                     if host_id == 'None':
                                         host_id = None
+
+                                    ip_str = port_id_dict['ip_addr']
+                                    if ip_str == 'None':
+                                        ip_str = None
 
                                     port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan, 'ip' : ip_str, 'port' : port_str}
                                     port_arr.append(port_obj)

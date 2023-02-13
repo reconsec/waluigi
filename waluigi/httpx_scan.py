@@ -105,6 +105,9 @@ class HttpXScan(luigi.Task):
                     for domain in domain_list:
                         ip_set.add(domain)
 
+                        # Add to port id map
+                        port_to_id_map[domain+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id }
+
 
             for port_str in port_ip_dict:
 
@@ -217,15 +220,15 @@ class ImportHttpXOutput(luigi.Task):
                                     port_str = httpx_scan['port']
 
                                     # Get IP from DNS if host
-                                    ip_str = None
-                                    try:
-                                        ip_str = str(netaddr.IPAddress(host))
-                                    except:
-                                        if 'a' in httpx_scan:
-                                            dns_ips = httpx_scan['a']
-                                            if len(dns_ips) > 0:
-                                                ip = dns_ips[0]
-                                                ip_str = str(netaddr.IPAddress(ip))
+                                    ip_str = host
+                                    # try:
+                                    #     ip_str = str(netaddr.IPAddress(host))
+                                    # except:
+                                    #     if 'a' in httpx_scan:
+                                    #         dns_ips = httpx_scan['a']
+                                    #         if len(dns_ips) > 0:
+                                    #             ip = dns_ips[0]
+                                    #             ip_str = str(netaddr.IPAddress(ip))
 
                                     # If we have an IP
                                     if ip_str:

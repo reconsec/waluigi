@@ -1,7 +1,6 @@
 import json
 import os
 import subprocess
-import netaddr
 import luigi
 import multiprocessing
 import traceback
@@ -51,13 +50,6 @@ class HttpXScan(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        #scan_id = scan_input_obj.scan_id
-
-        # http_input_file = self.input()
-        # f = http_input_file.open()
-        # http_scan_data = f.read()
-        # f.close()
-
         scan_obj = scan_input_obj.scan_target_dict        
 
         # Get output file path
@@ -67,13 +59,11 @@ class HttpXScan(luigi.Task):
         output_file_list = []
         port_to_id_map = {}
 
-        #if len(http_scan_data) > 0:
-        print(scan_obj)
+        #print(scan_obj)
         if scan_obj:
 
-            #scan_obj = json.loads(http_scan_data)
             scan_input_data = scan_obj['scan_input']
-            print(scan_input_data)
+            #print(scan_input_data)
 
             target_map = {}
             if 'target_map' in scan_input_data:
@@ -96,7 +86,7 @@ class HttpXScan(luigi.Task):
                     port_id = port_obj['port_id']
                     
                     # Add to port id map
-                    port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id }
+                    port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id, 'ip_addr': ip_addr }
 
                     # Add to scan map
                     if port_str in port_ip_dict:
@@ -107,6 +97,13 @@ class HttpXScan(luigi.Task):
 
                     # Add IP to list
                     ip_set.add(ip_addr)
+
+                    # Add domains
+                    for domain in domain_list:
+                        ip_set.add(domain)
+
+                        # Add to port id map
+                        port_to_id_map[domain+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id, 'ip_addr': ip_addr }
 
 
             for port_str in port_ip_dict:
@@ -131,6 +128,7 @@ class HttpXScan(luigi.Task):
                     "httpx",
                     "-json",
                     "-tls-probe",
+                    "-favicon",
                     "-td",
                     "-t",
                     "100",
@@ -164,10 +162,6 @@ class HttpXScan(luigi.Task):
             # Loop through thread function calls and update progress
             for thread_obj in tqdm(thread_list):
                 thread_obj.get()
-
-        else:
-            # Remove empty file
-            os.remove(self.input().path)
 
         results_dict = {'port_to_id_map': port_to_id_map, 'output_file_list': output_file_list}
 
@@ -205,52 +199,39 @@ class ImportHttpXOutput(luigi.Task):
             if len(output_file_list) > 0:
 
                 for output_file in output_file_list:
-                    f = open(output_file, 'r')
-                    scan_data = f.read()
-                    f.close()
 
-                    if len(scan_data) > 0:
-                        
-                        json_blobs = scan_data.split("\n")
-                        for blob in json_blobs:
-                            blob_trimmed = blob.strip()
-                            if len(blob_trimmed) > 0:
-                                httpx_scan = json.loads(blob)
-                                if 'host' in httpx_scan and 'port' in httpx_scan:
+                    obj_arr = scan_utils.parse_json_blob_file(output_file)
+                    for httpx_scan in obj_arr: 
 
-                                    # Attempt to get the port id
-                                    host = httpx_scan['host']
-                                    port_str = httpx_scan['port']
+                        if 'input' in httpx_scan and 'port' in httpx_scan:
 
-                                    # Get IP from DNS if host
-                                    ip_str = None
-                                    try:
-                                        ip_str = str(netaddr.IPAddress(host))
-                                    except:
-                                        if 'a' in httpx_scan:
-                                            dns_ips = httpx_scan['a']
-                                            if len(dns_ips) > 0:
-                                                ip = dns_ips[0]
-                                                ip_str = str(netaddr.IPAddress(ip))
+                            # Attempt to get the port id
+                            target_str = httpx_scan['input']
+                            port_str = httpx_scan['port']
 
-                                    # If we have an IP
-                                    if ip_str:
-                                        host_key = '%s:%s' % (ip_str, port_str)
+                            # If we have an IP
+                            if target_str:
+                                host_key = '%s:%s' % (target_str, port_str)
 
-                                        if host_key in port_to_id_map:
-                                            port_id_dict = port_to_id_map[host_key]
+                                if host_key in port_to_id_map:
+                                    port_id_dict = port_to_id_map[host_key]
 
-                                            port_id = port_id_dict['port_id']
-                                            if port_id == 'None':
-                                                port_id = None
+                                    port_id = port_id_dict['port_id']
+                                    if port_id == 'None':
+                                        port_id = None
 
-                                            host_id = port_id_dict['host_id']
-                                            if host_id == 'None':
-                                                host_id = None
+                                    host_id = port_id_dict['host_id']
+                                    if host_id == 'None':
+                                        host_id = None
 
-                                            port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan, 'ip' : ip_str, 'port' : port_str}
-                                            port_arr.append(port_obj)
-            
+                                    ip_str = port_id_dict['ip_addr']
+                                    if ip_str == 'None':
+                                        ip_str = None
+
+                                    port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan, 'ip' : ip_str, 'port' : port_str}
+                                    port_arr.append(port_obj)
+                        else:
+                            print("[-] No input and/or port field in output: %s" % httpx_scan)
 
             if len(port_arr) > 0:
                 #print(port_arr)

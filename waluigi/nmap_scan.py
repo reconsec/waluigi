@@ -13,57 +13,9 @@ from waluigi import scan_utils
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
-class NmapScope(luigi.ExternalTask):
-
-    scan_input = luigi.Parameter()
-   
-    def output(self):
-
-        # Get a hash of the inputs
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-
-        # Init directory
-        tool_name = scan_input_obj.current_tool.name
-        dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
-
-        scan_target_dict = scan_input_obj.scan_target_dict
-        mod_str = ''
-        if 'module_id' in scan_target_dict:
-            module_id = str(scan_target_dict['module_id'])
-            mod_str = "_" + module_id
-
-        nmap_inputs_file = dir_path + os.path.sep + "nmap_inputs" + mod_str
-        if os.path.isfile(nmap_inputs_file):
-            return luigi.LocalTarget(nmap_inputs_file)
-
-        # Open the input file
-        nmap_inputs_f = open(nmap_inputs_file, 'w')
-
-        scan_target_dict = scan_input_obj.scan_target_dict
-        if scan_target_dict:
-
-            # Write the output
-            nmap_scan_input = json.dumps(scan_target_dict)
-            nmap_inputs_f.write(nmap_scan_input)            
-
-        else:
-            print("[-] Nmap scan array is empted.")
-
-        # Close the file
-        nmap_inputs_f.close()
-
-        return luigi.LocalTarget(nmap_inputs_file)
-
-
-#@inherits(NmapScope)
 class NmapScan(luigi.Task):
     
     scan_input = luigi.Parameter()
-    # def requires(self):
-    #     # Requires the target scope
-    #     return NmapScope(scan_input=self.scan_input)
-
     def output(self):
 
         scan_input_obj = self.scan_input
@@ -87,14 +39,6 @@ class NmapScan(luigi.Task):
         scan_input_obj = self.scan_input        
         selected_interface = scan_input_obj.selected_interface
 
-        # Read input file
-        #nmap_input_file = self.input()                
-        #print("[*] Input file: %s" % nmap_input_file.path)
-
-        # f = nmap_input_file.open()
-        # json_input = f.read()
-        # f.close()
-
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
@@ -104,8 +48,6 @@ class NmapScan(luigi.Task):
 
         #load input file
         nmap_scan_data = None
-        # if len(json_input) > 0:
-    #     nmap_scan_obj = json.loads(json_input)
         scan_input = scan_target_dict['scan_input']
         nmap_scan_args = scan_target_dict['tool_args']
 
@@ -216,8 +158,6 @@ class NmapScan(luigi.Task):
         commands = []
         #print(nmap_scan_list)
         for scan_obj in nmap_scan_list:
-
-            #scan_obj = nmap_scan_list[port_str]
 
             nmap_scan_inst = {}
             script_args = None

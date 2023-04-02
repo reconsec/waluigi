@@ -170,8 +170,7 @@ class ScheduledScanThread(threading.Thread):
                 if tool_status == CollectionToolStatus.COMPLETED.value:
                     print("[*] %s tool complete,  skipping." % tool_obj.name)
                     continue
-                
-                
+                                
                 scan_input = None
                 try:
                     # Check if scan is cancelled

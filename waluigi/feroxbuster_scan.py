@@ -61,6 +61,7 @@ class FeroxScan(luigi.Task):
         command_list = []
 
         scan_input_data = scan_target_dict['scan_input']
+        tool_args = scan_target_dict['tool_args']
         #print(scan_input_data)
 
         target_map = {}
@@ -173,7 +174,8 @@ class FeroxScan(luigi.Task):
                 command.extend(command_arr)
 
                 # Add optional arguments
-                #command.extend(option_arr)
+                if tool_args and len(tool_args) > 0:
+                    command.extend(tool_args)
 
                 # Add process dict to process array
                 command_list.append(command)

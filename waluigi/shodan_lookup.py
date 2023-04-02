@@ -63,11 +63,15 @@ def shodan_host_query(api, ip):
                 service_list = results['data']
             break
         except shodan.exception.APIError as e:
-            if "limit reached" in str(e):
+            err_msg = str(e).lower()
+
+            if "limit reached" in err_msg:
                 time.sleep(1)
                 continue
-            if "No information" not in str(e):
-                print("[-] Shodan API Error: %s" % str(e))
+            if "invalid api key" in err_msg:
+                raise e
+            if "no information" not in err_msg:
+                print("[-] Shodan API Error: %s" % err_msg)
             break
 
     return service_list
@@ -87,11 +91,15 @@ def shodan_subnet_query(api, subnet, cidr):
                 service_list.append(service)
             break
         except shodan.exception.APIError as e:
-            if "limit reached" in str(e):
+            err_msg = str(e).lower()
+
+            if "limit reached" in err_msg:
                 time.sleep(1)
                 continue
-            if "No information" not in str(e):
-                print("[-] Shodan API Error: %s" % str(e))
+            if "invalid api key" in err_msg:
+                raise e
+            if "no information" not in err_msg:
+                print("[-] Shodan API Error: %s" % err_msg)
             break
 
 
@@ -120,6 +128,7 @@ def shodan_wrapper(shodan_key, ip, cidr):
         print(traceback.format_exc())
         # Re-raise the original exception so the Pool worker can
         # clean up
+        return None
 
     return results
 
@@ -198,48 +207,56 @@ class ShodanScan(luigi.Task):
 
         # Write the output
         scan_target_dict = scan_input_obj.scan_target_dict
-        shodan_key = scan_target_dict['scan_input']
-        
-        if shodan_key:
+        if 'api_key' in scan_target_dict:
+            shodan_key = scan_target_dict['api_key']
 
-            pool = ThreadPool(processes=10)
-            thread_list = []
-            for subnet in ip_subnets:
+            # Do a test lookup to make sure our key is good and we have connectivity
+            result = shodan_wrapper(shodan_key, "8.8.8.8", 32)
+            if result is not None:
 
-                #print(subnet)
-                # Get the subnet
-                subnet = str(subnet)
-                subnet_arr = subnet.split("/")
-                ip = subnet_arr[0]
+                pool = ThreadPool(processes=10)
+                thread_list = []
+                for subnet in ip_subnets:
 
-                cidr = 32
-                if len(subnet_arr) > 1:
-                    cidr = int(subnet_arr[1])
+                    #print(subnet)
+                    # Get the subnet
+                    subnet = str(subnet)
+                    subnet_arr = subnet.split("/")
+                    ip = subnet_arr[0]
 
-                # Skip private IPs
-                subnet = netaddr.IPNetwork(str(ip)+"/"+str(cidr))
-                if subnet.is_private():
-                    continue
+                    cidr = 32
+                    if len(subnet_arr) > 1:
+                        cidr = int(subnet_arr[1])
 
-                thread_list.append(pool.apply_async(shodan_wrapper, (shodan_key, ip, cidr)))
+                    # Skip private IPs
+                    subnet = netaddr.IPNetwork(str(ip)+"/"+str(cidr))
+                    if subnet.is_private():
+                        continue
 
-            # Close the pool
-            pool.close()
+                    thread_list.append(pool.apply_async(shodan_wrapper, (shodan_key, ip, cidr)))
 
-            output_arr = []
-            # Loop through thread function calls and update progress
-            for thread_obj in tqdm(thread_list):
-                output_arr.extend(thread_obj.get())
-                
-            # Open output file and write json of output
-            outfile = self.output().path
-            f_out = open(outfile, 'w')
+                # Close the pool
+                pool.close()
 
-            if len(output_arr) > 0:
-                f_out.write(json.dumps(output_arr))
+                output_arr = []
+                # Loop through thread function calls and update progress
+                for thread_obj in tqdm(thread_list):
+                    result = thread_obj.get()
+                    if result is None:
+                        # Stop all threads
+                        pool.terminate()
+                        break
+                    output_arr.extend(result)
+                    
+                # Open output file and write json of output
+                outfile = self.output().path
+                f_out = open(outfile, 'w')
 
-            # Close the file
-            f_out.close()
+                if len(output_arr) > 0:
+                    f_out.write(json.dumps(output_arr))
+
+                # Close the file
+                f_out.close()
             
         else:
             print("[-] No shodan API key provided.")

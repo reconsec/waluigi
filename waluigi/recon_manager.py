@@ -577,8 +577,9 @@ class ReconManager:
             return target_obj
 
         content = r.json()
-        data = self._decrypt_json(content)
-        target_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        if content:
+            data = self._decrypt_json(content)
+            target_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
 
         return target_obj
 

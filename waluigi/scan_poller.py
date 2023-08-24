@@ -29,7 +29,6 @@ def main(args):
             # Create the scheduled scan thread
             scan_thread = recon_manager.ScheduledScanThread(recon_manager_inst)
             scan_thread.start()
-            scan_thread.toggle_poller()
 
             # interactive console
             while exit_loop == False:

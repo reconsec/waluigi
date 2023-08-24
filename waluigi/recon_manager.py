@@ -320,8 +320,10 @@ class ScheduledScanThread(threading.Thread):
                             sched_scan_obj_arr = recon_manager.get_scheduled_scans()
                             if sched_scan_obj_arr and len(sched_scan_obj_arr) > 0:
                                 sched_scan_obj = sched_scan_obj_arr[0]
-                                self.process_scan_obj(sched_scan_obj)                                    
-                         
+                                self.process_scan_obj(sched_scan_obj)                                 
+                        except requests.exceptions.ConnectionError as e:
+                            print("[-] Unable to connect to server.")
+                            pass  
                         except Exception as e:
                             print(traceback.format_exc())
                             pass
@@ -360,8 +362,11 @@ class ReconManager:
             # Send interface list to server
             try:
                 self.update_collector_status(self.network_ifaces)
+            except requests.exceptions.ConnectionError as e:
+                print("[-] Unable to connect to server.")
+                pass
             except Exception as e:
-                print(traceback.format_exc())
+                #print(traceback.format_exc())
                 pass
 
     def set_debug(self, debug):
@@ -582,24 +587,6 @@ class ReconManager:
             
 
         return target_obj
-
-    # def get_shodan_key(self):
-
-    #     shodan_key = None
-    #     r = requests.get('%s/api/integrations/shodan/key' % (self.manager_url), headers=self.headers, verify=False)
-    #     if r.status_code == 404:
-    #         return subnets
-    #     if r.status_code != 200:
-    #         print("[-] Unknown Error")
-    #         return subnets
-
-    #     content = r.json()
-    #     data = self._decrypt_json(content)
-    #     if data:
-    #         shodan_key_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
-    #         shodan_key = shodan_key_obj.key
-
-    #     return shodan_key
 
     def get_collector_interface(self):
 

@@ -204,11 +204,12 @@ class ImportHttpXOutput(luigi.Task):
                     obj_arr = scan_utils.parse_json_blob_file(output_file)
                     for httpx_scan in obj_arr: 
 
-                        if 'input' in httpx_scan and 'port' in httpx_scan:
+                        if 'input' in httpx_scan and 'port' in httpx_scan and 'host' in httpx_scan:
 
                             # Attempt to get the port id
                             target_str = httpx_scan['input']
                             port_str = httpx_scan['port']
+                            ip_str = httpx_scan['host']
 
                             # If we have an IP
                             if target_str:
@@ -224,10 +225,6 @@ class ImportHttpXOutput(luigi.Task):
                                     host_id = port_id_dict['host_id']
                                     if host_id == 'None':
                                         host_id = None
-
-                                    ip_str = port_id_dict['ip_addr']
-                                    if ip_str == 'None':
-                                        ip_str = None
 
                                     port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan, 'ip' : ip_str, 'port' : port_str}
                                     port_arr.append(port_obj)

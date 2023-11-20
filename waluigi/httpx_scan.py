@@ -131,6 +131,7 @@ class HttpXScan(luigi.Task):
                     "-favicon",
                     "-td",
                     "-irr", # Return response so Headers can be parsed
+                    "-ss", 
                     "-t",
                     "100",
                     "-nf",

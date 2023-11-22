@@ -11,6 +11,41 @@ from waluigi import scan_utils
 TCP = 'tcp'
 UDP = 'udp'
 
+import re
+import netifaces as ni
+
+def get_mac_address(ip_address):
+    # Run the arp command to get the ARP table entries
+    try:
+        output = subprocess.check_output(["arp", "-n", ip_address], text=True)
+    except subprocess.CalledProcessError as e:
+        return None
+
+    # Use regular expression to extract the MAC address
+    mac_regex = r"(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))"
+    match = re.search(mac_regex, output)
+
+    if match:
+        return match.group(0)
+    else:
+        return None
+
+def get_default_gateway():
+
+    default_gateway = None
+    try:
+        # Retrieve the gateways in the system
+        gws = ni.gateways()
+        
+        # Get the default gateway, typically found under 'default' and using the AF_INET family
+        default_gateway = gws['default'][ni.AF_INET][0]
+
+    except:
+        pass
+
+    return default_gateway
+
+
 # Setup the inputs for masscan from the scan data
 def get_masscan_input(scan_input_obj):
 
@@ -100,6 +135,15 @@ class MasscanScan(luigi.Task):
             ips_file_path = scan_config_dict['input_path']
             tool_args = scan_config_dict['tool_args']
 
+
+            # Get and print the default gateway IP
+            router_mac = None
+            default_gateway_ip = get_default_gateway()
+            if default_gateway_ip:
+                mac_address = get_mac_address(default_gateway_ip)
+                if mac_address:
+                    router_mac = mac_address.replace(":", "-")
+
             if conf_file_path and ips_file_path:
 
                 command = []
@@ -108,7 +152,7 @@ class MasscanScan(luigi.Task):
 
                 command_arr = [
                     "masscan",
-                    "--open",                   
+                    "--open",                
                     "-oX",
                     masscan_output_file_path,
                     "-c",
@@ -121,6 +165,9 @@ class MasscanScan(luigi.Task):
                 if selected_interface:
                     int_name = selected_interface.name.strip()
                     command_arr.extend(['-e', int_name])
+
+                if router_mac:
+                    command_arr.extend(['--router-mac', router_mac])
 
                 # Add tool args
                 if tool_args and len(tool_args) > 0:

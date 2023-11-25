@@ -149,7 +149,7 @@ class NucleiScan(luigi.Task):
 
                 command_inner = [
                     "nuclei",
-                    "-json",
+                    "-jsonl",
                     "-duc",
                     "-ni",
                     "-pt",  # Limit to HTTP currently

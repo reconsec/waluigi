@@ -4,6 +4,8 @@ import subprocess
 import luigi
 import multiprocessing
 import traceback
+import hashlib
+import binascii
 
 from luigi.util import inherits
 from tqdm import tqdm
@@ -192,6 +194,7 @@ class ImportHttpXOutput(luigi.Task):
         data = f.read()
         f.close()
 
+        hash_alg=hashlib.sha1
         if len(data) > 0:
             scan_data_dict = json.loads(data)            
             port_arr = []
@@ -212,6 +215,13 @@ class ImportHttpXOutput(luigi.Task):
                             target_str = httpx_scan['input']
                             port_str = httpx_scan['port']
                             ip_str = httpx_scan['host']
+
+                            if 'path' in httpx_scan:
+                                hashobj = hash_alg()
+                                hashobj.update(httpx_scan['path'])
+                                path_hash = hashobj.digest()
+                                hex_str = binascii.hexlify(path_hash)
+                                httpx_scan['path_hash'] = hex_str
 
                             # If we have an IP
                             if target_str:

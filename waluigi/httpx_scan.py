@@ -6,6 +6,7 @@ import multiprocessing
 import traceback
 import hashlib
 import binascii
+import base64
 
 from luigi.util import inherits
 from tqdm import tqdm
@@ -222,6 +223,15 @@ class ImportHttpXOutput(luigi.Task):
                                 path_hash = hashobj.digest()
                                 hex_str = binascii.hexlify(path_hash).decode()
                                 httpx_scan['path_hash'] = hex_str
+
+                            if 'screenshot_bytes' in httpx_scan:
+                                screenshot_bytes_b64 = httpx_scan['screenshot_bytes']
+                                ss_data = base64.b64decode(screenshot_bytes_b64)
+                                hashobj = hash_alg()
+                                hashobj.update(ss_data)
+                                image_hash = hashobj.digest()
+                                image_hash_str = binascii.hexlify(image_hash).decode()
+                                httpx_scan['image_hash'] = image_hash_str
 
                             # If we have an IP
                             if target_str:

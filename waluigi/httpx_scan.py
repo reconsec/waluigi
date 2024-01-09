@@ -231,7 +231,7 @@ class ImportHttpXOutput(luigi.Task):
                                 hashobj.update(ss_data)
                                 image_hash = hashobj.digest()
                                 image_hash_str = binascii.hexlify(image_hash).decode()
-                                httpx_scan['image_hash'] = image_hash_str
+                                httpx_scan['screenshot_hash'] = image_hash_str
 
                             # If we have an IP
                             if target_str:

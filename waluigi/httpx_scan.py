@@ -220,7 +220,7 @@ class ImportHttpXOutput(luigi.Task):
                                 hashobj = hash_alg()
                                 hashobj.update(httpx_scan['path'].encode())
                                 path_hash = hashobj.digest()
-                                hex_str = binascii.hexlify(path_hash)
+                                hex_str = binascii.hexlify(path_hash).decode()
                                 httpx_scan['path_hash'] = hex_str
 
                             # If we have an IP

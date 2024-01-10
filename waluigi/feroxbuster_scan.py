@@ -267,7 +267,7 @@ class ImportFeroxOutput(luigi.Task):
                                     web_path_str = u.path
                                     if web_path_str and len(web_path_str) > 0:
                                         hashobj = hash_alg()
-                                        hashobj.update(web_path_str)
+                                        hashobj.update(web_path_str.encode())
                                         path_hash = hashobj.digest()
                                         path_hash_hex = binascii.hexlify(path_hash).decode()
 

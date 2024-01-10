@@ -8,11 +8,14 @@ import traceback
 import socket
 import random
 import tempfile
+import hashlib
+import binascii
 
 from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+from urllib.parse import urlparse
 
 def construct_url(target_str, port, secure):
     
@@ -229,6 +232,7 @@ class ImportFeroxOutput(luigi.Task):
         data = f.read()
         f.close()
 
+        hash_alg=hashlib.sha1
         if len(data) > 0:
             scan_data_dict = json.loads(data)            
             port_arr = []
@@ -254,9 +258,18 @@ class ImportFeroxOutput(luigi.Task):
                             if 'status' in web_result:
                                 result_status = web_result['status']
                                 endpoint_url = None
+                                path_hash_hex = None
 
                                 if 'url' in web_result:
                                     endpoint_url = web_result['url']
+                                    
+                                    u = urlparse(endpoint_url)
+                                    web_path_str = u.path
+                                    if web_path_str and len(web_path_str) > 0:
+                                        hashobj = hash_alg()
+                                        hashobj.update(web_path_str)
+                                        path_hash = hashobj.digest()
+                                        path_hash_hex = binascii.hexlify(path_hash).decode()
 
                                 # # Show the endpoint that was referenced in the 301
                                 # if result_status == 301 or result_status == 302:
@@ -266,7 +279,7 @@ class ImportFeroxOutput(luigi.Task):
                                 #         if 'location' in headers:
                                 #             endpoint_url = headers['location']
 
-                                port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'status' : result_status}
+                                port_inst = {'port_id' : port_id, 'host_id' : host_id, 'url' : endpoint_url, 'path_hash' : path_hash_hex, 'status' : result_status}
                                 port_arr.append(port_inst)
 
             

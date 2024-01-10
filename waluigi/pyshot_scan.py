@@ -154,11 +154,16 @@ class ImportPyshotOutput(luigi.Task):
                             image_hash = hashobj.digest()
                             image_hash_str = binascii.hexlify(image_hash).decode()
 
+                        hashobj = hash_alg()
+                        hashobj.update(path.encode())
+                        path_hash = hashobj.digest()
+                        hex_str = binascii.hexlify(path_hash).decode()
 
                         b64_image = base64.b64encode(image_data).decode()
                         obj_data = { 'port_id': port_id_val,
                                     'url': url,
                                     'path': path,
+                                    'path_hash' hex_str: 
                                     'hash': str(image_hash_str),
                                     'data': b64_image,
                                     'status_code' : status_code}

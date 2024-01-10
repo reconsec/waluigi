@@ -70,6 +70,7 @@ class FeroxScan(luigi.Task):
         if 'target_map' in scan_input_data:
             target_map = scan_input_data['target_map']
 
+        scan_wordlist = None
         wordlist_arr = scan_target_dict['wordlist']
         if wordlist_arr and len(wordlist_arr) > 0:
             # Create temp file
@@ -81,126 +82,126 @@ class FeroxScan(luigi.Task):
             f.write(output.encode())
             f.close()
 
-            #for scan_inst in scan_list:
-            for target_key in target_map:
+        #for scan_inst in scan_list:
+        for target_key in target_map:
 
-                target_dict = target_map[target_key]
-                host_id = target_dict['host_id']
-                ip_addr = target_dict['target_host']
-                domain_arr = target_dict['domain_set']
+            target_dict = target_map[target_key]
+            host_id = target_dict['host_id']
+            ip_addr = target_dict['target_host']
+            domain_arr = target_dict['domain_set']
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]
-                    port_str = str(port_obj['port'])
-                    port_id = port_obj['port_id']
-                    secure = port_obj['secure']
+            port_obj_map = target_dict['port_map']
+            for port_key in port_obj_map:
+                port_obj = port_obj_map[port_key]
+                port_str = str(port_obj['port'])
+                port_id = port_obj['port_id']
+                secure = port_obj['secure']
 
-                    #if len(domain_arr) > 0:
-                    # NEED TO REWORK THIS TO DETERMINE THIS BEST DOMAIN TO USE. SENDING FOR ALL DOMAINS BE EXCESSIVE
+                #if len(domain_arr) > 0:
+                # NEED TO REWORK THIS TO DETERMINE THIS BEST DOMAIN TO USE. SENDING FOR ALL DOMAINS BE EXCESSIVE
 
-                    for domain_str in domain_arr:
+                for domain_str in domain_arr:
 
-                        # Get the IP of the TLD
-                        try:
-                            ip_str = socket.gethostbyname(domain_str).strip()
-                        except Exception:
-                            print("[-] Exception resolving domain: %s" % domain_str)
-                            continue
+                    # Get the IP of the TLD
+                    try:
+                        ip_str = socket.gethostbyname(domain_str).strip()
+                    except Exception:
+                        print("[-] Exception resolving domain: %s" % domain_str)
+                        continue
 
-                        #print("[*] IP %s" % ip_str )
-                        #print("[*] Domain %s" % domain_str )
-                        if ip_addr != ip_str:
-                            continue
+                    #print("[*] IP %s" % ip_str )
+                    #print("[*] Domain %s" % domain_str )
+                    if ip_addr != ip_str:
+                        continue
 
-                        # If it's an IP skip it
-                        if "*." in domain_str:
-                            continue
+                    # If it's an IP skip it
+                    if "*." in domain_str:
+                        continue
 
-                        # If it's an IP skip it
-                        try:
-                            ip_addr_check = int(netaddr.IPAddress(domain_str))
-                            continue
-                        except:
-                            pass
+                    # If it's an IP skip it
+                    try:
+                        ip_addr_check = int(netaddr.IPAddress(domain_str))
+                        continue
+                    except:
+                        pass
 
-                        url_str = construct_url(domain_str, port_str, secure)
-                        rand_str = str(random.randint(1000000, 2000000))
-
-                        # Add to port id map
-                        scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
-                        url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
-
-                    #else:
-                        
-                    # ADD FOR IP
-                    url_str = construct_url(ip_addr, port_str, secure)
-                    rand_str = str(random.randint(1000000, 2000000))      
+                    url_str = construct_url(domain_str, port_str, secure)
+                    rand_str = str(random.randint(1000000, 2000000))
 
                     # Add to port id map
                     scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
                     url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
 
+                #else:
+                    
+                # ADD FOR IP
+                url_str = construct_url(ip_addr, port_str, secure)
+                rand_str = str(random.randint(1000000, 2000000))      
 
-            for target_url in url_to_id_map:
+                # Add to port id map
+                scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
+                url_to_id_map[url_str] = { 'port_id' : port_id, 'host_id' : host_id, 'output_file' : scan_output_file_path }
 
-                # Get output file
-                scan_output_file_path = url_to_id_map[url_str]['output_file']
 
-                command = []
-                if os.name != 'nt':
-                    command.append("sudo")
+        for target_url in url_to_id_map:
 
-                command_arr = [
-                    "feroxbuster",
-                    "--json",
-                    "-k", # Disable cert validation
-                    #"-q", # Quiet
-                    "-A", # Random User Agent
-                    "-n", # No recursion
-                    #"--thorough", # Collects words, extensions, and links in content
-                    #"--auto-tune", # Resets speed based on errors
-                    "--auto-bail", # Quits after too many errors
-                    "--rate-limit", # Rate limit
-                    "50",
-                    "-s", #Status codes to include
-                    "200", 
-                    "-u",
-                    target_url,
-                    "-w",
-                    scan_wordlist,
-                    "-o",
-                    scan_output_file_path
-                ]
+            # Get output file
+            scan_output_file_path = url_to_id_map[url_str]['output_file']
 
-                command.extend(command_arr)
+            command = []
+            if os.name != 'nt':
+                command.append("sudo")
 
-                # Add optional arguments
-                if tool_args and len(tool_args) > 0:
-                    command.extend(tool_args)
+            command_arr = [
+                "feroxbuster",
+                "--json",
+                "-k", # Disable cert validation
+                #"-q", # Quiet
+                "-A", # Random User Agent
+                "-n", # No recursion
+                #"--thorough", # Collects words, extensions, and links in content
+                #"--auto-tune", # Resets speed based on errors
+                "--auto-bail", # Quits after too many errors
+                "--rate-limit", # Rate limit
+                "50",
+                "-s", #Status codes to include
+                "200", 
+                "-u",
+                target_url,                
+                "-o",
+                scan_output_file_path
+            ]
 
-                # Add process dict to process array
-                command_list.append(command)
+            command.extend(command_arr)
 
-            # Print for debug
-            print(command_list)
+            # Add optional arguments
+            if tool_args and len(tool_args) > 0:
+                command.extend(tool_args)
 
-            # Run threaded
-            pool = ThreadPool(processes=5)
-            thread_list = []
+            # Add wordlist if provided
+            if scan_wordlist:
+                command.extend(['-w', scan_wordlist])
 
-            for command_args in command_list:
-                thread_list.append(pool.apply_async(scan_utils.process_wrapper, (command_args,)))
+            # Add process dict to process array
+            command_list.append(command)
 
-            # Close the pool
-            pool.close()
+        # Print for debug
+        print(command_list)
 
-            # Loop through thread function calls and update progress
-            for thread_obj in tqdm(thread_list):
-                thread_obj.get()
+        # Run threaded
+        pool = ThreadPool(processes=5)
+        thread_list = []
+
+        for command_args in command_list:
+            thread_list.append(pool.apply_async(scan_utils.process_wrapper, (command_args,)))
+
+        # Close the pool
+        pool.close()
+
+        # Loop through thread function calls and update progress
+        for thread_obj in tqdm(thread_list):
+            thread_obj.get()
                 
-        else:
-            print("[-] No wordlist set. Aborting")
 
         results_dict = {'url_to_id_map': url_to_id_map}
 

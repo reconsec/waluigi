@@ -163,7 +163,7 @@ class ImportPyshotOutput(luigi.Task):
                         obj_data = { 'port_id': port_id_val,
                                     'url': url,
                                     'path': path,
-                                    'path_hash': hex_str: 
+                                    'path_hash': hex_str,
                                     'hash': str(image_hash_str),
                                     'data': b64_image,
                                     'status_code' : status_code}

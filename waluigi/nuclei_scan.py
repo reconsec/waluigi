@@ -219,7 +219,7 @@ class ImportNucleiOutput(luigi.Task):
                 obj_arr = scan_utils.parse_json_blob_file(output_file_path)
                 for nuclei_scan_result in obj_arr:
               
-                    if 'host' in nuclei_scan_result:
+                    if 'matched-at' in nuclei_scan_result:
                         endpoint = nuclei_scan_result['host']
 
                         # Get the port object that maps to this url

@@ -116,6 +116,7 @@ class ImportPyshotOutput(luigi.Task):
         meta_file = self.input().path
         #pyshot_output_dir = self.input().path
         scan_input_obj = self.scan_input
+        scan_id = scan_input_obj.scan_id
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
         # Read meta data file
@@ -160,7 +161,8 @@ class ImportPyshotOutput(luigi.Task):
                         hex_str = binascii.hexlify(path_hash).decode()
 
                         b64_image = base64.b64encode(image_data).decode()
-                        obj_data = { 'port_id': port_id_val,
+                        obj_data = {'scan_id': scan_id, 
+                                    'port_id': port_id_val,
                                     'url': url,
                                     'path': path,
                                     'path_hash': hex_str,

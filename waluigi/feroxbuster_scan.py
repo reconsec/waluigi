@@ -61,7 +61,9 @@ class FeroxScan(luigi.Task):
         command_list = []
 
         scan_input_data = scan_target_dict['scan_input']
-        tool_args = scan_target_dict['tool_args']
+        tool_args = None
+        if 'tool_args' in scan_target_dict:
+            tool_args = scan_target_dict['tool_args']
         #print(scan_input_data)
 
         target_map = {}

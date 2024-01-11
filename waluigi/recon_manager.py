@@ -199,7 +199,7 @@ class ScheduledScanThread(threading.Thread):
             if tool_obj.tool_type == 2:
 
                 if self.connection_manager:
-                    # Connect to synack target
+                    # Connect to target
                     ret_val = self.connection_manager.connect_to_target()
                     if ret_val == False:
                         print("[-] Failed connecting to target")

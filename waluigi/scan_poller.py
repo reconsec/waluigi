@@ -17,7 +17,7 @@ def print_usage():
 
 def main(args):
 
-    # Create Synack connection manager thread
+    # Create connection manager thread
     scan_thread = None
     debug = False
     exit_loop = False

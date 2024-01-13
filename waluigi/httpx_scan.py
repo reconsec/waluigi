@@ -134,7 +134,7 @@ class HttpXScan(luigi.Task):
                     "-favicon",
                     "-td",
                     "-irr", # Return response so Headers can be parsed
-                    "-ss",
+                    # "-ss", Removed from default because it is too memory/cpu intensive for small collectors
                     "-fhr",
                     "-t",
                     "100",

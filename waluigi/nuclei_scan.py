@@ -3,6 +3,7 @@ import os
 import luigi
 import traceback
 import errno
+import copy
 
 from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
@@ -225,8 +226,9 @@ class ImportNucleiOutput(luigi.Task):
                         # Get the port object that maps to this url
                         if endpoint in endpoint_port_obj_map:
                             port_obj = endpoint_port_obj_map[endpoint]
-                            port_obj['nuclei_script_results'] = nuclei_scan_result
-                            port_arr.append(port_obj)
+                            port_obj_copy = copy.deepcopy(port_obj)
+                            port_obj_copy['nuclei_script_results'] = nuclei_scan_result
+                            port_arr.append(port_obj_copy)
                         else:
                             print("[-] Endpoint not in map: %s %s" % (endpoint, str(endpoint_port_obj_map)))
 

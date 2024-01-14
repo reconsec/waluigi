@@ -219,7 +219,7 @@ class ImportNucleiOutput(luigi.Task):
                 obj_arr = scan_utils.parse_json_blob_file(output_file_path)
                 for nuclei_scan_result in obj_arr:
               
-                    if 'matched-at' in nuclei_scan_result:
+                    if 'url' in nuclei_scan_result:
                         endpoint = nuclei_scan_result['matched-at']
 
                         # Get the port object that maps to this url
@@ -227,6 +227,8 @@ class ImportNucleiOutput(luigi.Task):
                             port_obj = endpoint_port_obj_map[endpoint]
                             port_obj['nuclei_script_results'] = nuclei_scan_result
                             port_arr.append(port_obj)
+                        else:
+                            print("[-] Endpoint not in map: %s %s" % (endpoint, str(endpoint_port_obj_map)))
 
         # Import the nuclei scans
         if len(port_arr) > 0:

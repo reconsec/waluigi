@@ -220,7 +220,7 @@ class ImportNucleiOutput(luigi.Task):
                 for nuclei_scan_result in obj_arr:
               
                     if 'url' in nuclei_scan_result:
-                        endpoint = nuclei_scan_result['matched-at']
+                        endpoint = nuclei_scan_result['url']
 
                         # Get the port object that maps to this url
                         if endpoint in endpoint_port_obj_map:

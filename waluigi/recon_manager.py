@@ -664,7 +664,7 @@ class ReconManager:
     def get_scheduled_scan(self, sched_scan_id):
 
         sched_scan = None
-        r = requests.get('%s/api/scheduler/%d/scan/' % (self.manager_url, sched_scan_id), headers=self.headers,
+        r = requests.get('%s/api/scheduler/%s/scan/' % (self.manager_url, sched_scan_id), headers=self.headers,
                          verify=False)
         if r.status_code == 404:
             return sched_scan
@@ -699,7 +699,7 @@ class ReconManager:
     def remove_scheduled_scan(self, sched_scan_id):
 
         ret_val = True
-        r = requests.delete('%s/api/scheduler/%d/' % (self.manager_url, sched_scan_id), headers=self.headers,
+        r = requests.delete('%s/api/scheduler/%s/' % (self.manager_url, sched_scan_id), headers=self.headers,
                             verify=False)
         if r.status_code == 404:
             return False

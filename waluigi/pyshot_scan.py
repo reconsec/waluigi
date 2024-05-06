@@ -143,7 +143,7 @@ class ImportPyshotOutput(luigi.Task):
                         if port_id == 'None':
                             port_id_val = None
                         else:
-                            port_id_val = int(port_id)
+                            port_id_val = port_id
 
                         # Hash the image
                         image_data = b""

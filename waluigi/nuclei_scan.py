@@ -66,7 +66,9 @@ class NucleiScan(luigi.Task):
             thread_list = []
             
             scan_input_data = scan_target_dict['scan_input']
-            template_path_list = scan_target_dict['tool_args']
+            template_path_list = []
+            if 'tool_args' in scan_target_dict:
+                template_path_list = scan_target_dict['tool_args']
             #print(scan_input_data)
 
             target_map = {}

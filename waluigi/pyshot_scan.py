@@ -15,11 +15,11 @@ from multiprocessing.pool import ThreadPool
 from urllib.parse import urlparse, ParseResult
 from os.path import exists
 
-def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
+def pyshot_wrapper(ip_addr, port, query_arg, dir_path, ssl_val, screenshot_id, domain=None):
 
     ret_msg = ""
     try:
-        pyshot.take_screenshot(host=ip_addr, port_arg=port, query_arg="", dest_dir=dir_path, secure=ssl_val, port_id=port_id, domain=domain)
+        pyshot.take_screenshot(host=ip_addr, port_arg=port, query_arg=query_arg, dest_dir=dir_path, secure=ssl_val, screenshot_id=screenshot_id, domain=domain)
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
@@ -51,7 +51,7 @@ class PyshotScan(luigi.Task):
 
     def run(self):
 
-
+        id_map = {}
         # Ensure output folder exists
         dir_path = os.path.dirname(self.output().path)
 
@@ -80,18 +80,35 @@ class PyshotScan(luigi.Task):
             for port_key in port_obj_map:
                 port_obj = port_obj_map[port_key]
 
-                # print(scan_inst)
-                port_id = str(port_obj['port_id'])
                 ip_addr = target_str
                 port = str(port_obj['port'])
                 secure = port_obj['secure']
+                endpoint_path = "/"
+
+                if 'http_endpoint_map' in port_obj:
+                    http_endpoint_map = port_obj['http_endpoint_map']
+                    for endpoint_id in http_endpoint_map:
+                        http_endpoint = http_endpoint_map[endpoint_id]
+                        if 'domain' in http_endpoint and http_endpoint['domain'] is not None:
+                            ip_addr = http_endpoint['domain']
+
+                        if 'path' in http_endpoint:
+                            endpoint_path = http_endpoint['path']
+
+                        port_id = http_endpoint['endpoint_id']
+                        id_map[port_id] = 'http_endpoint_data_id'
+                        thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, endpoint_path, dir_path, secure, port_id)))
+
 
                 # Add argument without domain first
-                thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id)))
+                # print(scan_inst)
+                port_id = str(port_obj['port_id'])
+                id_map[port_id] = 'port_id'
+                thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, endpoint_path, dir_path, secure, port_id)))
 
                 # Loop through domains - truncate to the first 20
                 for domain in domain_list[:20]:
-                    thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, dir_path, secure, port_id, domain)))
+                    thread_list.append(pool.apply_async(pyshot_wrapper, (ip_addr, port, endpoint_path, dir_path, secure, port_id, domain)))
 
         # Close the pool
         pool.close()
@@ -102,6 +119,9 @@ class PyshotScan(luigi.Task):
             if len(output) > 0:
                 print(output)
                     #raise RuntimeError("[-] Input file is empty")
+
+        # Add this object for later
+        scan_input_obj.id_map = id_map
 
 
 @inherits(PyshotScan)
@@ -116,6 +136,7 @@ class ImportPyshotOutput(luigi.Task):
         meta_file = self.input().path
         #pyshot_output_dir = self.input().path
         scan_input_obj = self.scan_input
+        id_map = scan_input_obj.id_map
         scan_id = scan_input_obj.scan_id
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
@@ -132,18 +153,21 @@ class ImportPyshotOutput(luigi.Task):
 
                 try:
 
+                    id_val_str = 'port_id'
                     screenshot_meta = json.loads(line)
                     filename = screenshot_meta['file_path']
                     if filename and exists(filename):
                         url = screenshot_meta['url']
                         path = screenshot_meta['path']
-                        port_id = screenshot_meta['port_id']
+                        screenshot_id = screenshot_meta['screenshot_id']
                         status_code = screenshot_meta['status_code']
 
-                        if port_id == 'None':
-                            port_id_val = None
+                        if screenshot_id == 'None':
+                            screenshot_id_val = None
                         else:
-                            port_id_val = port_id
+                            screenshot_id_val = screenshot_id
+                            if screenshot_id_val in id_map:
+                                id_val_str = id_map[screenshot_id_val]
 
                         # Hash the image
                         image_data = b""
@@ -162,7 +186,7 @@ class ImportPyshotOutput(luigi.Task):
 
                         b64_image = base64.b64encode(image_data).decode()
                         obj_data = {'scan_id': scan_id, 
-                                    'port_id': port_id_val,
+                                    id_val_str : screenshot_id_val,
                                     'url': url,
                                     'path': path,
                                     'path_hash': hex_str,

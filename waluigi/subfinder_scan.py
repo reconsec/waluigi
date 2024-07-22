@@ -4,7 +4,6 @@ import subprocess
 import netaddr
 import socket
 import luigi
-import multiprocessing
 import traceback
 import os.path
 import yaml
@@ -13,46 +12,49 @@ from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 from tqdm import tqdm
+from waluigi import data_model
+
 
 def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
 
     ret_list = []
     # Call subfinder process
     error_flag = scan_utils.process_wrapper(command, use_shell, my_env)
-    #print("[+] Process returned")
+    # print("[+] Process returned")
     # Parse the output
     obj_arr = scan_utils.parse_json_blob_file(scan_output_file_path)
     for domain_entry in obj_arr:
         domain_name = domain_entry['host']
         ip_str = domain_entry['ip']
-        ret_list.append({'ip' : ip_str, 'domain' : domain_name})
+        ret_list.append({'ip': ip_str, 'domain': domain_name})
 
     return ret_list
 
-def get_subfinder_input(scan_input_obj):    
+
+def get_subfinder_input(scan_input_obj):
 
     scan_id = scan_input_obj.scan_id
 
     # Init directory
     tool_name = scan_input_obj.current_tool.name
     dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
-    
+
     dns_url_file = dir_path + os.path.sep + "dns_urls_" + scan_id
     url_inputs_fd = open(dns_url_file, 'w')
 
     scan_target_dict = scan_input_obj.scan_target_dict
     if scan_target_dict:
-        
+
         # Write the output
         scan_input = scan_target_dict['scan_input']
         api_keys = scan_target_dict['api_keys']
         target_map = {}
         if 'target_map' in scan_input:
             target_map = scan_input['target_map']
-        
+
         print("[+] Retrieved %d urls from database" % len(target_map))
         for target_key in target_map:
-            url_inputs_fd.write(target_key + '\n')          
+            url_inputs_fd.write(target_key + '\n')
 
     else:
         print("[-] Target url list is empty.")
@@ -61,8 +63,9 @@ def get_subfinder_input(scan_input_obj):
     url_inputs_fd.close()
 
     # Write the output
-    scan_dict = {'input_path': dns_url_file, 'api_keys' : api_keys}
+    scan_dict = {'input_path': dns_url_file, 'api_keys': api_keys}
     return scan_dict
+
 
 def update_config_file(api_keys, my_env):
 
@@ -71,15 +74,16 @@ def update_config_file(api_keys, my_env):
 
     # If no file then run subfinder to generate the template
     if os.path.isfile(config_file_path) == False:
-        subprocess.run(["subfinder", "-d","localhost","-timeout", "1"],env=my_env)
-        subprocess.run(["subfinder", "-h"],env=my_env)
+        subprocess.run(["subfinder", "-d", "localhost",
+                       "-timeout", "1"], env=my_env)
+        subprocess.run(["subfinder", "-h"], env=my_env)
 
     # Update provider config file
     f = open(config_file_path, 'r')
     data = yaml.safe_load(f)
     f.close()
 
-    #print(data)
+    # print(data)
     key_arr = []
     if 'chaos' in api_keys:
         key_val = api_keys['chaos']
@@ -100,7 +104,7 @@ def update_config_file(api_keys, my_env):
 
     # Write to config file
     with open(config_file_path, 'w') as yaml_file:
-        yaml_file.write( yaml.dump(data, default_flow_style=False))
+        yaml_file.write(yaml.dump(data, default_flow_style=False))
 
 
 def dns_wrapper(domain_set):
@@ -113,13 +117,14 @@ def dns_wrapper(domain_set):
 
         for domain in domain_set:
             # Add argument without domain first
-            thread_map[domain] = pool.apply_async(socket.gethostbyname, (domain, ))
+            thread_map[domain] = pool.apply_async(
+                socket.gethostbyname, (domain, ))
 
         # Close the pool
         pool.close()
 
         # Loop through thread function calls and update progress
-        #print(thread_map)
+        # print(thread_map)
         for domain_str in thread_map:
 
             ip_domain_map = {}
@@ -150,7 +155,8 @@ def dns_wrapper(domain_set):
 
                 # Add to the list
                 ret_list.append(ip_domain_map)
-                print("[*] Adding IP %s for hostname %s" % (ip_str, domain_str))
+                print("[*] Adding IP %s for hostname %s" %
+                      (ip_str, domain_str))
 
     except subprocess.CalledProcessError as e:
         print("[*] called process error")
@@ -200,7 +206,7 @@ class SubfinderScan(luigi.Task):
 
         # Add env variables for HOME
         my_env = os.environ.copy()
-        
+
         use_shell = False
         if os.name != 'nt':
             home_dir = os.path.expanduser('~')
@@ -216,7 +222,7 @@ class SubfinderScan(luigi.Task):
         # Add the domains from the wildcards
         f = open(subfinder_domain_list, 'r')
         sub_lines = f.readlines()
-        f.close()   
+        f.close()
 
         # Add the lines
         domain_set = set()
@@ -227,7 +233,7 @@ class SubfinderScan(luigi.Task):
 
                     domain_set.add(domain_str)
 
-                    command = [] 
+                    command = []
                     command_arr = [
                         "subfinder",
                         "-json",
@@ -242,9 +248,10 @@ class SubfinderScan(luigi.Task):
                     command.extend(command_arr)
 
                     # Add optional arguments
-                    #command.extend(option_arr)
+                    # command.extend(option_arr)
 
-                    thread_list.append(pool.apply_async(subfinder_wrapper, (scan_output_file_path, command, use_shell, my_env)))
+                    thread_list.append(pool.apply_async(
+                        subfinder_wrapper, (scan_output_file_path, command, use_shell, my_env)))
 
             # Close the pool
             pool.close()
@@ -252,17 +259,17 @@ class SubfinderScan(luigi.Task):
             # Loop through thread function calls and update progress
             for thread_obj in tqdm(thread_list):
                 temp_list = thread_obj.get()
-                #print(temp_list)
-                ret_list.extend( temp_list )
+                # print(temp_list)
+                ret_list.extend(temp_list)
 
         # Reset the API keys
         update_config_file({}, my_env)
 
-        #print(domain_set)
+        # print(domain_set)
         if len(domain_set) > 0:
-            ret_list.extend( dns_wrapper(domain_set) )
+            ret_list.extend(dns_wrapper(domain_set))
 
-        #print(ret_list)
+        # print(ret_list)
         output_fd.write(json.dumps({'domain_list': ret_list}))
         output_fd.close()
 
@@ -287,14 +294,14 @@ class SubfinderImport(luigi.Task):
 
         if len(data) > 0:
             domain_map = json.loads(data)
-            #print(domain_map)
+            # print(domain_map)
 
             if 'domain_list' in domain_map:
                 domain_list = domain_map['domain_list']
 
                 ip_map = {}
 
-                #Convert from domain to ip map to ip to domain map
+                # Convert from domain to ip map to ip to domain map
                 for domain_entry in domain_list:
 
                     # Get IP for domain
@@ -309,24 +316,42 @@ class SubfinderImport(luigi.Task):
 
                     domain_list.add(domain_str)
 
-
-                port_arr = []
+                obj_arr = []
                 for ip_addr in ip_map:
 
                     domain_set = ip_map[ip_addr]
                     domains = list(domain_set)
 
-                    ip_addr_int = int(netaddr.IPAddress(ip_addr))
-                    #print(domains)
-                    port_obj = {'ipv4_addr': ip_addr_int, 'domains': domains}
+                    ip_object = netaddr.IPAddress(ip_addr)
+                    if ip_object.version == 4:
+                        addr_type = 'ipv4'
+                    elif ip_object.version == 6:
+                        addr_type = 'ipv6'
 
-                    # Add to list
-                    port_arr.append(port_obj)
+                    host_obj = data_model.Host(scan_id)
+                    host_obj.ip_addr_type = addr_type
+                    host_obj.ip_addr = str(ip_object)
 
-                if len(port_arr) > 0:
+                    # Add host
+                    obj_arr.append(host_obj)
 
-                    tool_obj = scan_input_obj.current_tool
-                    tool_id = tool_obj.id
-                    scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                    #print(scan_results)
-                    ret_val = recon_manager.import_ports_ext(scan_results)
+                    for domain in domains:
+
+                        domain_obj = data_model.Domain(
+                            host_id=host_obj.record_id)
+                        domain_obj.name = domain
+
+                        # Add port
+                        obj_arr.append(domain_obj)
+
+                import_arr = []
+                for obj in obj_arr:
+                    flat_obj = obj.to_jsonable()
+                    import_arr.append(flat_obj)
+
+                # Import the results to the server
+                # print(scan_results)
+                tool_obj = scan_input_obj.current_tool
+                tool_id = tool_obj.id
+                ret_val = recon_manager.import_data(
+                    scan_id, tool_id, import_arr)

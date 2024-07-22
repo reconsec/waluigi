@@ -1,14 +1,15 @@
 import os
 import subprocess
 import re
+import netaddr
 
 from json import JSONDecoder, JSONDecodeError
-from threading  import Thread
+from threading import Thread
 from queue import Queue
 from enum import Enum
 
-
 NOT_WHITESPACE = re.compile(r'\S')
+
 
 class ProcessStreamReader(Thread):
 
@@ -27,7 +28,6 @@ class ProcessStreamReader(Thread):
 
     def queue(self, data):
         self.output_queue.put(data)
-
 
     def run(self):
 
@@ -54,25 +54,46 @@ class ProcessStreamReader(Thread):
         return output_str
 
 
+def check_domain(domain_str):
+
+    # If it's an IP skip it
+    if "*." in domain_str:
+        return None
+
+    # If it's an IP skip it
+    try:
+        ip_addr_check = int(netaddr.IPAddress(domain_str))
+        return None
+    except:
+        pass
+
+    return domain_str
+
+
 def init_tool_folder(tool_name, desc, scan_id):
 
     # Create directory if it doesn't exist
     cwd = os.getcwd()
-    dir_path = cwd + os.path.sep + scan_id + os.path.sep + "%s-%s" % (tool_name, desc)
+    dir_path = cwd + os.path.sep + scan_id + \
+        os.path.sep + "%s-%s" % (tool_name, desc)
     if not os.path.isdir(dir_path):
         os.makedirs(dir_path)
         os.chmod(dir_path, 0o777)
 
     return dir_path
 
+
 def process_wrapper(cmd_args, use_shell=False, my_env=None):
 
     ret_value = True
     print("[*] Executing '%s'" % str(cmd_args))
-    p = subprocess.Popen(cmd_args, shell=use_shell, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=my_env)
-    
-    stdout_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDOUT, p.stdout, True)
-    stderr_reader = ProcessStreamReader(ProcessStreamReader.StreamType.STDERR, p.stderr, True)
+    p = subprocess.Popen(cmd_args, shell=use_shell, stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=my_env)
+
+    stdout_reader = ProcessStreamReader(
+        ProcessStreamReader.StreamType.STDOUT, p.stdout, True)
+    stderr_reader = ProcessStreamReader(
+        ProcessStreamReader.StreamType.STDERR, p.stderr, True)
 
     p.stdin.close()
 
@@ -89,8 +110,10 @@ def process_wrapper(cmd_args, use_shell=False, my_env=None):
     return ret_value
 
 # Parse a file that contains multiple JSON blogs and return a list of objects
+
+
 def parse_json_blob_file(output_file):
-    
+
     obj_arr = []
 
     if os.path.exists(output_file):
@@ -102,7 +125,7 @@ def parse_json_blob_file(output_file):
 
         if len(data) > 0:
 
-            decoder=JSONDecoder()
+            decoder = JSONDecoder()
             pos = 0
 
             while True:

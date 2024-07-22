@@ -23,6 +23,7 @@ custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.
 requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
 
+
 def tool_order_cmp(x, y):
 
     if x.collection_tool.scan_order is None:
@@ -38,6 +39,7 @@ def tool_order_cmp(x, y):
     else:
         return 0
 
+
 class ScanStatus(enum.Enum):
     CREATED = 1
     RUNNING = 2
@@ -46,23 +48,33 @@ class ScanStatus(enum.Enum):
     ERROR = 5
 
     def __str__(self):
-        if (self == ScanStatus.CREATED):     return "CREATED"
-        elif (self == ScanStatus.RUNNING):    return "RUNNING"
-        elif (self == ScanStatus.COMPLETED):   return "COMPLETED"
-        elif (self == ScanStatus.CANCELLED):   return "CANCELLED"
-        elif (self == ScanStatus.ERROR):   return "ERROR"
+        if (self == ScanStatus.CREATED):
+            return "CREATED"
+        elif (self == ScanStatus.RUNNING):
+            return "RUNNING"
+        elif (self == ScanStatus.COMPLETED):
+            return "COMPLETED"
+        elif (self == ScanStatus.CANCELLED):
+            return "CANCELLED"
+        elif (self == ScanStatus.ERROR):
+            return "ERROR"
+
 
 class CollectionToolStatus(enum.Enum):
-   CREATED = 1
-   RUNNING = 2
-   COMPLETED = 3
-   ERROR = 4
+    CREATED = 1
+    RUNNING = 2
+    COMPLETED = 3
+    ERROR = 4
 
-   def __str__(self):
-      if (self == CollectionToolStatus.CREATED):     return "CREATED"
-      elif (self == CollectionToolStatus.RUNNING):    return "RUNNING"
-      elif (self == CollectionToolStatus.COMPLETED):   return "COMPLETED"
-      elif (self == CollectionToolStatus.ERROR):   return "ERROR"
+    def __str__(self):
+        if (self == CollectionToolStatus.CREATED):
+            return "CREATED"
+        elif (self == CollectionToolStatus.RUNNING):
+            return "RUNNING"
+        elif (self == CollectionToolStatus.COMPLETED):
+            return "COMPLETED"
+        elif (self == CollectionToolStatus.ERROR):
+            return "ERROR"
 
 
 class PortScan():
@@ -87,16 +99,19 @@ class ScanInput():
 
         # Create a scan id if it does not exist
         if self.scheduled_scan.scan_id is None:
-            scan_obj = self.scan_thread.recon_manager.get_scheduled_scan(self.scheduled_scan.id)
+            scan_obj = self.scan_thread.recon_manager.get_scheduled_scan(
+                self.scheduled_scan.id)
             if not scan_obj:
-                raise RuntimeError("[-] No scan object returned for scheduled scan.")
+                raise RuntimeError(
+                    "[-] No scan object returned for scheduled scan.")
             else:
                 self.scan_id = str(scan_obj.scan_id)
         else:
-             self.scan_id = str(self.scheduled_scan.scan_id)
+            self.scan_id = str(self.scheduled_scan.scan_id)
 
         # Get the initial subnets and urls for this target
-        self.scan_target = self.scan_thread.recon_manager.get_target(self.scan_id)
+        self.scan_target = self.scan_thread.recon_manager.get_target(
+            self.scan_id)
         if self.scan_target is None:
             raise RuntimeError("[-] No scan target returned for scan.")
 
@@ -106,7 +121,6 @@ class ScanInput():
     # This is necessary because luigi hashes input parameters and dictionaries won't work
     def __hash__(self):
         return 0
-
 
 
 class ScheduledScanThread(threading.Thread):
@@ -132,13 +146,15 @@ class ScheduledScanThread(threading.Thread):
     def execute_scan_jobs(self, sched_scan_obj, scan_input_obj, lock_val=None):
 
         ret_val = True
-        # Set connection target in connection manager to this target 
+        # Set connection target in connection manager to this target
         target_id = scan_input_obj.scheduled_scan.target_id
-        self.recon_manager.set_current_target(self.connection_manager, target_id)
+        self.recon_manager.set_current_target(
+            self.connection_manager, target_id)
 
-        #print(sched_scan_obj.collection_tools)
+        # print(sched_scan_obj.collection_tools)
         # Sort the list
-        sorted_list = sorted(sched_scan_obj.collection_tools, key=functools.cmp_to_key(tool_order_cmp))
+        sorted_list = sorted(sched_scan_obj.collection_tools,
+                             key=functools.cmp_to_key(tool_order_cmp))
 
         # Connect to extender to see if scan has been cancelled and get tool scope
         if self.connection_manager:
@@ -161,14 +177,14 @@ class ScheduledScanThread(threading.Thread):
             # Set the tool obj
             scan_input_obj.current_tool = tool_obj
 
-
             # Check if tool instance is already completed
-            tool_status = self.recon_manager.get_tool_status(collection_tool_inst.id)
-            #print("[*] %s tool status: %d" %(tool_obj.name, tool_status))
+            tool_status = self.recon_manager.get_tool_status(
+                collection_tool_inst.id)
+            # print("[*] %s tool status: %d" %(tool_obj.name, tool_status))
             if tool_status == CollectionToolStatus.COMPLETED.value:
                 print("[*] %s tool complete,  skipping." % tool_obj.name)
                 continue
-                            
+
             scan_input = None
 
             # Check if scan is cancelled
@@ -178,10 +194,11 @@ class ScheduledScanThread(threading.Thread):
                 return False
 
             # Check if load balanced
-            skip_load_balance_ports = self.recon_manager.is_load_balanced() 
+            skip_load_balance_ports = self.recon_manager.is_load_balanced()
 
             # Get scope
-            scan_input  = self.recon_manager.get_tool_scope(scan_input_obj.scan_id, collection_tool_inst.id, skip_load_balance_ports)
+            scan_input = self.recon_manager.get_tool_scope(
+                scan_input_obj.scan_id, collection_tool_inst.id, skip_load_balance_ports)
 
             # Return if there was an error getting the scope
             if scan_input is None:
@@ -206,7 +223,7 @@ class ScheduledScanThread(threading.Thread):
                         return False
 
                 try:
-                    
+
                     # Execute appropriate tool
                     ret = scan_pipeline.scan_func(scan_input_obj)
                     if not ret:
@@ -220,7 +237,7 @@ class ScheduledScanThread(threading.Thread):
                         if ret_val == False:
                             print("[-] Failed connecting to extender")
                             return False
-        
+
             # Import results
             ret = scan_pipeline.import_func(scan_input_obj)
             if not ret:
@@ -228,24 +245,23 @@ class ScheduledScanThread(threading.Thread):
 
             # Set status for the tool
             if tool_ret:
-                self.recon_manager.update_tool_status( collection_tool_inst.id, CollectionToolStatus.COMPLETED.value)
+                self.recon_manager.update_tool_status(
+                    collection_tool_inst.id, CollectionToolStatus.COMPLETED.value)
             else:
                 # Set error code and break
-                self.recon_manager.update_tool_status( collection_tool_inst.id, CollectionToolStatus.ERROR.value)
+                self.recon_manager.update_tool_status(
+                    collection_tool_inst.id, CollectionToolStatus.ERROR.value)
                 ret_val = False
                 break
-            
-                
+
             # Reset the tool id
             scan_input_obj.current_tool = None
 
-        
         # Cleanup files
         if ret_val:
             ret = scan_pipeline.scan_cleanup_func(scan_input_obj.scan_id)
 
         return ret_val
-
 
     def process_scan_obj(self, sched_scan_obj, lock_val=True):
 
@@ -254,11 +270,13 @@ class ScheduledScanThread(threading.Thread):
         scan_input_obj = ScanInput(self, sched_scan_obj)
 
         # Update scan status
-        self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.RUNNING.value)
+        self.recon_manager.update_scan_status(
+            scan_input_obj.scan_id, ScanStatus.RUNNING.value)
 
         # Execute scan jobs
         try:
-            ret_val = self.execute_scan_jobs(sched_scan_obj, scan_input_obj, lock_val)
+            ret_val = self.execute_scan_jobs(
+                sched_scan_obj, scan_input_obj, lock_val)
 
             # Set status
             if self.connection_manager:
@@ -268,7 +286,6 @@ class ScheduledScanThread(threading.Thread):
                     print("[-] Failed connecting to extender")
                     return False
 
-
             scan_status = ScanStatus.ERROR.value
             if ret_val == True:
                 # Remove scheduled scan
@@ -276,16 +293,17 @@ class ScheduledScanThread(threading.Thread):
 
                 # Update scan status
                 scan_status = ScanStatus.COMPLETED.value
-            
-            # Update scan status
-            self.recon_manager.update_scan_status(scan_input_obj.scan_id, scan_status)
 
+            # Update scan status
+            self.recon_manager.update_scan_status(
+                scan_input_obj.scan_id, scan_status)
 
         except Exception as e:
             # Update scan status
-            self.recon_manager.update_scan_status(scan_input_obj.scan_id, ScanStatus.ERROR.value)
+            self.recon_manager.update_scan_status(
+                scan_input_obj.scan_id, ScanStatus.ERROR.value)
             print(traceback.format_exc())
-       
+
         return
 
     def run(self):
@@ -311,19 +329,21 @@ class ScheduledScanThread(threading.Thread):
                                 if lock_val:
                                     ret_val = self.connection_manager.connect_to_extender()
                                     if ret_val == False:
-                                        print("[-] Failed connecting to extender")
+                                        print(
+                                            "[-] Failed connecting to extender")
                                         continue
                                 else:
-                                    print("[-] Connection lock is currently held. Retrying later")
+                                    print(
+                                        "[-] Connection lock is currently held. Retrying later")
                                     continue
 
                             sched_scan_obj_arr = recon_manager.get_scheduled_scans()
                             if sched_scan_obj_arr and len(sched_scan_obj_arr) > 0:
                                 sched_scan_obj = sched_scan_obj_arr[0]
-                                self.process_scan_obj(sched_scan_obj)                                 
+                                self.process_scan_obj(sched_scan_obj)
                         except requests.exceptions.ConnectionError as e:
                             print("[-] Unable to connect to server.")
-                            pass  
+                            pass
                         except Exception as e:
                             print(traceback.format_exc())
                             pass
@@ -331,7 +351,8 @@ class ScheduledScanThread(threading.Thread):
                             # Release the lock if we have it
                             if self.connection_manager:
                                 if lock_val:
-                                    self.connection_manager.free_connection_lock(lock_val)
+                                    self.connection_manager.free_connection_lock(
+                                        lock_val)
 
     def stop(self, timeout=None):
         # Check if thread is dead
@@ -352,12 +373,13 @@ class ReconManager:
         self.token = token
         self.debug = False
         self.manager_url = manager_url
-        self.headers = {'User-Agent': custom_user_agent, 'Authorization': 'Bearer ' + self.token}
+        self.headers = {'User-Agent': custom_user_agent,
+                        'Authorization': 'Bearer ' + self.token}
         self.session_key = self._get_session_key()
 
         # Get network interfaces
         self.network_ifaces = self.get_network_interfaces()
-        #print(self.network_ifaces)
+        # print(self.network_ifaces)
         if len(self.network_ifaces) > 0:
             # Send interface list to server
             try:
@@ -366,7 +388,7 @@ class ReconManager:
                 print("[-] Unable to connect to server.")
                 pass
             except Exception as e:
-                #print(traceback.format_exc())
+                # print(traceback.format_exc())
                 pass
 
     def set_debug(self, debug):
@@ -415,14 +437,14 @@ class ReconManager:
                     # Only get the first one
                     break
 
-            interface_dict[if_name] = {'ipv4_addr' : ip_str, 'netmask' : netmask, 'mac_address' : mac_addr_str}
+            interface_dict[if_name] = {
+                'ipv4_addr': ip_str, 'netmask': netmask, 'mac_address': mac_addr_str}
 
         return interface_dict
 
-
-
     # Stub to be overwritten in case anything needs to be done by a specific connection manager
     # in regards to the target specified
+
     def set_current_target(self, connection_manager, target_id):
         return
 
@@ -454,12 +476,14 @@ class ReconManager:
                 if session_key and session_key != self.session_key:
                     cipher_aes = AES.new(session_key, AES.MODE_EAX, nonce)
                     try:
-                        data = cipher_aes.decrypt_and_verify(ciphertext, tag).decode()
+                        data = cipher_aes.decrypt_and_verify(
+                            ciphertext, tag).decode()
                         self.session_key = session_key
                         return data
                     except Exception as e:
-                        print("[-] Error decrypting response with session from disk. Refreshing session: %s" % str(e))
-                
+                        print(
+                            "[-] Error decrypting response with session from disk. Refreshing session: %s" % str(e))
+
                 # Remove the previous session file
                 os.remove('session')
 
@@ -472,7 +496,7 @@ class ReconManager:
 
         session_key = None
         if os.path.exists('session'):
-            
+
             f = open("session", "r")
             hex_session = f.read().strip()
             f.close()
@@ -483,9 +507,7 @@ class ReconManager:
 
         return session_key
 
-
     def _get_session_key(self):
-
 
         session_key = self._get_session_key_from_disk()
         if session_key:
@@ -516,7 +538,8 @@ class ReconManager:
             cipher_rsa = PKCS1_OAEP.new(private_key_obj)
             session_key = cipher_rsa.decrypt(enc_session_key)
 
-            print("[*] Session Key: %s" % binascii.hexlify(session_key).decode())
+            print("[*] Session Key: %s" %
+                  binascii.hexlify(session_key).decode())
             with open(os.open('session', os.O_CREAT | os.O_WRONLY, 0o777), 'w') as fh:
                 fh.write(binascii.hexlify(session_key).decode())
 
@@ -525,7 +548,8 @@ class ReconManager:
     def get_subnets(self, scan_id):
 
         subnets = []
-        r = requests.get('%s/api/subnets/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/subnets/scan/%s' % (self.manager_url,
+                         scan_id), headers=self.headers, verify=False)
         if r.status_code == 404:
             return subnets
         if r.status_code != 200:
@@ -534,7 +558,8 @@ class ReconManager:
 
         content = r.json()
         data = self._decrypt_json(content)
-        subnet_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        subnet_obj_arr = json.loads(
+            data, object_hook=lambda d: SimpleNamespace(**d))
 
         if subnet_obj_arr:
             for subnet in subnet_obj_arr:
@@ -547,7 +572,8 @@ class ReconManager:
     def get_target(self, scan_id):
 
         target_obj = None
-        r = requests.get('%s/api/target/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/target/scan/%s' % (self.manager_url,
+                         scan_id), headers=self.headers, verify=False)
         if r.status_code == 404:
             return target_obj
         if r.status_code != 200:
@@ -557,14 +583,16 @@ class ReconManager:
         content = r.json()
         if content:
             data = self._decrypt_json(content)
-            target_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+            target_obj = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
 
         return target_obj
 
     def get_tool_scope(self, scan_id, tool_id, load_balanced=False):
 
         target_obj = None
-        target_url = '%s/api/scan/%s/scope/%s' % (self.manager_url, scan_id, tool_id)
+        target_url = '%s/api/scan/%s/scope/%s' % (
+            self.manager_url, scan_id, tool_id)
         if load_balanced:
             target_url += "?load_balanced=True"
 
@@ -578,20 +606,20 @@ class ReconManager:
         try:
             content = r.json()
             data = self._decrypt_json(content)
-            #print(data)
+            # print(data)
             if len(data) > 0:
                 target_obj = json.loads(data)
-                
+
         except Exception as e:
             print(traceback.format_exc())
-            
 
         return target_obj
 
     def get_collector_interface(self):
 
         interface = None
-        r = requests.get('%s/api/collector/interface' % (self.manager_url), headers=self.headers, verify=False)
+        r = requests.get('%s/api/collector/interface' %
+                         (self.manager_url), headers=self.headers, verify=False)
         if r.status_code == 404:
             return interface
         if r.status_code != 200:
@@ -601,7 +629,8 @@ class ReconManager:
         content = r.json()
         data = self._decrypt_json(content)
         if data:
-            interface_obj = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+            interface_obj = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
             interface = interface_obj.interface
 
         return interface
@@ -609,7 +638,8 @@ class ReconManager:
     def get_urls(self, scan_id):
 
         urls = []
-        r = requests.get('%s/api/urls/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/urls/scan/%s' % (self.manager_url,
+                         scan_id), headers=self.headers, verify=False)
         if r.status_code == 404:
             return urls
         if r.status_code != 200:
@@ -618,7 +648,8 @@ class ReconManager:
 
         content = r.json()
         data = self._decrypt_json(content)
-        url_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        url_obj_arr = json.loads(
+            data, object_hook=lambda d: SimpleNamespace(**d))
 
         if url_obj_arr:
             for url_obj in url_obj_arr:
@@ -647,7 +678,8 @@ class ReconManager:
     def get_scheduled_scans(self):
 
         sched_scan_arr = []
-        r = requests.get('%s/api/scheduler/' % (self.manager_url), headers=self.headers, verify=False)
+        r = requests.get('%s/api/scheduler/' %
+                         (self.manager_url), headers=self.headers, verify=False)
         if r.status_code == 404:
             return sched_scan_arr
         elif r.status_code != 200:
@@ -657,7 +689,8 @@ class ReconManager:
         content = r.json()
         data = self._decrypt_json(content)
         if data:
-            sched_scan_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+            sched_scan_arr = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
 
         return sched_scan_arr
 
@@ -674,14 +707,16 @@ class ReconManager:
 
         content = r.json()
         data = self._decrypt_json(content)
-        sched_scan = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        sched_scan = json.loads(
+            data, object_hook=lambda d: SimpleNamespace(**d))
 
         return sched_scan
 
     def get_scan(self, scan_id):
 
         scan = None
-        r = requests.get('%s/api/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/scan/%s' % (self.manager_url,
+                         scan_id), headers=self.headers, verify=False)
         if r.status_code == 404:
             return scan
         elif r.status_code != 200:
@@ -690,7 +725,8 @@ class ReconManager:
 
         content = r.json()
         data = self._decrypt_json(content)
-        scan_list = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        scan_list = json.loads(
+            data, object_hook=lambda d: SimpleNamespace(**d))
         if scan_list and len(scan_list) > 0:
             scan = scan_list[0]
 
@@ -712,7 +748,8 @@ class ReconManager:
     def get_hosts(self, scan_id):
 
         port_arr = []
-        r = requests.get('%s/api/hosts/scan/%s' % (self.manager_url, scan_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/hosts/scan/%s' % (self.manager_url,
+                         scan_id), headers=self.headers, verify=False)
         if r.status_code == 404:
             return port_arr
         elif r.status_code != 200:
@@ -721,14 +758,16 @@ class ReconManager:
 
         content = r.json()
         data = self._decrypt_json(content)
-        port_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        port_obj_arr = json.loads(
+            data, object_hook=lambda d: SimpleNamespace(**d))
 
         return port_obj_arr
 
     def get_tools(self):
 
         port_arr = []
-        r = requests.get('%s/api/tools' % (self.manager_url), headers=self.headers, verify=False)
+        r = requests.get('%s/api/tools' % (self.manager_url),
+                         headers=self.headers, verify=False)
         if r.status_code == 404:
             return port_arr
         elif r.status_code != 200:
@@ -737,11 +776,12 @@ class ReconManager:
 
         content = r.json()
         data = self._decrypt_json(content)
-        tool_obj_arr = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+        tool_obj_arr = json.loads(
+            data, object_hook=lambda d: SimpleNamespace(**d))
 
         return tool_obj_arr
 
-    def update_collector_status(self, network_ifaces ):
+    def update_collector_status(self, network_ifaces):
 
         # Import the data to the manager
         json_data = json.dumps(network_ifaces).encode()
@@ -752,7 +792,8 @@ class ReconManager:
         # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/collector/interfaces/' % (self.manager_url), headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/collector/interfaces/' % (self.manager_url),
+                          headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating collector interfaces.")
 
@@ -768,7 +809,8 @@ class ReconManager:
         packet = cipher_aes.nonce + tag + ciphertext
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/scan/%s/' % (self.manager_url, scan_id), headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/scan/%s/' % (self.manager_url, scan_id),
+                          headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating scan status.")
 
@@ -777,7 +819,8 @@ class ReconManager:
     def get_tool_status(self, tool_id):
 
         status = None
-        r = requests.get('%s/api/tool/status/%s' % (self.manager_url, tool_id), headers=self.headers, verify=False)
+        r = requests.get('%s/api/tool/status/%s' % (self.manager_url,
+                         tool_id), headers=self.headers, verify=False)
         if r.status_code == 404:
             return status
         if r.status_code != 200:
@@ -787,7 +830,8 @@ class ReconManager:
         content = r.json()
         data = self._decrypt_json(content)
         if data:
-            tool_inst = json.loads(data, object_hook=lambda d: SimpleNamespace(**d))
+            tool_inst = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
             status = tool_inst.status
 
         return status
@@ -795,14 +839,15 @@ class ReconManager:
     def update_tool_status(self, tool_id, status, status_message=''):
 
         # Import the data to the manager
-        status_dict = { 'status': status, 'status_message': status_message}
+        status_dict = {'status': status, 'status_message': status_message}
         json_data = json.dumps(status_dict).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        
+
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/tool/%s' % (self.manager_url, tool_id), headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/tool/%s' % (self.manager_url, tool_id),
+                          headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating tool status.")
 
@@ -817,7 +862,8 @@ class ReconManager:
         packet = cipher_aes.nonce + tag + ciphertext
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/ports' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/ports' % self.manager_url,
+                          headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error importing ports to manager server.")
 
@@ -832,7 +878,27 @@ class ReconManager:
         packet = cipher_aes.nonce + tag + ciphertext
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/ports/ext' % self.manager_url, headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/ports/ext' % self.manager_url,
+                          headers=self.headers, json={"data": b64_val}, verify=False)
+        if r.status_code != 200:
+            raise RuntimeError("[-] Error importing ports to manager server.")
+
+        return True
+
+    def import_data(self, scan_id, tool_id, scan_results):
+
+        scan_results_dict = {'TOOL_ID': tool_id,
+                             'SCAN_ID': scan_id, 'OBJ_LIST': scan_results}
+
+        # Import the data to the manager
+        json_data = json.dumps(scan_results_dict).encode()
+        cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+        ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
+        packet = cipher_aes.nonce + tag + ciphertext
+
+        b64_val = base64.b64encode(packet).decode()
+        r = requests.post('%s/api/data/import' % self.manager_url,
+                          headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error importing ports to manager server.")
 
@@ -847,7 +913,8 @@ class ReconManager:
         packet = cipher_aes.nonce + tag + ciphertext
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/integration/shodan/import/%s' % (self.manager_url, str(scan_id)), headers=self.headers, json={"data": b64_val}, verify=False)
+        r = requests.post('%s/api/integration/shodan/import/%s' % (self.manager_url,
+                          str(scan_id)), headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error importing ports to manager server.")
 
@@ -858,7 +925,7 @@ class ReconManager:
         # Import the data to the manager
         obj_data = [data_dict]
 
-        #print(b64_image)
+        # print(b64_image)
         json_data = json.dumps(obj_data).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)

@@ -1,4 +1,5 @@
-import json
+import netifaces as ni
+import re
 import os
 import subprocess
 import netaddr
@@ -7,12 +8,11 @@ import luigi
 
 from luigi.util import inherits
 from waluigi import scan_utils
+from waluigi import data_model
 
 TCP = 'tcp'
 UDP = 'udp'
 
-import re
-import netifaces as ni
 
 def get_mac_address(ip_address):
     # Run the arp command to get the ARP table entries
@@ -30,13 +30,14 @@ def get_mac_address(ip_address):
     else:
         return None
 
+
 def get_default_gateway():
 
     default_gateway = None
     try:
         # Retrieve the gateways in the system
         gws = ni.gateways()
-        
+
         # Get the default gateway, typically found under 'default' and using the AF_INET family
         default_gateway = gws['default'][ni.AF_INET][0]
 
@@ -80,7 +81,7 @@ def get_masscan_input(scan_input_obj):
         f = open(masscan_ip_file, 'w')
         for target_key in target_map:
             f.write(target_key + '\n')
-            
+
             # Add the port to the set
             target_dict = target_map[target_key]
             port_obj_map = target_dict['port_map']
@@ -100,14 +101,15 @@ def get_masscan_input(scan_input_obj):
         f.write(port_line + '\n')
         f.close()
 
-    masscan_conf = {'config_path' : masscan_config_file, 'input_path': masscan_ip_file, 'tool_args' : tool_args}
+    masscan_conf = {'config_path': masscan_config_file,
+                    'input_path': masscan_ip_file, 'tool_args': tool_args}
     return masscan_conf
 
 
 class MasscanScan(luigi.Task):
 
     scan_input = luigi.Parameter(default=None)
-    
+
     def output(self):
 
         scan_input_obj = self.scan_input
@@ -130,11 +132,10 @@ class MasscanScan(luigi.Task):
         scan_config_dict = get_masscan_input(scan_input_obj)
         if scan_config_dict:
 
-            #print(scan_json)
+            # print(scan_json)
             conf_file_path = scan_config_dict['config_path']
             ips_file_path = scan_config_dict['input_path']
             tool_args = scan_config_dict['tool_args']
-
 
             # Get and print the default gateway IP
             router_mac = None
@@ -152,7 +153,7 @@ class MasscanScan(luigi.Task):
 
                 command_arr = [
                     "masscan",
-                    "--open",                
+                    "--open",
                     "-oX",
                     masscan_output_file_path,
                     "-c",
@@ -190,22 +191,88 @@ class MasscanScan(luigi.Task):
             f_output.close()
 
 
+# @inherits(MasscanScan)
+# class ImportMasscanOutput(luigi.Task):
+
+#     def requires(self):
+#         # Requires MassScan Task to be run prior
+#         return MasscanScan(scan_input=self.scan_input)
+
+#     def run(self):
+
+#         port_arr = []
+#         masscan_output_file = self.input().path
+
+#         scan_input_obj = self.scan_input
+#         scan_id = scan_input_obj.scan_id
+#         recon_manager = scan_input_obj.scan_thread.recon_manager
+
+#         if os.path.isfile(masscan_output_file) and os.path.getsize(masscan_output_file) > 0:
+
+#             try:
+#                 # load masscan results from Masscan Task
+#                 tree = ET.parse(masscan_output_file)
+#                 root = tree.getroot()
+
+#                 # Loop through hosts
+#                 port_arr = []
+#                 for host in root.iter('host'):
+#                     address = host.find('address')
+#                     addr = address.get('addr')
+#                     ipv4_addr_int = str(int(netaddr.IPAddress(addr)))
+
+#                     ports_obj = host.find('ports')
+#                     ports = ports_obj.findall('port')
+#                     for port in ports:
+
+#                         port_id = port.get('portid')
+#                         proto_str = port.get('protocol').strip()
+#                         if proto_str == TCP:
+#                             proto = 0
+#                         else:
+#                             proto = 1
+
+#                         port_obj = {'port': port_id,
+#                                     'proto': proto,
+#                                     'ipv4_addr': ipv4_addr_int}
+
+#                         port_arr.append(port_obj)
+
+#             except Exception as e:
+#                 print('[-] Masscan results parsing error: %s' % str(e))
+#                 os.remove(masscan_output_file)
+#                 raise e
+#         else:
+#             print("[*] Masscan output file is empty. Ensure inputs were provided.")
+
+#         if len(port_arr) > 0:
+
+#             # Import the ports to the manager
+#             tool_obj = scan_input_obj.current_tool
+#             tool_id = tool_obj.id
+#             scan_results = {'tool_id': tool_id,
+#                             'scan_id': scan_id, 'port_list': port_arr}
+#             # print(scan_results)
+#             ret_val = recon_manager.import_ports_ext(scan_results)
+
 @inherits(MasscanScan)
 class ImportMasscanOutput(luigi.Task):
-
 
     def requires(self):
         # Requires MassScan Task to be run prior
         return MasscanScan(scan_input=self.scan_input)
 
     def run(self):
-        
-        port_arr = []
+
+        obj_arr = []
         masscan_output_file = self.input().path
 
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
         recon_manager = scan_input_obj.scan_thread.recon_manager
+
+        tool_obj = scan_input_obj.current_tool
+        tool_id = tool_obj.id
 
         if os.path.isfile(masscan_output_file) and os.path.getsize(masscan_output_file) > 0:
 
@@ -215,11 +282,24 @@ class ImportMasscanOutput(luigi.Task):
                 root = tree.getroot()
 
                 # Loop through hosts
-                port_arr = []
                 for host in root.iter('host'):
                     address = host.find('address')
                     addr = address.get('addr')
-                    ipv4_addr_int = str(int(netaddr.IPAddress(addr)))
+                    addr_type = address.get('addrtype')
+
+                    try:
+                        ip_addr = str(netaddr.IPAddress(addr))
+                    except netaddr.core.AddrFormatError:
+                        # Not a valid IP Address
+                        continue
+
+                    host_obj = data_model.Host(
+                        scan_id)
+                    host_obj.ip_addr_type = addr_type
+                    host_obj.ip_addr = ip_addr
+
+                    # Add host
+                    obj_arr.append(host_obj)
 
                     ports_obj = host.find('ports')
                     ports = ports_obj.findall('port')
@@ -232,11 +312,12 @@ class ImportMasscanOutput(luigi.Task):
                         else:
                             proto = 1
 
-                        port_obj = { 'port' : port_id,
-                                     'proto' : proto,
-                                     'ipv4_addr' : ipv4_addr_int }
+                        port_obj = data_model.Port(host_id=host_obj.record_id)
+                        port_obj.proto = proto
+                        port_obj.number = port_id
 
-                        port_arr.append(port_obj)
+                        # Add port
+                        obj_arr.append(port_obj)
 
             except Exception as e:
                 print('[-] Masscan results parsing error: %s' % str(e))
@@ -245,11 +326,13 @@ class ImportMasscanOutput(luigi.Task):
         else:
             print("[*] Masscan output file is empty. Ensure inputs were provided.")
 
-        if len(port_arr) > 0:
+        if len(obj_arr) > 0:
 
-            # Import the ports to the manager
-            tool_obj = scan_input_obj.current_tool
-            tool_id = tool_obj.id
-            scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-            #print(scan_results)
-            ret_val = recon_manager.import_ports_ext(scan_results)
+            import_arr = []
+            for obj in obj_arr:
+                flat_obj = obj.to_jsonable()
+                import_arr.append(flat_obj)
+
+            # Import the results to the server
+            # print(scan_results)
+            ret_val = recon_manager.import_data(scan_id, tool_id, import_arr)

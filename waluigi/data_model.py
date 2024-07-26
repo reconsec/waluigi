@@ -65,13 +65,28 @@ class Port(Record):
 
 class Domain(Record):
 
-    def __init__(self, host_id, record_id=None):
+    def __init__(self, host_id=None, record_id=None):
         super().__init__(record_id=record_id, parent=Host(record_id=host_id))
 
         self.name = None
 
     def _data_to_jsonable(self):
         return {'NAME': self.name}
+
+
+class Component(Record):
+
+    def __init__(self, port_id=None, record_id=None):
+        super().__init__(record_id=record_id, parent=Port(record_id=port_id))
+
+        self.name = None
+        self.version = None
+
+    def _data_to_jsonable(self):
+        ret = {'NAME': self.name}
+        if self.version is not None:
+            ret['VERSION'] = self.version
+        return ret
 
 
 class Path(Record):
@@ -96,8 +111,8 @@ class Screenshot(Record):
         self.data_hash = None
 
     def _data_to_jsonable(self):
-        return {'DATA': self.web_path,
-                'DATA_HASH': self.web_path_hash}
+        return {'DATA': self.data,
+                'DATA_HASH': self.data_hash}
 
 
 class HttpEndpoint(Record):

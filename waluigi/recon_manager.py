@@ -890,6 +890,7 @@ class ReconManager:
         scan_results_dict = {'TOOL_ID': tool_id,
                              'SCAN_ID': scan_id, 'OBJ_LIST': scan_results}
 
+        print(scan_results_dict)
         # Import the data to the manager
         json_data = json.dumps(scan_results_dict).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)

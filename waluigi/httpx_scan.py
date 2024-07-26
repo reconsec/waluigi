@@ -16,6 +16,7 @@ from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 from waluigi import data_model
+from urllib.parse import urlparse
 
 
 def httpx_wrapper(cmd_args):
@@ -83,6 +84,9 @@ class HttpXScan(luigi.Task):
 
             port_ip_dict = {}
             command_list = []
+
+            if 'tool_args' in scan_obj:
+                script_args = scan_obj['tool_args']
 
             for target_key in target_map:
 
@@ -158,6 +162,10 @@ class HttpXScan(luigi.Task):
                 ]
 
                 command.extend(command_arr)
+
+                # Add script args
+                if script_args and len(script_args) > 0:
+                    command.extend(script_args)
 
                 # Add process dict to process array
                 command_list.append(command)
@@ -414,17 +422,17 @@ class ImportHttpXOutput(luigi.Task):
                     web_path_hash = hex_str
 
                     if web_path_hash in path_hash_map:
-                        screenshot_obj = path_hash_map[web_path_hash]
+                        path_obj = path_hash_map[web_path_hash]
                     else:
-                        screenshot_obj = data_model.Path()
-                        screenshot_obj.web_path = web_path
-                        screenshot_obj.web_path_hash = web_path_hash
+                        path_obj = data_model.Path()
+                        path_obj.web_path = web_path
+                        path_obj.web_path_hash = web_path_hash
 
                         # Add to map and the object list
-                        path_hash_map[web_path_hash] = screenshot_obj
-                        ret_arr.append(screenshot_obj)
+                        path_hash_map[web_path_hash] = path_obj
+                        ret_arr.append(path_obj)
 
-                    web_path_id = screenshot_obj.record_id
+                    web_path_id = path_obj.record_id
 
                 screenshot_id = None
                 if 'screenshot_bytes' in httpx_scan:
@@ -488,8 +496,12 @@ class ImportHttpXOutput(luigi.Task):
                                 domains.add(dns_name.lower())
 
                 domain_used = None
-                if 'input' in httpx_scan:
-                    domain_used = httpx_scan['input'].lower()
+                if 'url' in httpx_scan:
+                    url = httpx_scan['url'].lower()
+                    u = urlparse(url)
+                    host = u.netloc
+                    if ":" in host:
+                        domain_used = host.split(":")[0]
 
                 # Add the domains
                 endpoint_domain_id = None
@@ -505,6 +517,28 @@ class ImportHttpXOutput(luigi.Task):
 
                     # Add domain
                     ret_arr.append(domain_obj)
+
+                # Add http component
+                component_obj = data_model.Component(
+                    port_id=port_obj.record_id)
+                component_obj.name = 'http'
+                ret_arr.append(component_obj)
+
+                if 'tech' in httpx_scan:
+                    tech_list = httpx_scan['tech']
+                    for tech_entry in tech_list:
+
+                        component_obj = data_model.Component(
+                            port_id=port_obj.record_id)
+
+                        if ":" in tech_entry:
+                            tech_entry_arr = tech_entry.split(":")
+                            component_obj.name = tech_entry_arr[0]
+                            component_obj.version = tech_entry_arr[1]
+                        else:
+                            component_obj.name = tech_entry
+
+                        ret_arr.append(component_obj)
 
                 # Add http endpoint
                 http_endpoint_obj = data_model.HttpEndpoint(

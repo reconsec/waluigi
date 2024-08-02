@@ -244,7 +244,6 @@ class ImportFeroxOutput(luigi.Task):
         hash_alg = hashlib.sha1
         if len(data) > 0:
             scan_data_dict = json.loads(data)
-            # port_arr = []
 
             # Get data and map
             url_to_id_map = scan_data_dict['url_to_id_map']
@@ -253,7 +252,6 @@ class ImportFeroxOutput(luigi.Task):
                 obj_data = url_to_id_map[url_str]
                 output_file = obj_data['output_file']
                 port_id = obj_data['port_id']
-                host_id = obj_data['host_id']
 
                 obj_arr = scan_utils.parse_json_blob_file(output_file)
                 for web_result in obj_arr:
@@ -332,39 +330,15 @@ class ImportFeroxOutput(luigi.Task):
                                     # Add the endpoint
                                     ret_arr.append(http_endpoint_obj)
 
-                                # # Show the endpoint that was referenced in the 301
-                                # if result_status == 301 or result_status == 302:
-                                #     print(web_result)
-                                #     if 'headers' in web_result:
-                                #         headers = web_result['headers']
-                                #         if 'location' in headers:
-                                #             endpoint_url = headers['location']
+        if len(ret_arr) > 0:
 
-                                # port_inst = {'port_id': port_id, 'host_id': host_id, 'url': endpoint_url,
-                                #              'path_hash': path_hash_hex, 'status': result_status}
-                                # port_arr.append(port_inst)
+            import_arr = []
+            for obj in ret_arr:
+                flat_obj = obj.to_jsonable()
+                import_arr.append(flat_obj)
 
-            if len(ret_arr) > 0:
-
-                import_arr = []
-                for obj in ret_arr:
-                    flat_obj = obj.to_jsonable()
-                    import_arr.append(flat_obj)
-
-                # Import the ports to the manager
-                tool_obj = scan_input_obj.current_tool
-                tool_id = tool_obj.id
-                ret_val = recon_manager.import_data(
-                    scan_id, tool_id, import_arr)
-            # port_id, status, domain, web_path
-            # if len(port_arr) > 0:
-            #     # print(port_arr)
-
-            #     # Import the ports to the manager
-            #     tool_obj = scan_input_obj.current_tool
-            #     tool_id = tool_obj.id
-            #     scan_results = {'tool_id': tool_id,
-            #                     'scan_id': scan_id, 'port_list': port_arr}
-            #     # print(scan_results)
-            #     ret_val = recon_manager.import_ports_ext(scan_results)
-                print("[+] Imported ferox scan to manager.")
+            # Import the ports to the manager
+            tool_obj = scan_input_obj.current_tool
+            tool_id = tool_obj.id
+            ret_val = recon_manager.import_data(scan_id, tool_id, import_arr)
+            print("[+] Imported ferox scan to manager.")

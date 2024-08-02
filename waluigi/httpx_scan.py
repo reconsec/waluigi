@@ -85,6 +85,7 @@ class HttpXScan(luigi.Task):
             port_ip_dict = {}
             command_list = []
 
+            script_args = None
             if 'tool_args' in scan_obj:
                 script_args = scan_obj['tool_args']
 
@@ -197,101 +198,6 @@ class HttpXScan(luigi.Task):
         f.close()
 
 
-# @inherits(HttpXScan)
-# class ImportHttpXOutput(luigi.Task):
-
-#     def requires(self):
-#         # Requires HttpScan Task to be run prior
-#         return HttpXScan(scan_input=self.scan_input)
-
-#     def run(self):
-
-#         scan_input_obj = self.scan_input
-#         scan_id = scan_input_obj.scan_id
-#         recon_manager = scan_input_obj.scan_thread.recon_manager
-
-#         http_output_file = self.input().path
-#         f = open(http_output_file, 'r')
-#         data = f.read()
-#         f.close()
-
-#         hash_alg = hashlib.sha1
-#         if len(data) > 0:
-#             scan_data_dict = json.loads(data)
-#             port_arr = []
-
-#             # Get data and map
-#             port_to_id_map = scan_data_dict['port_to_id_map']
-#             output_file_list = scan_data_dict['output_file_list']
-#             if len(output_file_list) > 0:
-
-#                 for output_file in output_file_list:
-
-#                     obj_arr = scan_utils.parse_json_blob_file(output_file)
-#                     for httpx_scan in obj_arr:
-
-#                         if 'input' in httpx_scan and 'port' in httpx_scan and 'host' in httpx_scan:
-
-#                             # Attempt to get the port id
-#                             target_str = httpx_scan['input']
-#                             port_str = httpx_scan['port']
-#                             ip_str = httpx_scan['host']
-
-#                             if 'path' in httpx_scan:
-#                                 hashobj = hash_alg()
-#                                 hashobj.update(httpx_scan['path'].encode())
-#                                 path_hash = hashobj.digest()
-#                                 hex_str = binascii.hexlify(path_hash).decode()
-#                                 httpx_scan['path_hash'] = hex_str
-
-#                             if 'screenshot_bytes' in httpx_scan:
-#                                 screenshot_bytes_b64 = httpx_scan['screenshot_bytes']
-#                                 ss_data = base64.b64decode(
-#                                     screenshot_bytes_b64)
-#                                 hashobj = hash_alg()
-#                                 hashobj.update(ss_data)
-#                                 image_hash = hashobj.digest()
-#                                 image_hash_str = binascii.hexlify(
-#                                     image_hash).decode()
-#                                 httpx_scan['screenshot_hash'] = image_hash_str
-
-#                             # If we have an IP
-#                             if target_str:
-#                                 host_key = '%s:%s' % (target_str, port_str)
-
-#                                 if host_key in port_to_id_map:
-#                                     port_id_dict = port_to_id_map[host_key]
-
-#                                     port_id = port_id_dict['port_id']
-#                                     if port_id == 'None':
-#                                         port_id = None
-
-#                                     host_id = port_id_dict['host_id']
-#                                     if host_id == 'None':
-#                                         host_id = None
-
-#                                     port_obj = {'port_id': port_id, 'host_id': host_id,
-#                                                 'httpx_data': httpx_scan, 'ip': ip_str, 'port': port_str}
-#                                     port_arr.append(port_obj)
-#                         else:
-#                             print(
-#                                 "[-] No input and/or port field in output: %s" % httpx_scan)
-
-#             if len(port_arr) > 0:
-#                 # print(port_arr)
-
-#                 # Import the ports to the manager
-#                 tool_obj = scan_input_obj.current_tool
-#                 tool_id = tool_obj.id
-#                 scan_results = {'tool_id': tool_id,
-#                                 'scan_id': scan_id, 'port_list': port_arr}
-
-#                 # print(scan_results)
-#                 ret_val = recon_manager.import_ports_ext(scan_results)
-#                 print("[+] Imported httpx scan to manager.")
-#             else:
-#                 print("[*] No ports to import to manager")
-
 @inherits(HttpXScan)
 class ImportHttpXOutput(luigi.Task):
 
@@ -324,6 +230,7 @@ class ImportHttpXOutput(luigi.Task):
 
         path_hash_map = {}
         screenshot_hash_map = {}
+        # domain_name_id_map = {}
 
         for output_file in output_file_list:
 
@@ -377,6 +284,7 @@ class ImportHttpXOutput(luigi.Task):
                     host_id=host_id, record_id=port_id)
                 port_obj.proto = 0
                 port_obj.number = port_str
+                port_id = port_obj.record_id
 
                 # If TLS
                 if 'scheme' in httpx_scan and httpx_scan['scheme'] == "https":
@@ -412,14 +320,24 @@ class ImportHttpXOutput(luigi.Task):
                         last_modified = int(time.mktime(
                             timestamp_datetime.timetuple()))
 
+                favicon_hash = None
+                tmp_fav_hash = None
+                if 'favicon' in httpx_scan:
+                    favicon_hash = httpx_scan['favicon']
+                    tmp_fav_hash = favicon_hash
+
                 web_path_id = None
                 if 'path' in httpx_scan:
-                    web_path = httpx_scan['path']
+                    web_path = httpx_scan['path'].strip()
                     hashobj = hash_alg()
                     hashobj.update(web_path.encode())
                     path_hash = hashobj.digest()
                     hex_str = binascii.hexlify(path_hash).decode()
                     web_path_hash = hex_str
+
+                    # Attach the favicon to the root path
+                    if tmp_fav_hash and web_path == "/":
+                        favicon_hash = tmp_fav_hash
 
                     if web_path_hash in path_hash_map:
                         path_obj = path_hash_map[web_path_hash]
@@ -442,7 +360,6 @@ class ImportHttpXOutput(luigi.Task):
                     hashobj.update(ss_data)
                     image_hash = hashobj.digest()
                     image_hash_str = binascii.hexlify(image_hash).decode()
-                    # httpx_scan['screenshot_hash'] = image_hash_str
 
                     if image_hash_str in screenshot_hash_map:
                         screenshot_obj = screenshot_hash_map[image_hash_str]
@@ -457,44 +374,6 @@ class ImportHttpXOutput(luigi.Task):
 
                     screenshot_id = screenshot_obj.record_id
 
-                # Add domains
-                domains = set()
-                if 'tls' in httpx_scan:
-                    tls_data = httpx_scan['tls']
-                    if 'subject_an' in tls_data:
-                        dns_names = tls_data['subject_an']
-                        for dns_name in dns_names:
-
-                            dns_name = scan_utils.check_domain(dns_name)
-                            if dns_name:
-                                domains.add(dns_name.lower())
-
-                    if 'host' in tls_data:
-                        common_name = tls_data['host']
-                        if type(common_name) == list:
-                            for common_name_inst in common_name:
-                                dns_name = scan_utils.check_domain(
-                                    common_name_inst)
-                                if dns_name:
-                                    domains.add(dns_name.lower())
-                        else:
-                            dns_name = scan_utils.check_domain(common_name)
-                            if dns_name:
-                                domains.add(dns_name.lower())
-
-                    if 'subject_cn' in tls_data:
-                        common_name = tls_data['subject_cn']
-                        if type(common_name) == list:
-                            for common_name_inst in common_name:
-                                dns_name = scan_utils.check_domain(
-                                    common_name_inst)
-                                if dns_name:
-                                    domains.add(dns_name.lower())
-                        else:
-                            dns_name = scan_utils.check_domain(common_name)
-                            if dns_name:
-                                domains.add(dns_name.lower())
-
                 domain_used = None
                 if 'url' in httpx_scan:
                     url = httpx_scan['url'].lower()
@@ -503,20 +382,77 @@ class ImportHttpXOutput(luigi.Task):
                     if ":" in host:
                         domain_used = host.split(":")[0]
 
-                # Add the domains
+                # Add domains
+                if 'tls' in httpx_scan:
+                    tls_data = httpx_scan['tls']
+
+                    # Create a certificate object
+                    cert_obj = data_model.Certificate(
+                        port_id=port_obj.record_id)
+
+                    if 'subject_an' in tls_data:
+                        dns_names = tls_data['subject_an']
+                        for dns_name in dns_names:
+                            domain_obj = cert_obj.add_domain(host_id, dns_name)
+                            if domain_obj:
+                                ret_arr.append(domain_obj)
+
+                    if 'host' in tls_data:
+                        common_name = tls_data['host']
+                        if type(common_name) == list:
+                            for common_name_inst in common_name:
+                                domain_obj = cert_obj.add_domain(host_id,
+                                                                 common_name_inst)
+                                if domain_obj:
+                                    ret_arr.append(domain_obj)
+                        else:
+                            domain_obj = cert_obj.add_domain(
+                                host_id, common_name)
+                            if domain_obj:
+                                ret_arr.append(domain_obj)
+
+                    if 'subject_cn' in tls_data:
+                        common_name = tls_data['subject_cn']
+                        if type(common_name) == list:
+                            for common_name_inst in common_name:
+                                domain_obj = cert_obj.add_domain(host_id,
+                                                                 common_name_inst)
+                                if domain_obj:
+                                    ret_arr.append(domain_obj)
+
+                        else:
+                            domain_obj = cert_obj.add_domain(
+                                host_id, common_name)
+                            if domain_obj:
+                                ret_arr.append(domain_obj)
+
+                    if 'issuer_dn' in tls_data:
+                        issuer = tls_data['issuer_dn']
+                        cert_obj.issuer = issuer
+
+                    if 'not_before' in tls_data:
+                        issued = tls_data['not_before']
+                        # Parse the time string into a datetime object in UTC
+                        dt = datetime.strptime(issued, '%Y-%m-%dT%H:%M:%SZ')
+                        cert_obj.issued = int(time.mktime(dt.timetuple()))
+
+                    if 'not_after' in tls_data:
+                        expires = tls_data['not_after']
+                        dt = datetime.strptime(expires, '%Y-%m-%dT%H:%M:%SZ')
+                        cert_obj.expires = int(time.mktime(dt.timetuple()))
+
+                    if 'fingerprint_hash' in tls_data:
+                        cert_hash_map = tls_data['fingerprint_hash']
+                        if 'sha1' in cert_hash_map:
+                            sha_cert_hash = cert_hash_map['sha1']
+                            cert_obj.fingerprint_hash = sha_cert_hash
+
+                    # Add the cert object
+                    ret_arr.append(cert_obj)
+
                 endpoint_domain_id = None
-                for domain_name in domains:
-
-                    domain_obj = data_model.Domain(
-                        host_id=host_id)
-                    domain_obj.name = domain_name
-
-                    # Set endpoint id
-                    if domain_used == domain_name:
-                        endpoint_domain_id = domain_obj.record_id
-
-                    # Add domain
-                    ret_arr.append(domain_obj)
+                if cert_obj and domain_used in cert_obj.domain_name_id_map:
+                    endpoint_domain_id = cert_obj.domain_name_id_map[domain_used]
 
                 # Add http component
                 component_obj = data_model.Component(
@@ -549,6 +485,7 @@ class ImportHttpXOutput(luigi.Task):
                 http_endpoint_obj.last_modified = last_modified
                 http_endpoint_obj.web_path_id = web_path_id
                 http_endpoint_obj.screenshot_id = screenshot_id
+                http_endpoint_obj.fav_icon_hash = favicon_hash
 
                 # Add the endpoint
                 ret_arr.append(http_endpoint_obj)

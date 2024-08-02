@@ -1,4 +1,5 @@
 import uuid
+import netaddr
 
 
 class Record():
@@ -32,6 +33,12 @@ class Scan(Record):
 
     def __init__(self, scan_id):
         super().__init__(record_id=scan_id)
+
+
+class Tool(Record):
+
+    def __init__(self, tool_id):
+        super().__init__(record_id=tool_id)
 
 
 class Host(Record):
@@ -89,6 +96,18 @@ class Component(Record):
         return ret
 
 
+class Vulnerability(Record):
+
+    def __init__(self, port_id=None, record_id=None):
+        super().__init__(record_id=record_id, parent=Port(record_id=port_id))
+
+        self.name = None
+
+    def _data_to_jsonable(self):
+        ret = {'NAME': self.name}
+        return ret
+
+
 class Path(Record):
 
     def __init__(self, record_id=None):
@@ -126,6 +145,7 @@ class HttpEndpoint(Record):
         self.screenshot_id = None
         self.web_path_id = None
         self.last_modified = None
+        self.fav_icon_hash = None
 
     def _data_to_jsonable(self):
         ret = {'TITLE': self.title, 'STATUS_CODE': self.status_code,
@@ -140,4 +160,73 @@ class HttpEndpoint(Record):
         if self.screenshot_id is not None:
             ret['SCREENSHOT_ID'] = self.screenshot_id
 
+        if self.fav_icon_hash is not None:
+            ret['FAV_ICON_HASH'] = self.fav_icon_hash
+
         return ret
+
+
+class CollectionModule(Record):
+
+    def __init__(self, tool_id=None, record_id=None):
+        super().__init__(record_id=record_id, parent=Tool(tool_id))
+
+        self.name = None
+        self.args = None
+
+    def _data_to_jsonable(self):
+        ret = {'NAME': self.name, 'ARGS': self.args}
+        return ret
+
+
+class CollectionModuleOutput(Record):
+
+    def __init__(self, module_id=None, record_id=None):
+        super().__init__(record_id=record_id, parent=CollectionModule(record_id=module_id))
+
+        self.data = None
+        self.port_id = None
+
+    def _data_to_jsonable(self):
+        ret = {'DATA': self.data, 'PORT_ID': self.port_id}
+        return ret
+
+
+class Certificate(Record):
+
+    def __init__(self, port_id=None, record_id=None):
+        super().__init__(record_id=record_id, parent=Port(record_id=port_id))
+
+        self.issuer = None
+        self.issued = None
+        self.expires = None
+        self.fingerprint_hash = None
+        self.domain_name_id_map = {}
+
+    def _data_to_jsonable(self):
+        ret = {'ISSUER': self.issuer}
+        ret['ISSUED'] = self.issued
+        ret['EXPIRES'] = self.expires
+        ret['FINGERPRINT_HASH'] = self.fingerprint_hash
+        ret['DOMAIN_ID_LIST'] = list(self.domain_name_id_map.values())
+        return ret
+
+    def add_domain(self, host_id, domain_str):
+
+        # If it's a wildcard
+        if "*." in domain_str:
+            return None
+
+        # If it's an IP skip it
+        try:
+            int(netaddr.IPAddress(domain_str))
+            return None
+        except:
+            pass
+
+        if domain_str not in self.domain_name_id_map:
+            domain_obj = Domain(host_id=host_id)
+            domain_obj.name = domain_str
+
+            self.domain_name_id_map[domain_str] = domain_obj.record_id
+            return domain_obj

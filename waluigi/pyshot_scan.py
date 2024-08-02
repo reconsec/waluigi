@@ -118,7 +118,6 @@ class ImportPyshotOutput(luigi.Task):
     def run(self):
 
         meta_file = self.input().path
-        # pyshot_output_dir = self.input().path
         scan_input_obj = self.scan_input
         scan_id = scan_input_obj.scan_id
         recon_manager = scan_input_obj.scan_thread.recon_manager
@@ -127,8 +126,6 @@ class ImportPyshotOutput(luigi.Task):
         screenshot_hash_map = {}
         domain_name_id_map = {}
 
-        # Read meta data file
-        # meta_file = '%s%s%s' % (pyshot_output_dir, os.path.sep, 'screenshots.meta' )
         if os.path.exists(meta_file):
 
             f = open(meta_file, 'r')
@@ -146,11 +143,6 @@ class ImportPyshotOutput(luigi.Task):
                     web_path = screenshot_meta['path']
                     port_id = screenshot_meta['port_id']
                     status_code = screenshot_meta['status_code']
-
-                    if port_id == 'None':
-                        port_id_val = None
-                    else:
-                        port_id_val = port_id
 
                     # Hash the image
                     screenshot_id = None
@@ -174,7 +166,8 @@ class ImportPyshotOutput(luigi.Task):
 
                             # Add to map and the object list
                             screenshot_hash_map[image_hash_str] = screenshot_obj
-                            ret_arr.append(screenshot_obj)
+
+                        ret_arr.append(screenshot_obj)
 
                         screenshot_id = screenshot_obj.record_id
 
@@ -188,39 +181,17 @@ class ImportPyshotOutput(luigi.Task):
                     endpoint_domain_id = None
                     if 'domain' in screenshot_meta and screenshot_meta['domain']:
                         domain_str = screenshot_meta['domain']
-                        # u = urlparse(url)
-                        # host = u.netloc
-                        # port = ''
-                        # if ":" in host:
-                        #     host_arr = host.split(":")
-                        #     port = ":" + host_arr[1]
-
-                        # res = ParseResult(scheme=u.scheme, netloc=domain + port, path=u.path, params=u.params, query=u.query, fragment=u.fragment)
-                        # url = res.geturl()
-
                         if domain_str in domain_name_id_map:
-                            endpoint_domain_id = domain_name_id_map[domain_str]
+                            domain_obj = domain_name_id_map[domain_str]
                         else:
                             domain_obj = data_model.Domain()
                             domain_obj.name = domain_str
-
-                            # Add domain
-                            ret_arr.append(domain_obj)
-                            # Set endpoint id
-                            endpoint_domain_id = domain_obj.record_id
-                            domain_name_id_map[domain_str] = endpoint_domain_id
-
-                            # Add domain
-                            ret_arr.append(domain_obj)
-
-                        # domain_obj = data_model.Domain()
-                        # domain_obj.name = domain
-
-                        # # Set endpoint id
-                        # endpoint_domain_id = domain_obj.record_id
+                            domain_name_id_map[domain_str] = domain_obj
 
                         # Add domain
-                        # ret_arr.append(domain_obj)
+                        ret_arr.append(domain_obj)
+                        # Set endpoint id
+                        endpoint_domain_id = domain_obj.record_id
 
                     if web_path_hash in path_hash_map:
                         path_obj = path_hash_map[web_path_hash]
@@ -231,7 +202,9 @@ class ImportPyshotOutput(luigi.Task):
 
                         # Add to map and the object list
                         path_hash_map[web_path_hash] = path_obj
-                        ret_arr.append(path_obj)
+
+                    # Add path object
+                    ret_arr.append(path_obj)
 
                     web_path_id = path_obj.record_id
 

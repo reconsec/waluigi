@@ -56,7 +56,7 @@ class ProcessStreamReader(Thread):
 
 def check_domain(domain_str):
 
-    # If it's an IP skip it
+    # If it's a wildcard
     if "*." in domain_str:
         return None
 

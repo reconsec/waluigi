@@ -169,7 +169,7 @@ class ImportPyshotOutput(luigi.Task):
 
                         ret_arr.append(screenshot_obj)
 
-                        screenshot_id = screenshot_obj.record_id
+                        screenshot_id = screenshot_obj.id
 
                     hashobj = hash_alg()
                     hashobj.update(web_path.encode())
@@ -191,12 +191,12 @@ class ImportPyshotOutput(luigi.Task):
                         # Add domain
                         ret_arr.append(domain_obj)
                         # Set endpoint id
-                        endpoint_domain_id = domain_obj.record_id
+                        endpoint_domain_id = domain_obj.id
 
                     if web_path_hash in path_hash_map:
                         path_obj = path_hash_map[web_path_hash]
                     else:
-                        path_obj = data_model.Path()
+                        path_obj = data_model.ListItem()
                         path_obj.web_path = web_path
                         path_obj.web_path_hash = web_path_hash
 
@@ -206,11 +206,11 @@ class ImportPyshotOutput(luigi.Task):
                     # Add path object
                     ret_arr.append(path_obj)
 
-                    web_path_id = path_obj.record_id
+                    web_path_id = path_obj.id
 
                     # Add http endpoint
                     http_endpoint_obj = data_model.HttpEndpoint(
-                        port_id=port_id)
+                        parent_id=port_id)
                     http_endpoint_obj.domain_id = endpoint_domain_id
                     http_endpoint_obj.status_code = status_code
                     http_endpoint_obj.web_path_id = web_path_id

@@ -249,8 +249,8 @@ class ImportNucleiOutput(luigi.Task):
                                     )
 
                                     # Add component
-                                    component_obj = data_model.Component(
-                                        port_id=port_id)
+                                    component_obj = data_model.WebComponent(
+                                        parent_id=port_id)
                                     component_obj.name = matcher_name
                                     ret_arr.append(component_obj)
 
@@ -258,7 +258,7 @@ class ImportNucleiOutput(luigi.Task):
 
                                     # Add vuln
                                     vuln_obj = data_model.Vulnerability(
-                                        port_id=port_id)
+                                        parent_id=port_id)
                                     vuln_obj.name = template_id
                                     ret_arr.append(vuln_obj)
 
@@ -268,7 +268,7 @@ class ImportNucleiOutput(luigi.Task):
 
                                 # Add collection module
                                 module_obj = data_model.CollectionModule(
-                                    tool_id=tool_id)
+                                    parent_id=tool_id)
                                 module_obj.name = template_id
                                 module_obj.args = module_args
 
@@ -276,7 +276,7 @@ class ImportNucleiOutput(luigi.Task):
 
                                 # Add module output
                                 module_output_obj = data_model.CollectionModuleOutput(
-                                    module_id=module_obj.record_id)
+                                    parent_id=module_obj.id)
                                 module_output_obj.data = nuclei_scan_result
                                 module_output_obj.port_id = port_id
 

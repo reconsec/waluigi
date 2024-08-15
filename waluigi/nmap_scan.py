@@ -6,11 +6,13 @@ import netaddr
 import concurrent.futures
 import luigi
 import traceback
+import time
 
 from luigi.util import inherits
 from libnmap.parser import NmapParser
 from waluigi import scan_utils
 from waluigi import data_model
+from datetime import datetime
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
@@ -21,17 +23,17 @@ class NmapScan(luigi.Task):
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
-        scan_target_dict = scan_input_obj.scan_target_dict
+        scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
         if 'module_id' in scan_target_dict:
             module_id = str(scan_target_dict['module_id'])
             mod_str = "_" + module_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         meta_file_path = dir_path + os.path.sep + \
             "nmap_scan_" + scan_id + mod_str + ".meta"
@@ -40,24 +42,34 @@ class NmapScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        selected_interface = scan_input_obj.selected_interface
+        scheduled_scan_obj = self.scan_input
+        selected_interface = scheduled_scan_obj.selected_interface
+        scope_obj = scheduled_scan_obj.scan_data
 
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
 
-        scan_target_dict = scan_input_obj.scan_target_dict
-        print(scan_target_dict)
+        scan_target_dict = scheduled_scan_obj.scan_target_dict
+        # print(scan_target_dict)
 
         # load input file
         nmap_scan_data = None
-        scan_input = scan_target_dict['scan_input']
-        nmap_scan_args = scan_target_dict['tool_args']
+        # scan_input = scan_target_dict['scan_input']
+        # nmap_scan_args = scan_target_dict['tool_args']
+        nmap_scan_args = scheduled_scan_obj.current_tool.args
+        if nmap_scan_args:
+            nmap_scan_args = nmap_scan_args.split(" ")
 
         target_map = {}
         if 'target_map' in scan_input:
             target_map = scan_input['target_map']
+        host_map = scope_obj.host_map
+        if len(host_map) == 0:
+            subnet_map = scope_obj.subnet_map
+            for subnet_id in subnet_map:
+                subnet_obj = subnet_map[subnet_id]
+                subnet_str = "%s/%s" % (subnet_obj.subnet, subnet_obj.mask)
 
         module_id = None
         mod_str = ''
@@ -283,11 +295,11 @@ class ImportNmapOutput(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
+        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
 
-        tool_obj = scan_input_obj.current_tool
+        tool_obj = scheduled_scan_obj.current_tool
         tool_id = tool_obj.id
 
         ret_arr = []
@@ -339,24 +351,20 @@ class ImportNmapOutput(luigi.Task):
 
                         if host_id is None:
                             ip_object = netaddr.IPAddress(host_ip)
-                            if ip_object.version == 4:
-                                addr_type = 'ipv4'
-                            elif ip_object.version == 6:
-                                addr_type = 'ipv6'
 
-                            host_obj = data_model.Host(
-                                scan_id, record_id=host_id)
-                            host_obj.ip_addr_type = addr_type
-                            host_obj.ip_addr = str(ip_object)
-                            host_id = host_obj.record_id
+                            host_obj = data_model.Host(id=host_id)
+                            if ip_object.version == 4:
+                                host_obj.ipv4_addr = str(ip_object)
+                            elif ip_object.version == 6:
+                                host_obj.ipv6_addr = str(ip_object)
+
+                            host_id = host_obj.id
 
                             # Add host
                             ret_arr.append(host_obj)
 
                         # Loop through ports
                         for port in host.get_open_ports():
-
-                            domain_set = set()
 
                             port_str = str(port[0])
                             port_service_id = port[1] + "." + port_str
@@ -368,10 +376,10 @@ class ImportNmapOutput(luigi.Task):
                                 port_id = port_entry['port_id']
 
                             port_obj = data_model.Port(
-                                host_id=host_id, record_id=port_id)
+                                parent_id=host_id, id=port_id)
                             port_obj.proto = 0
-                            port_obj.number = port_str
-                            port_id = port_obj.record_id
+                            port_obj.port = port_str
+                            port_id = port_obj.id
 
                             # Add port
                             ret_arr.append(port_obj)
@@ -384,7 +392,7 @@ class ImportNmapOutput(luigi.Task):
                                     hostname = hostname['name']
 
                                 domain_obj = data_model.Domain(
-                                    host_id=host_id)
+                                    parent_id=host_id)
                                 domain_obj.name = hostname
 
                                 # Add domain
@@ -406,8 +414,8 @@ class ImportNmapOutput(luigi.Task):
                                         # print("[*] Service name: %s" % component_name)
                                         if len(component_name) > 0 and component_name != "unknown":
                                             # svc_dict['name'] = ''
-                                            component_obj = data_model.Component(
-                                                port_id=port_id)
+                                            component_obj = data_model.WebComponent(
+                                                parent_id=port_id)
 
                                             component_obj.name = component_name
                                             ret_arr.append(component_obj)
@@ -418,8 +426,8 @@ class ImportNmapOutput(luigi.Task):
                                         " httpd", "").lower().strip()
                                     if len(component_name) > 0 and component_name != "unknown":
 
-                                        component_obj = data_model.Component(
-                                            port_id=port_id)
+                                        component_obj = data_model.WebComponent(
+                                            parent_id=port_id)
 
                                         component_obj.name = component_name
 
@@ -447,36 +455,79 @@ class ImportNmapOutput(luigi.Task):
                                             # port_obj['secure'] = 1
                                             if port_obj:
                                                 port_obj.secure = True
-                                            output = script['output']
-                                            lines = output.split("\n")
 
-                                            for line in lines:
+                                            # Create a certificate object
+                                            cert_obj = data_model.Certificate(
+                                                parent_id=port_obj.id)
 
-                                                if "Subject Alternative Name:" in line:
+                                            if 'elements' in script:
+                                                elements = script['elements']
+                                                if 'validity' in elements:
+                                                    validity = elements['validity']
+                                                    if 'notBefore' in validity:
+                                                        issued = validity['notBefore']
 
-                                                    line = line.replace(
-                                                        "Subject Alternative Name:", "")
-                                                    line_arr = line.split(",")
-                                                    for dns_entry in line_arr:
-                                                        if "DNS" in dns_entry:
-                                                            dns_stripped = dns_entry.replace(
-                                                                "DNS:", "").strip()
+                                                        dt = datetime.strptime(
+                                                            issued, '%Y-%m-%dT%H:%M:%S')
+                                                        cert_obj.issued = int(
+                                                            time.mktime(dt.timetuple()))
 
-                                                            domain_obj = data_model.Domain(
-                                                                host_id=host_id)
-                                                            domain_obj.name = dns_stripped
+                                                    if 'notAfter' in validity:
+                                                        expires = validity['notAfter']
 
-                                                            # Add domain
+                                                        dt = datetime.strptime(
+                                                            expires, '%Y-%m-%dT%H:%M:%S')
+                                                        cert_obj.expires = int(
+                                                            time.mktime(dt.timetuple()))
+
+                                                if 'sha1' in elements:
+                                                    fingerprint_hash = elements['sha1']
+                                                    cert_obj.fingerprint_hash = fingerprint_hash
+
+                                                if 'subject' in elements:
+                                                    subject = elements['subject']
+                                                    if 'commonName' in subject:
+                                                        common_name = subject['commonName']
+                                                        domain_obj = cert_obj.add_domain(
+                                                            host_id, common_name)
+                                                        if domain_obj:
                                                             ret_arr.append(
                                                                 domain_obj)
 
-                                                    break
+                                                if 'issuer' in elements:
+                                                    issuer = elements['issuer']
+                                                    cert_obj.issuer = json.dumps(
+                                                        issuer)
 
-                                                # print(domains)
+                                                if 'extensions' in elements:
+                                                    extensions = elements['extensions']
+                                                    if 'null' in extensions:
+                                                        null_ext = extensions['null']
+                                                        if not isinstance(null_ext, list):
+                                                            null_ext = [
+                                                                null_ext]
+
+                                                        for ext_inst in null_ext:
+                                                            if 'name' in ext_inst:
+                                                                ext_name = ext_inst['name']
+                                                                if 'X509v3 Subject Alternative Name' == ext_name:
+                                                                    san_value = ext_inst['value']
+                                                                    if ":" in san_value:
+                                                                        dns_name = san_value.split(":")[
+                                                                            1]
+                                                                        domain_obj = cert_obj.add_domain(
+                                                                            host_id, dns_name)
+                                                                        if domain_obj:
+                                                                            ret_arr.append(
+                                                                                domain_obj)
+
+                                            # Add the cert object
+                                            ret_arr.append(cert_obj)
+
                                         elif 'http' in script_id:
                                             # Set to http if nmap detected http in a script
-                                            component_obj = data_model.Component(
-                                                port_id=port_id)
+                                            component_obj = data_model.WebComponent(
+                                                parent_id=port_id)
                                             component_obj.name = 'http'
                                             ret_arr.append(component_obj)
 
@@ -485,7 +536,7 @@ class ImportNmapOutput(luigi.Task):
                                         module_id = nmap_scan_entry['module_id']
 
                                         module_output_obj = data_model.CollectionModuleOutput(
-                                            module_id=module_id)
+                                            parent_id=module_id)
                                         module_output_obj.data = script_res
                                         module_output_obj.port_id = port_id
 
@@ -504,7 +555,7 @@ class ImportNmapOutput(luigi.Task):
                                                     # Add collection module
                                                     args_str = "--script +%s" % script_id
                                                     module_obj = data_model.CollectionModule(
-                                                        tool_id=tool_id)
+                                                        parent_id=tool_id)
                                                     module_obj.name = script_id
                                                     module_obj.args = args_str
 
@@ -512,7 +563,7 @@ class ImportNmapOutput(luigi.Task):
 
                                                     # Add module output
                                                     module_output_obj = data_model.CollectionModuleOutput(
-                                                        module_id=module_obj.record_id)
+                                                        parent_id=module_obj.id)
                                                     module_output_obj.data = output
                                                     module_output_obj.port_id = port_id
 
@@ -527,7 +578,7 @@ class ImportNmapOutput(luigi.Task):
                 import_arr.append(flat_obj)
 
             # Import the ports to the manager
-            tool_obj = scan_input_obj.current_tool
+            tool_obj = scheduled_scan_obj.current_tool
             tool_id = tool_obj.id
             ret_val = recon_manager.import_data(scan_id, tool_id, import_arr)
 

@@ -31,43 +31,34 @@ def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
     return ret_list
 
 
-def get_subfinder_input(scan_input_obj):
+def get_subfinder_input(scheduled_scan_obj):
 
-    scan_id = scan_input_obj.scan_id
+    scan_id = scheduled_scan_obj.scan_id
 
     # Init directory
-    tool_name = scan_input_obj.current_tool.name
+    tool_name = scheduled_scan_obj.current_tool.name
+
+    domain_name_set = set()
+    scope_obj = scheduled_scan_obj.scan_data
+    domain_map = scope_obj.domain_map
+    for host_id in domain_map:
+        domain_obj = domain_map[host_id]
+        domain_name = domain_obj.name
+        domain_name_set.add(domain_name)
+
     dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
-
     dns_url_file = dir_path + os.path.sep + "dns_urls_" + scan_id
-    url_inputs_fd = open(dns_url_file, 'w')
 
-    scan_target_dict = scan_input_obj.scan_target_dict
-    if scan_target_dict:
-
-        # Write the output
-        scan_input = scan_target_dict['scan_input']
-        api_keys = scan_target_dict['api_keys']
-        target_map = {}
-        if 'target_map' in scan_input:
-            target_map = scan_input['target_map']
-
-        print("[+] Retrieved %d urls from database" % len(target_map))
-        for target_key in target_map:
-            url_inputs_fd.write(target_key + '\n')
-
-    else:
-        print("[-] Target url list is empty.")
-
-    # Close urls inputs file
-    url_inputs_fd.close()
+    with open(dns_url_file, 'w') as file_fd:
+        for domain_name in domain_name_set:
+            file_fd.write(domain_name + '\n')
 
     # Write the output
-    scan_dict = {'input_path': dns_url_file, 'api_keys': api_keys}
+    scan_dict = {'input_path': dns_url_file}
     return scan_dict
 
 
-def update_config_file(api_keys, my_env):
+def update_config_file(collection_tools, my_env):
 
     home_dir = os.path.expanduser('~')
     config_file_path = "%s/.config/subfinder/provider-config.yaml" % home_dir
@@ -84,25 +75,19 @@ def update_config_file(api_keys, my_env):
     f.close()
 
     # print(data)
-    key_arr = []
-    if 'chaos' in api_keys:
-        key_val = api_keys['chaos']
-        key_arr.append(key_val)
-    data['chaos'] = key_arr
+    data['chaos'] = []
+    data['shodan'] = []
+    data['securitytrails'] = []
 
-    key_arr = []
-    if 'shodan' in api_keys:
-        key_val = api_keys['shodan']
-        key_arr.append(key_val)
-    data['shodan'] = key_arr
-
-    key_arr = []
-    if 'sectrails' in api_keys:
-        key_val = api_keys['sectrails']
-        key_arr.append(key_val)
-    data['securitytrails'] = key_arr
+    api_key_arr = ['chaos', 'shodan', 'securitytrails']
+    if collection_tools:
+        for collection_tool_inst in collection_tools:
+            collection_tool = collection_tool_inst.collection_tool
+            if collection_tool.name in api_key_arr and collection_tool.api_key:
+                data[collection_tool.name] = [collection_tool.api_key]
 
     # Write to config file
+    print(data)
     with open(config_file_path, 'w') as yaml_file:
         yaml_file.write(yaml.dump(data, default_flow_style=False))
 
@@ -176,11 +161,11 @@ class SubfinderScan(luigi.Task):
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
@@ -189,8 +174,8 @@ class SubfinderScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        dns_scan_obj = get_subfinder_input(scan_input_obj)
+        scheduled_scan_obj = self.scan_input
+        dns_scan_obj = get_subfinder_input(scheduled_scan_obj)
 
         # Ensure output folder exists
         meta_file_path = self.output().path
@@ -202,7 +187,7 @@ class SubfinderScan(luigi.Task):
         ret_list = []
 
         subfinder_domain_list = dns_scan_obj['input_path']
-        api_keys = dns_scan_obj['api_keys']
+        # api_keys = dns_scan_obj['api_keys']
 
         # Add env variables for HOME
         my_env = os.environ.copy()
@@ -213,7 +198,7 @@ class SubfinderScan(luigi.Task):
             my_env["HOME"] = home_dir
 
         # Set the API keys
-        update_config_file(api_keys, my_env)
+        update_config_file(scheduled_scan_obj.collection_tools, my_env)
 
         # Add threads for large targets
         pool = ThreadPool(processes=10)
@@ -263,7 +248,7 @@ class SubfinderScan(luigi.Task):
                 ret_list.extend(temp_list)
 
         # Reset the API keys
-        update_config_file({}, my_env)
+        update_config_file(None, my_env)
 
         # print(domain_set)
         if len(domain_set) > 0:
@@ -283,15 +268,16 @@ class SubfinderImport(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
+        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
 
         subfinder_output_file = self.input().path
         f = open(subfinder_output_file, 'r')
         data = f.read()
         f.close()
 
+        obj_map = {}
         if len(data) > 0:
             domain_map = json.loads(data)
             # print(domain_map)
@@ -316,42 +302,43 @@ class SubfinderImport(luigi.Task):
 
                     domain_list.add(domain_str)
 
-                obj_arr = []
                 for ip_addr in ip_map:
 
                     domain_set = ip_map[ip_addr]
                     domains = list(domain_set)
 
                     ip_object = netaddr.IPAddress(ip_addr)
-                    if ip_object.version == 4:
-                        addr_type = 'ipv4'
-                    elif ip_object.version == 6:
-                        addr_type = 'ipv6'
 
-                    host_obj = data_model.Host(scan_id)
-                    host_obj.ip_addr_type = addr_type
-                    host_obj.ip_addr = str(ip_object)
+                    host_obj = data_model.Host()
+                    if ip_object.version == 4:
+                        host_obj.ipv4_addr = str(ip_object)
+                    elif ip_object.version == 6:
+                        host_obj.ipv6_addr = str(ip_object)
 
                     # Add host
-                    obj_arr.append(host_obj)
+                    obj_map[host_obj.id] = host_obj
 
                     for domain in domains:
 
                         domain_obj = data_model.Domain(
-                            host_id=host_obj.record_id)
+                            parent_id=host_obj.id)
                         domain_obj.name = domain
 
-                        # Add port
-                        obj_arr.append(domain_obj)
+                        # Add domain
+                        obj_map[domain_obj.id] = domain_obj
 
                 import_arr = []
-                for obj in obj_arr:
+                for obj in obj_map.values():
                     flat_obj = obj.to_jsonable()
                     import_arr.append(flat_obj)
 
                 # Import the results to the server
                 # print(scan_results)
-                tool_obj = scan_input_obj.current_tool
+                tool_obj = scheduled_scan_obj.current_tool
                 tool_id = tool_obj.id
-                ret_val = recon_manager.import_data(
+                updated_record_map = recon_manager.import_data(
                     scan_id, tool_id, import_arr)
+
+                # Update the scan scope
+                scheduled_scan_obj.scan_data.update(
+                    obj_map, updated_record_map)

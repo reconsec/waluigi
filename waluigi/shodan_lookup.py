@@ -339,16 +339,13 @@ class ImportShodanOutput(luigi.Task):
                     ip_int = service['ip']
                     if host_id is None:
                         ip_object = netaddr.IPAddress(ip_int)
-                        if ip_object.version == 4:
-                            addr_type = 'ipv4'
-                        elif ip_object.version == 6:
-                            addr_type = 'ipv6'
 
-                        host_obj = data_model.Host(
-                            scan_id, record_id=host_id)
-                        host_obj.ip_addr_type = addr_type
-                        host_obj.ip_addr = str(ip_object)
-                        host_id = host_obj.record_id
+                        host_obj = data_model.Host(id=host_id)
+                        if ip_object.version == 4:
+                            host_obj.ipv4_addr = str(ip_object)
+                        elif ip_object.version == 6:
+                            host_obj.ipv6_addr = str(ip_object)
+                        host_id = host_obj.id
 
                         # Add host
                         ret_arr.append(host_obj)
@@ -357,10 +354,10 @@ class ImportShodanOutput(luigi.Task):
                     port = service['port']
                     # print("[*] PORT: %s" % str(port))
                     port_obj = data_model.Port(
-                        host_id=host_id)
+                        parent_id=host_id)
                     port_obj.proto = 0
-                    port_obj.number = port
-                    port_id = port_obj.record_id
+                    port_obj.port = port
+                    port_id = port_obj.id
 
                     # Add port
                     ret_arr.append(port_obj)
@@ -384,7 +381,7 @@ class ImportShodanOutput(luigi.Task):
 
                                     # Get or create a domain object
                                     domain_obj = data_model.Domain(
-                                        host_id=host_id)
+                                        parent_id=host_id)
                                     domain_obj.name = domain_str
 
                                     # Add domain
@@ -422,8 +419,8 @@ class ImportShodanOutput(luigi.Task):
                                         if len(temp_val) > 0:
                                             server_version = temp_val
 
-                                        component_obj = data_model.Component(
-                                            port_id=port_id)
+                                        component_obj = data_model.WebComponent(
+                                            parent_id=port_id)
 
                                         component_obj.name = component_name
 
@@ -448,8 +445,8 @@ class ImportShodanOutput(luigi.Task):
                                 # Convert to lower to avoid upper/lower issues
                                 component_name = component_name.lower()
 
-                                component_obj = data_model.Component(
-                                    port_id=port_id)
+                                component_obj = data_model.WebComponent(
+                                    parent_id=port_id)
 
                                 component_obj.name = component_name
 
@@ -469,7 +466,7 @@ class ImportShodanOutput(luigi.Task):
 
                                 # Create a certificate object
                                 cert_obj = data_model.Certificate(
-                                    port_id=port_obj.record_id)
+                                    parent_id=port_obj.id)
 
                                 if 'issued' in cert:
                                     issued = cert['issued']
@@ -502,7 +499,7 @@ class ImportShodanOutput(luigi.Task):
                                         if domain_obj:
                                             ret_arr.append(domain_obj)
 
-                                            endpoint_domain_id = domain_obj.record_id
+                                            endpoint_domain_id = domain_obj.id
 
                                  # Add the cert object
                                 ret_arr.append(cert_obj)
@@ -516,7 +513,7 @@ class ImportShodanOutput(luigi.Task):
 
                                 # Get or create a domain object
                                 domain_obj = data_model.Domain(
-                                    host_id=host_id)
+                                    parent_id=host_id)
                                 domain_obj.name = domain_name
 
                                 # Add domain
@@ -545,7 +542,7 @@ class ImportShodanOutput(luigi.Task):
                                 if web_path_hash in path_hash_map:
                                     path_obj = path_hash_map[web_path_hash]
                                 else:
-                                    path_obj = data_model.Path()
+                                    path_obj = data_model.ListItem()
                                     path_obj.web_path = trimmed_path
                                     path_obj.web_path_hash = web_path_hash
 
@@ -553,11 +550,11 @@ class ImportShodanOutput(luigi.Task):
                                     path_hash_map[web_path_hash] = path_obj
                                     ret_arr.append(path_obj)
 
-                                web_path_id = path_obj.record_id
+                                web_path_id = path_obj.id
 
                                 # Add http endpoint
                         http_endpoint_obj = data_model.HttpEndpoint(
-                            port_id=port_obj.record_id)
+                            parent_id=port_obj.id)
                         http_endpoint_obj.domain_id = endpoint_domain_id
                         http_endpoint_obj.title = title
                         http_endpoint_obj.status_code = status_code

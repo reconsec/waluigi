@@ -54,6 +54,19 @@ class ProcessStreamReader(Thread):
         return output_str
 
 
+def get_ports(byte_array):
+    # Get byte
+    port_list = []
+    if byte_array:
+        for i in range(0, len(byte_array)):
+            current_byte = byte_array[i]
+            for j in range(8):
+                mask = 1 << j
+                if current_byte & mask:
+                    port_list.append(str(j + (i*8)))
+    return port_list
+
+
 def check_domain(domain_str):
 
     # If it's a wildcard

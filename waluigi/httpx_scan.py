@@ -49,11 +49,11 @@ class HttpXScan(luigi.Task):
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
@@ -62,8 +62,8 @@ class HttpXScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_obj = scan_input_obj.scan_target_dict
+        scheduled_scan_obj = self.scan_input
+        scan_obj = scheduled_scan_obj.scan_target_dict
 
         # Get output file path
         output_file_path = self.output().path
@@ -76,53 +76,82 @@ class HttpXScan(luigi.Task):
         if scan_obj:
 
             scan_input_data = scan_obj['scan_input']
+            scope_obj = scheduled_scan_obj.scan_data
             # print(scan_input_data)
 
-            target_map = {}
-            if 'target_map' in scan_input_data:
-                target_map = scan_input_data['target_map']
+            # target_map = {}
+            # if 'target_map' in scan_input_data:
+            #     target_map = scan_input_data['target_map']
 
             port_ip_dict = {}
             command_list = []
 
-            script_args = None
-            if 'tool_args' in scan_obj:
-                script_args = scan_obj['tool_args']
+            # script_args = None
+            script_args = scheduled_scan_obj.current_tool.args
+            if script_args:
+                script_args = script_args.split(" ")
 
-            for target_key in target_map:
+            host_map = scope_obj.host_map
+            port_map = scope_obj.port_map
 
-                target_dict = target_map[target_key]
-                host_id = target_dict['host_id']
-                ip_addr = target_dict['target_host']
-                domain_list = target_dict['domain_set']
+            scan_port_list = scope_obj.port_number_list
+            if len(scan_port_list) > 0:
+                port_id = None
+                for port_str in scan_port_list:
+                    # Add a port entry for each host
+                    for host_id in host_map:
+                        host_obj = host_map[host_id]
+                        ip_addr = host_obj.ipv4_addr
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]
-                    port_str = str(port_obj['port'])
-                    port_id = port_obj['port_id']
+                        # Add to ip set
+                        if port_str in port_ip_dict:
+                            ip_set = port_ip_dict[port_str]
+                        else:
+                            ip_set = set()
+                            port_ip_dict[port_str] = ip_set
 
-                    # Add to port id map
-                    port_to_id_map[ip_addr+":"+port_str] = {
-                        'port_id': port_id, 'host_id': host_id, 'ip_addr': ip_addr}
+                        # Add IP to list
+                        ip_set.add(ip_addr)
 
-                    # Add to scan map
-                    if port_str in port_ip_dict:
-                        ip_set = port_ip_dict[port_str]
-                    else:
-                        ip_set = set()
-                        port_ip_dict[port_str] = ip_set
-
-                    # Add IP to list
-                    ip_set.add(ip_addr)
-
-                    # Add domains
-                    for domain in domain_list:
-                        ip_set.add(domain)
-
-                        # Add to port id map
-                        port_to_id_map[domain+":"+port_str] = {
+                        port_to_id_map[ip_addr+":" + port_str] = {
                             'port_id': port_id, 'host_id': host_id, 'ip_addr': ip_addr}
+
+            elif len(port_map) > 0:
+
+                for port_id in port_map:
+                    port_obj = port_map[port_id]
+                    port_str = str(port_obj.port)
+
+                    if port_obj.parent:
+                        host_id = port_obj.parent.id
+                        if host_id in host_map:
+                            host_obj = host_map[host_id]
+                            ip_addr = host_obj.ipv4_addr
+
+                            # Add to ip set
+                            if port_str in port_ip_dict:
+                                ip_set = port_ip_dict[port_str]
+                            else:
+                                ip_set = set()
+                                port_ip_dict[port_str] = ip_set
+
+                            # Add IP to list
+                            ip_set.add(ip_addr)
+
+                            port_to_id_map[ip_addr+":"+port_str] = {
+                                'port_id': port_id, 'host_id': host_id, 'ip_addr': ip_addr}
+
+                            # Get domains
+                            if host_id in scope_obj.domain_host_id_map:
+                                temp_domain_list = scope_obj.domain_host_id_map[host_id]
+                                for domain_obj in temp_domain_list:
+
+                                    domain_name = domain_obj.name
+                                    ip_set.add(domain_name)
+
+                                    # Add to port id map
+                                    port_to_id_map[domain_name + ":" + port_str] = {
+                                        'port_id': port_id, 'host_id': host_id, 'ip_addr': ip_addr}
 
             for port_str in port_ip_dict:
 
@@ -207,9 +236,9 @@ class ImportHttpXOutput(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
+        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
 
         http_output_file = self.input().path
         f = open(http_output_file, 'r')
@@ -264,27 +293,27 @@ class ImportHttpXOutput(luigi.Task):
                 # If we have an IP somewhere in the scan
                 if ip_str:
                     ip_object = netaddr.IPAddress(ip_str)
-                    if ip_object.version == 4:
-                        addr_type = 'ipv4'
-                    elif ip_object.version == 6:
-                        addr_type = 'ipv6'
 
                     # Create Host object
-                    host_obj = data_model.Host(
-                        scan_id, record_id=host_id)
-                    host_obj.ip_addr_type = addr_type
-                    host_obj.ip_addr = str(ip_object)
-                    host_id = host_obj.record_id
+                    host_obj = data_model.Host(id=host_id)
+
+                    ip_object = netaddr.IPAddress(ip_str)
+                    if ip_object.version == 4:
+                        host_obj.ipv4_addr = str(ip_object)
+                    elif ip_object.version == 6:
+                        host_obj.ipv6_addr = str(ip_object)
+
+                    host_id = host_obj.id
 
                     # Add host
                     ret_arr.append(host_obj)
 
                 # Create Port object
                 port_obj = data_model.Port(
-                    host_id=host_id, record_id=port_id)
+                    parent_id=host_id, id=port_id)
                 port_obj.proto = 0
-                port_obj.number = port_str
-                port_id = port_obj.record_id
+                port_obj.port = port_str
+                port_id = port_obj.id
 
                 # If TLS
                 if 'scheme' in httpx_scan and httpx_scan['scheme'] == "https":
@@ -342,7 +371,7 @@ class ImportHttpXOutput(luigi.Task):
                     if web_path_hash in path_hash_map:
                         path_obj = path_hash_map[web_path_hash]
                     else:
-                        path_obj = data_model.Path()
+                        path_obj = data_model.ListItem()
                         path_obj.web_path = web_path
                         path_obj.web_path_hash = web_path_hash
 
@@ -350,7 +379,7 @@ class ImportHttpXOutput(luigi.Task):
                         path_hash_map[web_path_hash] = path_obj
                         ret_arr.append(path_obj)
 
-                    web_path_id = path_obj.record_id
+                    web_path_id = path_obj.id
 
                 screenshot_id = None
                 if 'screenshot_bytes' in httpx_scan:
@@ -372,7 +401,7 @@ class ImportHttpXOutput(luigi.Task):
                         screenshot_hash_map[image_hash_str] = screenshot_obj
                         ret_arr.append(screenshot_obj)
 
-                    screenshot_id = screenshot_obj.record_id
+                    screenshot_id = screenshot_obj.id
 
                 domain_used = None
                 if 'url' in httpx_scan:
@@ -383,12 +412,13 @@ class ImportHttpXOutput(luigi.Task):
                         domain_used = host.split(":")[0]
 
                 # Add domains
+                cert_obj = None
                 if 'tls' in httpx_scan:
                     tls_data = httpx_scan['tls']
 
                     # Create a certificate object
                     cert_obj = data_model.Certificate(
-                        port_id=port_obj.record_id)
+                        parent_id=port_obj.id)
 
                     if 'subject_an' in tls_data:
                         dns_names = tls_data['subject_an']
@@ -455,8 +485,8 @@ class ImportHttpXOutput(luigi.Task):
                     endpoint_domain_id = cert_obj.domain_name_id_map[domain_used]
 
                 # Add http component
-                component_obj = data_model.Component(
-                    port_id=port_obj.record_id)
+                component_obj = data_model.WebComponent(
+                    parent_id=port_obj.id)
                 component_obj.name = 'http'
                 ret_arr.append(component_obj)
 
@@ -464,8 +494,8 @@ class ImportHttpXOutput(luigi.Task):
                     tech_list = httpx_scan['tech']
                     for tech_entry in tech_list:
 
-                        component_obj = data_model.Component(
-                            port_id=port_obj.record_id)
+                        component_obj = data_model.WebComponent(
+                            parent_id=port_obj.id)
 
                         if ":" in tech_entry:
                             tech_entry_arr = tech_entry.split(":")
@@ -478,7 +508,7 @@ class ImportHttpXOutput(luigi.Task):
 
                 # Add http endpoint
                 http_endpoint_obj = data_model.HttpEndpoint(
-                    port_id=port_obj.record_id)
+                    parent_id=port_obj.id)
                 http_endpoint_obj.domain_id = endpoint_domain_id
                 http_endpoint_obj.title = title
                 http_endpoint_obj.status_code = status_code
@@ -498,7 +528,7 @@ class ImportHttpXOutput(luigi.Task):
                 import_arr.append(flat_obj)
 
             # Import the ports to the manager
-            tool_obj = scan_input_obj.current_tool
+            tool_obj = scheduled_scan_obj.current_tool
             tool_id = tool_obj.id
             ret_val = recon_manager.import_data(scan_id, tool_id, import_arr)
 

@@ -85,7 +85,6 @@ class ScheduledScan():
         self.target_id = scheduled_scan.target_id
         self.scan_id = scheduled_scan.scan_id
         self.id = scheduled_scan.id
-        # self.collection_tools = scheduled_scan.collection_tools
 
         self.collection_tool_map = {}
         for collection_tool in scheduled_scan.collection_tools:
@@ -107,6 +106,10 @@ class ScheduledScan():
         # Get scope
         scope_dict = self.scan_thread.recon_manager.get_scheduled_scan_scope(
             scheduled_scan.id)
+
+        if scope_dict is None:
+            raise RuntimeError(
+                "[-] No scan scope returned for scheduled scan.")
 
         self.scan_data = data_model.ScanData(scope_dict)
 
@@ -157,15 +160,14 @@ class ScheduledScanThread(threading.Thread):
             self._enabled = True
             print("[*] Scan poller enabled.")
 
-    def execute_scan_jobs(self, scheduled_scan_obj, lock_val=None):
+    def execute_scan_jobs(self, scheduled_scan_obj: ScheduledScan):
 
-        ret_val = True
+        ret_val = False
         # Set connection target in connection manager to this target
         target_id = scheduled_scan_obj.target_id
         self.recon_manager.set_current_target(
             self.connection_manager, target_id)
 
-        # print(sched_scan_obj.collection_tools)
         # Sort the list
         collection_tools = scheduled_scan_obj.collection_tool_map.values()
         sorted_list = sorted(collection_tools,
@@ -198,11 +200,11 @@ class ScheduledScanThread(threading.Thread):
                 collection_tool_inst.id)
 
             # print("[*] %s tool status: %d" %(tool_obj.name, tool_status))
-            if tool_status == CollectionToolStatus.COMPLETED.value:
-                print("[*] %s tool complete,  skipping." % tool_obj.name)
-                continue
+            # if tool_status == CollectionToolStatus.COMPLETED.value:
+            #     print("[*] %s tool complete,  skipping." % tool_obj.name)
+            #     continue
 
-            scan_input = None
+            #scan_input = None
 
             # Check if scan is cancelled
             scan = self.recon_manager.get_scan(scheduled_scan_obj.scan_id)
@@ -211,25 +213,25 @@ class ScheduledScanThread(threading.Thread):
                 return False
 
             # Check if load balanced
-            skip_load_balance_ports = self.recon_manager.is_load_balanced()
+            #skip_load_balance_ports = self.recon_manager.is_load_balanced()
 
             # Get scope
-            scan_input = self.recon_manager.get_tool_scope(
-                scheduled_scan_obj.scan_id, collection_tool_inst.id, skip_load_balance_ports)
+            # scan_input = self.recon_manager.get_tool_scope(
+            #     scheduled_scan_obj.scan_id, collection_tool_inst.id, skip_load_balance_ports)
 
             # print(scan_input)
 
             # Return if there was an error getting the scope
-            if scan_input is None:
-                return False
+            # if scan_input is None:
+            #     return False
 
-            # Skip tool if there is no input
-            if 'scan_input' in scan_input and len(scan_input['scan_input']['target_map']) == 0:
-                print("[-] Scan input is empty. Skipping")
-                continue
+            # # Skip tool if there is no input
+            # if 'scan_input' in scan_input and len(scan_input['scan_input']['target_map']) == 0:
+            #     print("[-] Scan input is empty. Skipping")
+            #     continue
 
-            # Set the input
-            scheduled_scan_obj.scan_target_dict = scan_input
+            # # Set the input
+            # scheduled_scan_obj.scan_target_dict = scan_input
 
             # If the tool is active then connect to the target and run the scan
             if tool_obj.tool_type == 2:
@@ -270,21 +272,20 @@ class ScheduledScanThread(threading.Thread):
         # Cleanup files
         if ret_status == CollectionToolStatus.COMPLETED.value:
             scan_pipeline.scan_cleanup_func(scheduled_scan_obj.scan_id)
+            ret_val = True
 
         return ret_val
 
-    def process_scan_obj(self, sched_scan_obj, lock_val=True):
+    def process_scan_obj(self, sched_scan_obj):
 
         # Create scan object
-        # self.recon_manager.dbg_print(sched_scan_obj)
-
         scheduled_scan_obj = ScheduledScan(self, sched_scan_obj)
-        # scan_input_obj = ScanInput(self, sched_scan_obj)
+        self.recon_manager.dbg_print(scheduled_scan_obj)
 
         # Execute scan jobs
         scan_status = ScanStatus.ERROR.value
         try:
-            ret_val = self.execute_scan_jobs(scheduled_scan_obj, lock_val)
+            ret_val = self.execute_scan_jobs(scheduled_scan_obj)
 
             # Set status
             if self.connection_manager and self.connection_manager.connect_to_extender() == False:
@@ -496,9 +497,8 @@ class ReconManager:
         session_key = None
         if os.path.exists('session'):
 
-            f = open("session", "r")
-            hex_session = f.read().strip()
-            f.close()
+            with open("session", "r") as file_fd:
+                hex_session = file_fd.read().strip()
 
             print("[*] Session Key File Exists. Key: %s" % hex_session)
 

@@ -25,11 +25,11 @@ class ShodanScope(luigi.ExternalTask):
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
 
         # path to each input file
@@ -37,25 +37,24 @@ class ShodanScope(luigi.ExternalTask):
         if os.path.isfile(shodan_ip_file):
             return luigi.LocalTarget(shodan_ip_file)
 
-        f = open(shodan_ip_file, 'w')
-        scan_target_dict = scan_input_obj.scan_target_dict
-        if scan_target_dict:
+        scope_obj = scheduled_scan_obj.scan_data
+        target_list = []
+        subnet_map = scope_obj.subnet_map
+        for subnet_id in subnet_map:
+            subnet_obj = subnet_map[subnet_id]
+            subnet_str = "%s/%s" % (subnet_obj.subnet, subnet_obj.mask)
+            target_list.append(subnet_str)
 
-            # Write the output
-            scan_input = scan_target_dict['scan_input']
+        host_map = scope_obj.host_map
+        for host_id in host_map:
+            host_obj = host_map[host_id]
+            host_str = "%s/32" % (host_obj.ipv4_addr)
+            target_list.append(host_str)
 
-            target_map = {}
-            if 'target_map' in scan_input:
-                target_map = scan_input['target_map']
-
-            print("[+] Retrieved %d subnets from database" % len(target_map))
-            for target_key in target_map:
-                f.write(target_key + '\n')
-
-        else:
-            print("[-] Target list is empty.")
-
-        f.close()
+        # print("[+] Retrieved %d subnets from database" % len(target_map))
+        with open(shodan_ip_file, 'w') as shodan_fd:
+            for target_str in target_list:
+                shodan_fd.write(target_str + '\n')
 
         return luigi.LocalTarget(shodan_ip_file)
 
@@ -215,11 +214,11 @@ class ShodanScan(luigi.Task):
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
         out_file = dir_path + os.path.sep + "shodan_out_" + scan_id
 
@@ -227,13 +226,12 @@ class ShodanScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
+        scheduled_scan_obj = self.scan_input
 
         # Read shodan input files
         shodan_input_file = self.input()
-        f = shodan_input_file.open()
-        ip_subnets = f.readlines()
-        f.close()
+        with shodan_input_file.open() as file_fd:
+            ip_subnets = file_fd.readlines()
 
         # Attempt to consolidate subnets to reduce the number of shodan calls
         print("[*] Attempting to reduce subnets queried by Shodan")
@@ -247,10 +245,9 @@ class ShodanScan(luigi.Task):
         print("[*] Retrieving Shodan data")
 
         # Write the output
-        scan_target_dict = scan_input_obj.scan_target_dict
-        if 'api_key' in scan_target_dict:
-            shodan_key = scan_target_dict['api_key']
-
+        shodan_key = scheduled_scan_obj.current_tool.api_key
+        print("Key: " + shodan_key)
+        if shodan_key and len(shodan_key) > 0:
             # Do a test lookup to make sure our key is good and we have connectivity
             result = shodan_wrapper(shodan_key, "8.8.8.8", 32)
             if result is not None:
@@ -310,17 +307,26 @@ class ImportShodanOutput(luigi.Task):
     def requires(self):
         # Requires MassScan Task to be run prior
         return ShodanScan(scan_input=self.scan_input)
+    
+    def output(self):
+
+        tool_output_file = self.input().path
+        dir_path = os.path.dirname(tool_output_file)
+        out_file = dir_path + os.path.sep + "tool_import_json"
+
+        return luigi.LocalTarget(out_file)
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
+        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
+        tool_obj = scheduled_scan_obj.current_tool
+        tool_id = tool_obj.id
 
         shodan_output_file = self.input().path
-        f = open(shodan_output_file, 'r')
-        data = f.read()
-        f.close()
+        with open(shodan_output_file, 'r') as file_fd:
+            data = file_fd.read()
 
         ret_arr = []
         path_hash_map = {}
@@ -567,12 +573,21 @@ class ImportShodanOutput(luigi.Task):
 
         if len(ret_arr) > 0:
 
+            record_map = {}
             import_arr = []
             for obj in ret_arr:
+                record_map[obj.id] = obj
                 flat_obj = obj.to_jsonable()
                 import_arr.append(flat_obj)
 
             # Import the ports to the manager
-            tool_obj = scan_input_obj.current_tool
-            tool_id = tool_obj.id
-            ret_val = recon_manager.import_data(scan_id, tool_id, import_arr)
+            updated_record_map = recon_manager.import_data(
+                scan_id, tool_id, import_arr)
+            
+            # Write imported data to file
+            tool_import_file = self.output().path
+            with open(tool_import_file, 'w') as import_fd:
+                import_fd.write(json.dumps(import_arr))
+
+            # Update the scan scope
+            scheduled_scan_obj.scan_data.update(record_map, updated_record_map)

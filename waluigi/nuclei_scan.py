@@ -20,14 +20,14 @@ class NucleiScan(luigi.Task):
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
-        scan_target_dict = scan_input_obj.scan_target_dict
+        scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
         if 'module_id' in scan_target_dict:
             module_id = str(scan_target_dict['module_id'])
@@ -39,7 +39,7 @@ class NucleiScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
+        scheduled_scan_obj = self.scan_input
 
         # Make sure template path exists
         my_env = os.environ.copy()
@@ -55,167 +55,166 @@ class NucleiScan(luigi.Task):
         output_file_path = self.output().path
         output_dir = os.path.dirname(output_file_path)
 
-        scan_target_dict = scan_input_obj.scan_target_dict
+        # scan_target_dict = scheduled_scan_obj.scan_target_dict
 
-        nuclei_scan_obj = None
+        # nuclei_scan_obj = None
         total_endpoint_set = set()
         endpoint_port_obj_map = {}
         nuclei_output_file = None
 
-        if scan_target_dict:
+       # if scan_target_dict:
 
-            # print(nuclei_scan_obj)
-            pool = ThreadPool(processes=10)
-            thread_list = []
+        # print(nuclei_scan_obj)
+        pool = ThreadPool(processes=10)
+        thread_list = []
 
-            scan_input_data = scan_target_dict['scan_input']
-            template_path_list = []
-            if 'tool_args' in scan_target_dict:
-                template_path_list = scan_target_dict['tool_args']
-            # print(scan_input_data)
+        # scan_input_data = scan_target_dict['scan_input']
+        # template_path_list = []
+        template_path_list = [scheduled_scan_obj.current_tool.args]
+        # if 'tool_args' in scan_target_dict:
+        #     template_path_list = scan_target_dict['tool_args']
+        # print(scan_input_data)
 
-            target_map = {}
-            if 'target_map' in scan_input_data:
-                target_map = scan_input_data['target_map']
+        # target_map = {}
+        # if 'target_map' in scan_input_data:
+        #     target_map = scan_input_data['target_map']
 
-            for target_key in target_map:
+        target_map = scheduled_scan_obj.scan_data.host_port_obj_map
 
-                # Get host info
-                target_dict = target_map[target_key]
-                ip_addr = target_dict['target_host']
-                domain_list = target_dict['domain_set']
+        for target_key in target_map:
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    # Get port info
-                    port_obj = port_obj_map[port_key]
-                    port_str = str(port_obj['port'])
-                    port_id = port_obj['port_id']
-                    secure_flag = port_obj['secure']
+            target_obj_dict = target_map[target_key]
+            port_obj = target_obj_dict['port_obj']
+            port_id = port_obj.id
+            port_str = port_obj.port
+            secure_flag = port_obj.secure
 
-                    # Setup inputs
-                    prefix = 'http://'
-                    if secure_flag:
-                        prefix = 'https://'
+            host_obj = target_obj_dict['host_obj']
+            ip_addr = host_obj.ipv4_addr
 
-                    endpoint = prefix + ip_addr + ":" + port_str
-                    port_obj_instance = {"port_id": port_id}
+            # Add domain if it is different from the IP
+            domain_str = None
+            target_arr = target_key.split(":")
 
-                    if endpoint not in total_endpoint_set:
-                        endpoint_port_obj_map[endpoint] = port_obj_instance
-                        total_endpoint_set.add(endpoint)
+            # Setup inputs
+            prefix = 'http://'
+            if secure_flag:
+                prefix = 'https://'
 
-                    # Add endpoint per domain - Truncate to top 20
-                    for domain_str in domain_list[:20]:
+            endpoint = prefix + ip_addr + ":" + port_str
+            port_obj_instance = {"port_id": port_id}
 
-                        endpoint = prefix + domain_str + ":" + port_str
-                        # print("[*] Endpoint: %s" % endpoint)
-                        if endpoint not in total_endpoint_set:
-                            endpoint_port_obj_map[endpoint] = port_obj_instance
-                            total_endpoint_set.add(endpoint)
+            if endpoint not in total_endpoint_set:
+                endpoint_port_obj_map[endpoint] = port_obj_instance
+                total_endpoint_set.add(endpoint)
 
-            template_arr = []
-            for template_path in template_path_list:
+            if target_arr[0] != ip_addr:
+                domain_str = target_arr[0]
+                endpoint = prefix + domain_str + ":" + port_str
+                # print("[*] Endpoint: %s" % endpoint)
+                if endpoint not in total_endpoint_set:
+                    endpoint_port_obj_map[endpoint] = port_obj_instance
+                    total_endpoint_set.add(endpoint)
 
-                if template_path:
-                    template_path = template_path.replace("/", os.path.sep)
 
-                    nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
-                    full_template_path = nuclei_template_path + os.path.sep + template_path
-                    if os.path.exists(full_template_path) == False:
-                        print("[-] Nuclei template path '%s' does not exist" %
-                              full_template_path)
-                        raise FileNotFoundError(errno.ENOENT, os.strerror(
-                            errno.ENOENT), full_template_path)
+        template_arr = []
+        for template_path in template_path_list:
 
-                    template_arr.append("-t")
-                    template_arr.append(full_template_path)
+            if template_path:
+                template_path = template_path.replace("/", os.path.sep)
 
-            # Write to nuclei input file if endpoints exist
-            counter = 0
-            if len(total_endpoint_set) > 0:
+                nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
+                full_template_path = nuclei_template_path + os.path.sep + template_path
+                if os.path.exists(full_template_path) == False:
+                    print("[-] Nuclei template path '%s' does not exist" %
+                          full_template_path)
+                    raise FileNotFoundError(errno.ENOENT, os.strerror(
+                        errno.ENOENT), full_template_path)
 
-                scan_target_dict = scan_input_obj.scan_target_dict
-                mod_str = ''
-                if 'module_id' in scan_target_dict:
-                    module_id = str(scan_target_dict['module_id'])
-                    mod_str = "_" + module_id
+                template_arr.append("-t")
+                template_arr.append(full_template_path)
 
-                nuclei_scan_input_file_path = (
-                    output_dir + os.path.sep + "nuclei_scan_in" + mod_str).strip()
-                f = open(nuclei_scan_input_file_path, 'w')
+        # Write to nuclei input file if endpoints exist
+        counter = 0
+        if len(total_endpoint_set) > 0:
+
+            # scan_target_dict = scheduled_scan_obj.scan_target_dict
+            mod_str = ''
+            # if 'module_id' in scan_target_dict:
+            #     module_id = str(scan_target_dict['module_id'])
+            #     mod_str = "_" + module_id
+
+            nuclei_scan_input_file_path = (
+                output_dir + os.path.sep + "nuclei_scan_in" + mod_str).strip()
+            
+            with open(nuclei_scan_input_file_path, 'w') as file_fd:
                 for endpoint in total_endpoint_set:
-                    f.write(endpoint + '\n')
-                f.close()
+                    file_fd.write(endpoint + '\n')
 
-                # Nmap command args
-                nuclei_output_file = output_dir + os.path.sep + \
-                    "nuclei_scan_out" + mod_str + "_" + str(counter)
+            # Nmap command args
+            nuclei_output_file = output_dir + os.path.sep + \
+                "nuclei_scan_out" + mod_str + "_" + str(counter)
 
-                command = []
-                if os.name != 'nt':
-                    command.append("sudo")
+            command = []
+            if os.name != 'nt':
+                command.append("sudo")
 
-                command_inner = [
-                    "nuclei",
-                    "-jsonl",
-                    "-duc",
-                    "-ni",
-                    "-pt",  # Limit to HTTP currently
-                    "http",
-                    "-rl",  # Rate limit 50
-                    "50",
-                    "-l",
-                    nuclei_scan_input_file_path,
-                    "-o",
-                    nuclei_output_file,
-                ]
+            command_inner = [
+                "nuclei",
+                "-jsonl",
+                "-duc",
+                "-ni",
+                "-pt",  # Limit to HTTP currently
+                "http",
+                "-rl",  # Rate limit 50
+                "50",
+                "-l",
+                nuclei_scan_input_file_path,
+                "-o",
+                nuclei_output_file,
+            ]
 
-                # Add templates
-                command_inner.extend(template_arr)
-                # print(command)
+            # Add templates
+            command_inner.extend(template_arr)
+            # print(command)
 
-                command.extend(command_inner)
-                thread_list.append(pool.apply_async(
-                    scan_utils.process_wrapper, (command, use_shell, my_env)))
+            command.extend(command_inner)
+            thread_list.append(pool.apply_async(
+                scan_utils.process_wrapper, (command, use_shell, my_env)))
 
-            # Close the pool
-            pool.close()
+        # Close the pool
+        pool.close()
 
-            # Loop through thread function calls and update progress
-            for thread_obj in tqdm(thread_list):
-                output = thread_obj.get()
+        # Loop through thread function calls and update progress
+        for thread_obj in tqdm(thread_list):
+            output = thread_obj.get()
 
         results_dict = {'endpoint_port_obj_map': endpoint_port_obj_map,
                         'output_file_path': nuclei_output_file}
 
         # Write output file
-        f = open(output_file_path, 'w')
-        f.write(json.dumps(results_dict))
-        f.close()
+        with open(output_file_path, 'w') as file_fd:
+            file_fd.write(json.dumps(results_dict))
 
 
 @inherits(NucleiScan)
-class ImportNucleiOutput(luigi.Task):
+class ImportNucleiOutput(data_model.ImportToolXOutput):
 
     def requires(self):
         # Requires NucleiScan
         return NucleiScan(scan_input=self.scan_input)
-
+    
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
+        scheduled_scan_obj = self.scan_input
 
         # Import the ports to the manager
-        tool_obj = scan_input_obj.current_tool
+        tool_obj = scheduled_scan_obj.current_tool
         tool_id = tool_obj.id
 
         nuclei_output_file = self.input().path
-        f = open(nuclei_output_file, 'r')
-        data = f.read()
-        f.close()
+        with open(nuclei_output_file, 'r') as file_fd:
+            data = file_fd.read()
 
         # port_arr = []
         ret_arr = []
@@ -286,18 +285,6 @@ class ImportNucleiOutput(luigi.Task):
                             print("[-] Endpoint not in map: %s %s" %
                                   (endpoint, str(endpoint_port_obj_map)))
 
-        # Import the nuclei scans
-        if len(ret_arr) > 0:
 
-            import_arr = []
-            for obj in ret_arr:
-                flat_obj = obj.to_jsonable()
-                import_arr.append(flat_obj)
-
-            # Import the ports to the manager
-            ret_val = recon_manager.import_data(scan_id, tool_id, import_arr)
-
-            print("[+] Imported nuclei scans to manager.")
-
-        else:
-            print("[-] No nuclei results to import")
+        # Import, Update, & Save
+        self.import_results(scheduled_scan_obj, ret_arr)

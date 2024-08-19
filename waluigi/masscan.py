@@ -6,6 +6,7 @@ import subprocess
 import netaddr
 import xml.etree.ElementTree as ET
 import luigi
+import json
 
 from luigi.util import inherits
 from waluigi import scan_utils
@@ -97,7 +98,6 @@ def get_masscan_input(scheduled_scan_obj):
         mass_scan_conf.write(port_line + '\n')
 
     # Set the tools args
-    # print(scheduled_scan_obj.current_tool)
     tool_args = scheduled_scan_obj.current_tool.args
     if tool_args:
         tool_args = tool_args.split(" ")
@@ -126,7 +126,6 @@ class MasscanScan(luigi.Task):
     def run(self):
 
         scheduled_scan_obj = self.scan_input
-        # scan_id = scheduled_scan_obj.scan_id
         selected_interface = scheduled_scan_obj.selected_interface
         masscan_output_file_path = self.output().path
 
@@ -193,23 +192,16 @@ class MasscanScan(luigi.Task):
 
 
 @inherits(MasscanScan)
-class ImportMasscanOutput(luigi.Task):
+class ImportMasscanOutput(data_model.ImportToolXOutput):
 
     def requires(self):
         # Requires MassScan Task to be run prior
         return MasscanScan(scan_input=self.scan_input)
-
+    
     def run(self):
 
         obj_arr = []
         masscan_output_file = self.input().path
-
-        scheduled_scan_obj = self.scan_input
-        scan_id = scheduled_scan_obj.scan_id
-        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
-
-        tool_obj = scheduled_scan_obj.current_tool
-        tool_id = tool_obj.id
 
         if os.path.isfile(masscan_output_file) and os.path.getsize(masscan_output_file) > 0:
 
@@ -265,19 +257,6 @@ class ImportMasscanOutput(luigi.Task):
         else:
             print("[*] Masscan output file is empty. Ensure inputs were provided.")
 
-        if len(obj_arr) > 0:
-
-            record_map = {}
-            import_arr = []
-            for obj in obj_arr:
-                # Add record to map
-                record_map[obj.id] = obj
-                flat_obj = obj.to_jsonable()
-                import_arr.append(flat_obj)
-
-            # Import the results to the server
-            updated_record_map = recon_manager.import_data(
-                scan_id, tool_id, import_arr)
-
-            # Update the scan scope
-            scheduled_scan_obj.scan_data.update(record_map, updated_record_map)
+        # Import, Update, & Save
+        scheduled_scan_obj = self.scan_input
+        self.import_results(scheduled_scan_obj, obj_arr)

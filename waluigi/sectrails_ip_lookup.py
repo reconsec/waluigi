@@ -127,9 +127,8 @@ class SecTrailsIPLookupScan(luigi.Task):
         results_dict = {'ip_to_host_dict_map': ip_to_host_dict_map }
 
         # Write output file
-        f = open(output_file_path, 'w')
-        f.write(json.dumps(results_dict))
-        f.close()            
+        with open(output_file_path, 'w') as file_fd:
+            file_fd.write(json.dumps(results_dict))
 
 
 @inherits(SecTrailsIPLookupScan)
@@ -146,9 +145,8 @@ class ImportSecTrailsIPLookupOutput(luigi.Task):
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
         scan_output_file = self.input().path
-        f = open(scan_output_file, 'r')
-        data = f.read()
-        f.close()
+        with open(scan_output_file, 'r') as file_fd:
+            data = file_fd.read()
 
         if len(data) > 0:
             scan_data_dict = json.loads(data)            

@@ -132,9 +132,8 @@ def parse_json_blob_file(output_file):
     if os.path.exists(output_file):
 
         # Open the file and read all the data
-        f = open(output_file, 'r')
-        data = f.read()
-        f.close()
+        with open(output_file, 'r') as file_fd:
+            data = file_fd.read()
 
         if len(data) > 0:
 

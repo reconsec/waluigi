@@ -70,9 +70,8 @@ def update_config_file(collection_tools, my_env):
         subprocess.run(["subfinder", "-h"], env=my_env)
 
     # Update provider config file
-    f = open(config_file_path, 'r')
-    data = yaml.safe_load(f)
-    f.close()
+    with open(config_file_path, 'r') as file_fd:
+        data = yaml.safe_load(file_fd)
 
     # print(data)
     data['chaos'] = []
@@ -198,16 +197,16 @@ class SubfinderScan(luigi.Task):
             my_env["HOME"] = home_dir
 
         # Set the API keys
-        update_config_file(scheduled_scan_obj.collection_tools, my_env)
+        update_config_file(
+            list(scheduled_scan_obj.collection_tool_map.values()), my_env)
 
         # Add threads for large targets
         pool = ThreadPool(processes=10)
         thread_list = []
 
         # Add the domains from the wildcards
-        f = open(subfinder_domain_list, 'r')
-        sub_lines = f.readlines()
-        f.close()
+        with open(subfinder_domain_list, 'r') as file_fd:
+            sub_lines = file_fd.readlines()
 
         # Add the lines
         domain_set = set()
@@ -260,7 +259,7 @@ class SubfinderScan(luigi.Task):
 
 
 @inherits(SubfinderScan)
-class SubfinderImport(luigi.Task):
+class SubfinderImport(data_model.ImportToolXOutput):
 
     def requires(self):
         # Requires subfinderScan Task to be run prior
@@ -268,14 +267,9 @@ class SubfinderImport(luigi.Task):
 
     def run(self):
 
-        scheduled_scan_obj = self.scan_input
-        scan_id = scheduled_scan_obj.scan_id
-        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
-
         subfinder_output_file = self.input().path
-        f = open(subfinder_output_file, 'r')
-        data = f.read()
-        f.close()
+        with open(subfinder_output_file, 'r') as file_fd:
+            data = file_fd.read()
 
         obj_map = {}
         if len(data) > 0:
@@ -327,18 +321,9 @@ class SubfinderImport(luigi.Task):
                         # Add domain
                         obj_map[domain_obj.id] = domain_obj
 
-                import_arr = []
-                for obj in obj_map.values():
-                    flat_obj = obj.to_jsonable()
-                    import_arr.append(flat_obj)
+        ret_arr = list(obj_map.values())
 
-                # Import the results to the server
-                # print(scan_results)
-                tool_obj = scheduled_scan_obj.current_tool
-                tool_id = tool_obj.id
-                updated_record_map = recon_manager.import_data(
-                    scan_id, tool_id, import_arr)
-
-                # Update the scan scope
-                scheduled_scan_obj.scan_data.update(
-                    obj_map, updated_record_map)
+        # Import, Update, & Save
+        scheduled_scan_obj = self.scan_input
+        self.import_results(scheduled_scan_obj, ret_arr)
+             

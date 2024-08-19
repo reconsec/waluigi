@@ -26,11 +26,11 @@ class NmapScan(luigi.Task):
         scheduled_scan_obj = self.scan_input
         scan_id = scheduled_scan_obj.scan_id
 
-        scan_target_dict = scheduled_scan_obj.scan_target_dict
+        #scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
-        if 'module_id' in scan_target_dict:
-            module_id = str(scan_target_dict['module_id'])
-            mod_str = "_" + module_id
+        # if 'module_id' in scan_target_dict:
+        #     module_id = str(scan_target_dict['module_id'])
+        #     mod_str = "_" + module_id
 
         # Init directory
         tool_name = scheduled_scan_obj.current_tool.name
@@ -44,114 +44,152 @@ class NmapScan(luigi.Task):
 
         scheduled_scan_obj = self.scan_input
         selected_interface = scheduled_scan_obj.selected_interface
-        scope_obj = scheduled_scan_obj.scan_data
 
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
 
-        scan_target_dict = scheduled_scan_obj.scan_target_dict
-        # print(scan_target_dict)
-
         # load input file
+        scope_obj = scheduled_scan_obj.scan_data
+
         nmap_scan_data = None
-        # scan_input = scan_target_dict['scan_input']
-        # nmap_scan_args = scan_target_dict['tool_args']
         nmap_scan_args = scheduled_scan_obj.current_tool.args
         if nmap_scan_args:
             nmap_scan_args = nmap_scan_args.split(" ")
 
-        target_map = {}
-        if 'target_map' in scan_input:
-            target_map = scan_input['target_map']
-        host_map = scope_obj.host_map
-        if len(host_map) == 0:
-            subnet_map = scope_obj.subnet_map
-            for subnet_id in subnet_map:
-                subnet_obj = subnet_map[subnet_id]
-                subnet_str = "%s/%s" % (subnet_obj.subnet, subnet_obj.mask)
-
-        module_id = None
-        mod_str = ''
-        if 'module_id' in scan_target_dict:
-            module_id = str(scan_target_dict['module_id'])
-            mod_str = "_" + module_id
-
-        # print(input_nmap_scan_list)
-        # Output structure for scan jobs
-        nmap_scan_cmd_list = []
-        nmap_scan_data = {'nmap_input_map': target_map}
+        # Check if massscan was already run
+        mass_scan_ran = False
+        for collection_tool in scheduled_scan_obj.collection_tool_map.values():
+            if collection_tool.collection_tool.name == 'masscan':
+                mass_scan_ran = True
+                break
 
         nmap_scan_list = []
-        if len(target_map) < 20:
+        if mass_scan_ran:
+            # port_num_list = scope_obj.port_number_list
+            # if len(port_num_list) > 0:
 
-            print("[*] Dividing NMAP jobs by target")
+            #     # Get host map and pair each host with all ports to scan
+            #     scan_obj = {}
+            #     target_set = set()
+            #     resolve_dns = False
+
+            #     host_map = scope_obj.host_map
+            #     for host_id in host_map:
+            #         host_obj = host_map[host_id]
+            #         ip_addr = host_obj.ipv4_addr
+            #         target_set.add(ip_addr)
+
+            #         if host_id in scope_obj.domain_host_id_map:
+            #             temp_domain_list = scope_obj.domain_host_id_map[host_id]
+            #             if len(temp_domain_list) > 0:
+            #                 resolve_dns = True
+            #                 for domain_obj in temp_domain_list:
+
+            #                     domain_name = domain_obj.name
+            #                     target_set.add(domain_name)
+
+            #     scan_obj['ip_set'] = target_set
+            #     scan_obj['tool_args'] = nmap_scan_args
+            #     scan_obj['resolve_dns'] = resolve_dns
+
+            #     port_set = set()
+            #     for port_str in port_num_list:
+            #         port_set.add(port_str)
+
+            #     scan_obj['port_list'] = list(port_set)
+
+            #     # Add the scan
+            #     nmap_scan_list.append(scan_obj)
+
+            # else:
+
+            scan_port_map = {}
+            # Create scan jobs for each port and only scan the IPs mapped to that port
+            target_map = scheduled_scan_obj.scan_data.host_port_obj_map
+            print(target_map)
             for target_key in target_map:
 
-                scan_obj = {}
-                target_dict = target_map[target_key]
-                # print(target_dict)
-                # Add target
-                target_str = target_dict['target_host']
-                target_set = set()
-                target_set.add(target_str)
+                target_obj_dict = target_map[target_key]
+                port_obj = target_obj_dict['port_obj']
+                port_str = port_obj.port
 
-                # Add domains
-                domain_list = target_dict['domain_set']
-                if len(domain_list) > 0:
-                    target_set.update(domain_list)
+                host_obj = target_obj_dict['host_obj']
+                ip_addr = host_obj.ipv4_addr
 
-                scan_obj['ip_set'] = target_set
+                # Get dict for port or create it
+                if port_str in scan_port_map:
+                    scan_obj = scan_port_map[port_str]
+                else:
+                    scan_obj = {'port_list': [
+                        str(port_str)], 'tool_args': nmap_scan_args}
+                    scan_obj['resolve_dns'] = False
+                    scan_port_map[port_str] = scan_obj
 
-                scan_obj['tool_args'] = nmap_scan_args
-                scan_obj['resolve_dns'] = False
+                # Add the targets
+                if 'ip_set' in scan_obj:
+                    ip_set = scan_obj['ip_set']
+                else:
+                    ip_set = set()
+                    scan_obj['ip_set'] = ip_set
 
-                port_list = []
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]
-                    port_int = port_obj['port']
-                    resolve_dns = port_obj['resolve_dns']
-                    # If any ports require DNS resolution then flip the flag for the scan
-                    if resolve_dns == True:
-                        scan_obj['resolve_dns'] = True
+                # Add IP
+                ip_set.add(ip_addr)
 
-                    port_list.append(str(port_int))
+                target_arr = target_key.split(":")
+                if target_arr[0] != ip_addr:
+                    domain_str = target_arr[0]
+                    scan_obj['resolve_dns'] = True
+                    ip_set.add(domain_str)
 
-                scan_obj['port_list'] = port_list
-
-                # Add the scan
-                nmap_scan_list.append(scan_obj)
+                # Add each to the scan list
+            nmap_scan_list.extend(list(scan_port_map.values()))
 
         else:
 
-            print("[*] Dividing NMAP jobs by port")
-            scan_port_map = {}
-            for target_key in target_map:
+            # Use original scope for scan
+            target_map = scheduled_scan_obj.scan_data.host_port_obj_map
 
-                # Add target
-                target_dict = target_map[target_key]
-                target_str = target_dict['target_host']
+            # Use original scope for scan
+            # Create scan for each subnet, for all ports to scan
+            subnet_map = scope_obj.subnet_map
+            if len(subnet_map) > 0:
+                for subnet_id in subnet_map:
+                    subnet_obj = subnet_map[subnet_id]
+                    subnet_str = "%s/%s" % (subnet_obj.subnet, subnet_obj.mask)
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
+                    scan_obj = {}
+                    scan_obj['ip_set'] = [subnet_str]
+                    scan_obj['tool_args'] = nmap_scan_args
+                    scan_obj['resolve_dns'] = False
 
-                    port_obj = port_obj_map[port_key]
-                    port_int = port_obj['port']
+                    port_set = set()
+                    for port_str in scope_obj.port_number_list:
+                        port_set.add(port_str)
+
+                    scan_obj['port_list'] = list(port_set)
+
+                    # Add the scan
+                    nmap_scan_list.append(scan_obj)
+
+            elif len(target_map) > 0:
+                for target_key in target_map:
+
+                    target_obj_dict = target_map[target_key]
+                    port_obj = target_obj_dict['port_obj']
+                    port_str = port_obj.port
+
+                    host_obj = target_obj_dict['host_obj']
+                    ip_addr = host_obj.ipv4_addr
 
                     # Get dict for port or create it
-                    if port_int in scan_port_map:
-                        scan_obj = scan_port_map[port_int]
+                    if port_str in scan_port_map:
+                        scan_obj = scan_port_map[port_str]
                     else:
                         scan_obj = {'port_list': [
-                            str(port_int)], 'tool_args': nmap_scan_args}
+                            str(port_str)], 'tool_args': nmap_scan_args}
                         scan_obj['resolve_dns'] = False
-                        scan_port_map[port_int] = scan_obj
-
-                    resolve_dns = port_obj['resolve_dns']
-                    # If any ports require DNS resolution then flip the flag for the scan
-                    if resolve_dns == True:
-                        scan_obj['resolve_dns'] = True
+                        scan_port_map[port_str] = scan_obj
 
                     # Add the targets
                     if 'ip_set' in scan_obj:
@@ -160,15 +198,66 @@ class NmapScan(luigi.Task):
                         ip_set = set()
                         scan_obj['ip_set'] = ip_set
 
-                    # Add target
-                    ip_set.add(target_str)
+                    # Add IP
+                    ip_set.add(ip_addr)
 
-                    # Add domains
-                    domain_list = target_dict['domain_set']
-                    ip_set.update(domain_list)
+                    target_arr = target_key.split(":")
+                    if target_arr[0] != ip_addr:
+                        domain_str = target_arr[0]
+                        scan_obj['resolve_dns'] = True
+                        ip_set.add(domain_str)
 
-            # Add each to the scan list
-            nmap_scan_list.extend(list(scan_port_map.values()))
+                    # Add each to the scan list
+                nmap_scan_list.extend(list(scan_port_map.values()))
+
+            else:
+
+                port_num_list = scope_obj.port_number_list
+                if len(port_num_list) > 0:
+
+                    # Get host map and pair each host with all ports to scan
+                    scan_obj = {}
+                    target_set = set()
+                    resolve_dns = False
+
+                    host_map = scope_obj.host_map
+                    for host_id in host_map:
+                        host_obj = host_map[host_id]
+                        ip_addr = host_obj.ipv4_addr
+                        target_set.add(ip_addr)
+
+                        if host_id in scope_obj.domain_host_id_map:
+                            temp_domain_list = scope_obj.domain_host_id_map[host_id]
+                            if len(temp_domain_list) > 0:
+                                resolve_dns = True
+                                for domain_obj in temp_domain_list:
+
+                                    domain_name = domain_obj.name
+                                    target_set.add(domain_name)
+
+                    scan_obj['ip_set'] = target_set
+                    scan_obj['tool_args'] = nmap_scan_args
+                    scan_obj['resolve_dns'] = resolve_dns
+
+                    port_set = set()
+                    for port_str in port_num_list:
+                        port_set.add(port_str)
+
+                    scan_obj['port_list'] = list(port_set)
+
+                    # Add the scan
+                    nmap_scan_list.append(scan_obj)
+
+
+        module_id = None
+        mod_str = ''
+        # if 'module_id' in scan_target_dict:
+        #     module_id = str(scan_target_dict['module_id'])
+        #     mod_str = "_" + module_id
+
+        # Output structure for scan jobs
+        nmap_scan_cmd_list = []
+        nmap_scan_data = {}
 
         # Loop through map and create nmap command array
         counter = 0
@@ -188,10 +277,9 @@ class NmapScan(luigi.Task):
             if len(ip_list) == 0:
                 continue
 
-            f = open(ip_list_path, 'w')
-            for ip in ip_list:
-                f.write(ip + "\n")
-            f.close()
+            with open(ip_list_path, 'w') as in_file_fd:
+                for ip in ip_list:
+                    in_file_fd.write(ip + "\n")
 
             if 'tool_args' in scan_obj:
                 script_args = scan_obj['tool_args']
@@ -266,10 +354,9 @@ class NmapScan(luigi.Task):
         nmap_scan_data['nmap_scan_list'] = nmap_scan_cmd_list
 
         # Write out meta data file
-        f = open(meta_file_path, 'w')
         if nmap_scan_data:
-            f.write(json.dumps(nmap_scan_data))
-        f.close()
+            with open(meta_file_path, 'w') as meta_file_fd:
+                meta_file_fd.write(json.dumps(nmap_scan_data))
 
 
 def remove_dups_from_dict(dict_array):
@@ -288,17 +375,14 @@ def remove_dups_from_dict(dict_array):
 
 
 @inherits(NmapScan)
-class ImportNmapOutput(luigi.Task):
+class ImportNmapOutput(data_model.ImportToolXOutput):
 
     def requires(self):
         return NmapScan(scan_input=self.scan_input)
-
+    
     def run(self):
 
         scheduled_scan_obj = self.scan_input
-        scan_id = scheduled_scan_obj.scan_id
-        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
-
         tool_obj = scheduled_scan_obj.current_tool
         tool_id = tool_obj.id
 
@@ -306,15 +390,15 @@ class ImportNmapOutput(luigi.Task):
 
         meta_file = self.input().path
         if os.path.exists(meta_file):
-            f = open(meta_file)
-            json_input = f.read()
-            f.close()
+
+            with open(meta_file) as file_fd:
+                json_input = file_fd.read()
 
             # load input file
             if len(json_input) > 0:
                 nmap_scan_obj = json.loads(json_input)
                 nmap_json_arr = nmap_scan_obj['nmap_scan_list']
-                nmap_input_map = nmap_scan_obj['nmap_input_map']
+                # nmap_input_map = nmap_scan_obj['nmap_input_map']
                 # print(nmap_scan_obj)
 
                 for nmap_scan_entry in nmap_json_arr:
@@ -341,27 +425,7 @@ class ImportNmapOutput(luigi.Task):
 
                         host_ip = host.id
                         # Get the host entry for the IP address in the results
-                        host_entry = None
                         host_id = None
-                        port_map = None
-                        if host_ip in nmap_input_map:
-                            host_entry = nmap_input_map[host_ip]
-                            host_id = host_entry['host_id']
-                            port_map = host_entry['port_map']
-
-                        if host_id is None:
-                            ip_object = netaddr.IPAddress(host_ip)
-
-                            host_obj = data_model.Host(id=host_id)
-                            if ip_object.version == 4:
-                                host_obj.ipv4_addr = str(ip_object)
-                            elif ip_object.version == 6:
-                                host_obj.ipv6_addr = str(ip_object)
-
-                            host_id = host_obj.id
-
-                            # Add host
-                            ret_arr.append(host_obj)
 
                         # Loop through ports
                         for port in host.get_open_ports():
@@ -371,9 +435,32 @@ class ImportNmapOutput(luigi.Task):
 
                             # Check if we have a port_id
                             port_id = None
-                            if port_map and port_str in port_map:
-                                port_entry = port_map[port_str]
-                                port_id = port_entry['port_id']
+                            host_key = '%s:%s' % (host_ip, port_str)
+
+                            if host_key in scheduled_scan_obj.scan_data.host_port_obj_map:
+                                host_port_dict = scheduled_scan_obj.scan_data.host_port_obj_map[
+                                    host_key]
+                                port_id = host_port_dict['port_obj'].id
+                                host_id = host_port_dict['host_obj'].id
+
+                            # See if we have a host/port mapping already for this domain and port
+                            elif host_ip in scheduled_scan_obj.scan_data.host_ip_id_map:
+                                host_id = scheduled_scan_obj.scan_data.host_ip_id_map[host_ip]
+
+                            # Create Host object if one doesn't exists already
+                            if host_id is None:
+                                ip_object = netaddr.IPAddress(host_ip)
+
+                                host_obj = data_model.Host(id=host_id)
+                                if ip_object.version == 4:
+                                    host_obj.ipv4_addr = str(ip_object)
+                                elif ip_object.version == 6:
+                                    host_obj.ipv6_addr = str(ip_object)
+
+                                host_id = host_obj.id
+
+                                # Add host
+                                ret_arr.append(host_obj)
 
                             port_obj = data_model.Port(
                                 parent_id=host_id, id=port_id)
@@ -570,16 +657,7 @@ class ImportNmapOutput(luigi.Task):
                                                     ret_arr.append(
                                                         module_output_obj)
 
-        if len(ret_arr) > 0:
-
-            import_arr = []
-            for obj in ret_arr:
-                flat_obj = obj.to_jsonable()
-                import_arr.append(flat_obj)
-
-            # Import the ports to the manager
-            tool_obj = scheduled_scan_obj.current_tool
-            tool_id = tool_obj.id
-            ret_val = recon_manager.import_data(scan_id, tool_id, import_arr)
-
-        print("[+] Updated ports database with Nmap results.")
+        
+        # Import, Update, & Save
+        self.import_results(scheduled_scan_obj, ret_arr)
+   

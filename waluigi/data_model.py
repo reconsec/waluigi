@@ -1,55 +1,139 @@
 import base64
 import uuid
 import netaddr
+import luigi
+import os
+import json
 
 from waluigi import scan_utils
 
+class ImportToolXOutput(luigi.Task):
+
+
+    def output(self):
+
+        tool_output_file = self.input().path
+        dir_path = os.path.dirname(tool_output_file)
+        out_file = dir_path + os.path.sep + "tool_import_json"
+
+        return luigi.LocalTarget(out_file)
+
+    def complete(self):
+        # Custom completion check: Verify the scan objects exist and update the scope 
+        output = self.output()
+        if output.exists():
+
+            import_arr = None
+            with open(output.path, 'r') as import_fd:
+                file_data = import_fd.read()
+                import_arr = json.loads(file_data)
+
+            # Update the scope
+            if import_arr:
+                scheduled_scan_obj = self.scan_input
+                scheduled_scan_obj.scan_data.update(import_arr)
+
+            return True
+        
+        return False
+    
+    def import_results(self, scheduled_scan_obj, obj_arr):
+        
+        scan_id = scheduled_scan_obj.scan_id
+        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
+
+        tool_obj = scheduled_scan_obj.current_tool
+        tool_id = tool_obj.id
+
+        if len(obj_arr) > 0:
+
+            record_map = {}
+            import_arr = []
+            for obj in obj_arr:
+                # Add record to map
+                record_map[obj.id] = obj
+                flat_obj = obj.to_jsonable()
+                import_arr.append(flat_obj)
+
+            # Import the results to the server
+            updated_record_map = recon_manager.import_data(
+                scan_id, tool_id, import_arr)
+            
+            # Update the records
+            updated_import_arr = update_scope_array(record_map, updated_record_map)
+
+            # Write imported data to file
+            tool_import_file = self.output().path
+            with open(tool_import_file, 'w') as import_fd:
+                import_fd.write(json.dumps(updated_import_arr))
+
+            # Update the scan scope
+            scheduled_scan_obj.scan_data.update(record_map)
+
+
+def update_scope_array(record_map, updated_record_map=None):
+
+    # Update the record map with those from the database
+    if updated_record_map and len(updated_record_map) > 0:
+        for record_entry in updated_record_map:
+            orig_id = record_entry['orig_id']
+            db_id = record_entry['db_id']
+            if orig_id in record_map:
+                record_obj = record_map[orig_id]
+                record_obj.id = db_id
+
+                # Update any parent ids
+                if record_obj.parent and record_obj.parent.id == orig_id:
+                    record_obj.parent.id = db_id
+
+                # Set object for db ID and remove old one
+                record_map[db_id] = record_obj
+                del record_map[orig_id]
+
+    import_arr = []
+    for obj_id in record_map:
+
+        obj = record_map[obj_id]
+        flat_obj = obj.to_jsonable()
+        import_arr.append(flat_obj)
+
+    return import_arr
 
 class ScanData():
+        
 
     def update(self, record_map, updated_record_map=None):
 
-        # Update the record map with those from the database
-        if updated_record_map and len(updated_record_map) > 0:
-            for record_entry in updated_record_map:
-                orig_id = record_entry['orig_id']
-                db_id = record_entry['db_id']
-                if orig_id in record_map:
-                    record_obj = record_map[orig_id]
-                    record_obj.id = db_id
-
-                    # Update any parent ids
-                    if record_obj.parent and record_obj.parent.id == orig_id:
-                        record_obj.parent.id = db_id
-
-                    # Set object for db ID and remove old one
-                    record_map[db_id] = record_obj
-                    del record_map[orig_id]
-
-        # Update the scheduled scan scope with scan results
-        # port_map = self.port_map
-        # host_map = self.host_map
-        # domain_map = self.domain_map
-        # http_endpoint_map = self.http_endpoint_map
-
-        # for id in record_map:
-        #     record_obj = record_map[id]
-        #     if isinstance(record_obj, Host):
-        #         host_map[id] = record_obj
-        #     elif isinstance(record_obj, Port):
-        #         port_map[id] = record_obj
-        #     elif isinstance(record_obj, Domain):
-        #         domain_map[id] = record_obj
-        #     elif isinstance(record_obj, HttpEndpoint):
-        #         http_endpoint_map[id] = record_obj
-
-        print(self.port_map)
-        print(self.host_map)
-        print(self.domain_map)
-        print(self.http_endpoint_map)
-
         # Parse the data
-        self._process_data(record_map.values())
+        import_list = []
+        if isinstance(record_map, dict):
+            import_list = list(record_map.values())
+        else:
+            import_list = record_map
+
+        self._process_data(import_list)
+
+        self._post_process()
+
+    # def _init_port_map(self):
+
+    #     for port_num in self.port_number_list:
+    #         for host_id in self.host_map:
+    #             host_obj = self.host_map[host_id]
+    #             host_port_str = "%s:%s" % (host_obj.ipv4_addr, port_num)
+
+    #             host_port_entry = {'host_obj': host_obj, 'port_obj': None}
+    #             self.host_port_obj_map[host_port_str] = host_port_entry
+
+    #             if host_id in self.domain_host_id_map:
+    #                 domain_obj_list = self.domain_host_id_map[host_id]
+    #                 for domain_obj in domain_obj_list:
+    #                     domain_port_str = "%s:%s" % (
+    #                         domain_obj.name, port_num)
+
+    #                     host_port_entry = {
+    #                         'host_obj': host_obj, 'port_obj': None}
+    #                     self.host_port_obj_map[domain_port_str] = host_port_entry
 
     def _post_process(self):
 
@@ -60,21 +144,33 @@ class ScanData():
                 host_obj = self.host_map[host_id]
                 host_port_str = "%s:%s" % (host_obj.ipv4_addr, port_obj.port)
 
-                if host_port_str in self.host_port_id_map:
-                    port_id_set = self.host_port_id_map[host_port_str]
-                else:
-                    port_id_set = set()
-                    self.host_port_id_map[host_port_str] = port_id_set
+                host_port_entry = {'host_obj': host_obj, 'port_obj': port_obj}
+                self.host_port_obj_map[host_port_str] = host_port_entry
 
-                port_id_set.add(port_id)
+                if host_id in self.domain_host_id_map:
+                    domain_obj_list = self.domain_host_id_map[host_id]
+                    for domain_obj in domain_obj_list:
+                        domain_port_str = "%s:%s" % (
+                            domain_obj.name, port_obj.port)
+
+                        host_port_entry = {
+                            'host_obj': host_obj, 'port_obj': port_obj}
+                        self.host_port_obj_map[domain_port_str] = host_port_entry
+
+        print(self.port_map)
+        print(self.host_map)
+        print(self.domain_map)
+        print(self.http_endpoint_map)
+        print(self.subnet_map)
 
     def _process_data(self, obj_list):
 
         for obj in obj_list:
-            print(obj)
-
             if not isinstance(obj, Record):
+                print(obj)
                 record_obj = Record.from_jsonsable(obj)
+                if record_obj is None:
+                    continue
             else:
                 record_obj = obj
 
@@ -82,14 +178,7 @@ class ScanData():
 
                 # Get IP as unique index for map
                 host_ip = record_obj.ipv4_addr
-                if host_ip in self.host_ip_id_map:
-                    host_id_set = self.host_ip_id_map[host_ip]
-                else:
-                    host_id_set = set()
-                    self.host_ip_id_map[host_ip] = host_id_set
-
-                # Add the record ID
-                host_id_set.add(record_obj.id)
+                self.host_ip_id_map[host_ip] = record_obj.id
 
                 # Add to the host insert list
                 self.host_map[record_obj.id] = record_obj
@@ -109,29 +198,35 @@ class ScanData():
 
                 # Create domain name id mapping
                 domain_name = record_obj.name
-                if domain_name in self.domain_name_id_map:
-                    domain_id_set = self.domain_name_id_map[domain_name]
-                else:
-                    domain_id_set = set()
-                    self.domain_name_id_map[domain_name] = domain_id_set
-
-                domain_id_set.add(record_obj.id)
+                self.domain_name_map[domain_name] = record_obj
 
                 # Add domain obj to list for being imported
                 self.domain_map[record_obj.id] = record_obj
 
             elif isinstance(record_obj, Port):
 
-                # Get host ID of port obj
+                # Create host id to port list map
                 host_id = record_obj.parent.id
-                if host_id in self.port_host_id_map:
-                    temp_port_list = self.port_host_id_map[host_id]
+                if host_id in self.host_id_port_map:
+                    temp_port_list = self.host_id_port_map[host_id]
                 else:
                     temp_port_list = []
-                    self.port_host_id_map[host_id] = temp_port_list
+                    self.host_id_port_map[host_id] = temp_port_list
+
+                 # Add port obj to list to be updated
+                temp_port_list.append(record_obj)
+
+                # Create port number to host id map
+                host_id = record_obj.parent.id
+                port_str = record_obj.port
+                if port_str in self.port_host_map:
+                    temp_host_id_set = self.port_host_map[port_str]
+                else:
+                    temp_host_id_set = set()
+                    self.port_host_map[port_str] = temp_host_id_set
 
                 # Add port obj to list to be updated
-                temp_port_list.append(record_obj)
+                temp_host_id_set.add(host_id)
 
                 # Add port obj to list for being imported
                 self.port_map[record_obj.id] = record_obj
@@ -316,17 +411,21 @@ class ScanData():
         self.host_map = {}
         self.host_ip_id_map = {}
 
-        # Maps ip:port to port id
-        self.host_port_id_map = {}
+        # Maps ip:port/domain:port to a host and port object tuple
+        self.host_port_obj_map = {}
 
         # Maps domain names to domain ids
-        self.domain_name_id_map = {}
+        self.domain_name_map = {}
 
         self.domain_map = {}
         self.domain_host_id_map = {}
 
+        # Maps domain:port to to host id port id tuple
+        self.domain_port_id_map = {}
+
         self.port_map = {}
-        self.port_host_id_map = {}
+        self.port_host_map = {}
+        self.host_id_port_map = {}
 
         self.component_map = {}
         self.component_port_id_map = {}
@@ -355,21 +454,25 @@ class ScanData():
         self.certificate_map = {}
         self.certificate_port_id_map = {}
 
-        self.scan_port_list = []
+        self.port_number_list = []
+
+        self.host_count = 0
 
         # Decode the port map
         if 'b64_port_bitmap' in scan_data and scan_data['b64_port_bitmap']:
             b64_port_bitmap = scan_data['b64_port_bitmap']
             if len(b64_port_bitmap) > 0:
                 port_map = base64.b64decode(b64_port_bitmap)
-                scan_port_list = scan_utils.get_ports(port_map)
-                self.port_number_list = scan_port_list
+                self.port_number_list = scan_utils.get_ports(port_map)
 
         if 'obj_list' in scan_data and scan_data['obj_list']:
             obj_list = scan_data['obj_list']
 
             # Parse the data
             self._process_data(obj_list)
+
+        # Initialize port map
+        # self._init_port_map()
 
         # Post process
         self._post_process()
@@ -405,13 +508,14 @@ class Record():
     def from_jsonsable(input_dict):
         obj = None
         try:
-            obj_id = int(input_dict['id'], 16)
+            print(input_dict)
+            obj_id = input_dict['id']
             record_data = input_dict['data']
             parent_id = None
             if 'parent' in input_dict:
                 parent_record = input_dict['parent']
                 if parent_record:
-                    parent_id = int(parent_record['id'], 16)
+                    parent_id = parent_record['id']
 
             # Create record
             record_type = input_dict['type']
@@ -421,27 +525,29 @@ class Record():
                 obj = Port(id=obj_id, parent_id=parent_id)
             elif record_type == 'domain':
                 obj = Domain(id=obj_id, parent_id=parent_id)
-            elif record_type == 'path':
+            elif record_type == 'listitem':
                 obj = ListItem(id=obj_id)
             elif record_type == 'httpendpoint':
                 obj = HttpEndpoint(id=obj_id, parent_id=parent_id)
-            elif record_type == 'screenshot':
-                obj = Screenshot(id=obj_id)
+            #elif record_type == 'screenshot':
+            #    obj = Screenshot(id=obj_id)
             elif record_type == 'component':
                 obj = WebComponent(id=obj_id, parent_id=parent_id)
             elif record_type == 'vuln':
                 obj = Vuln(id=obj_id, parent_id=parent_id)
-            elif record_type == 'collectionmodule':
-                obj = CollectionModule(id=obj_id, parent_id=parent_id)
-            elif record_type == 'collectionmoduleoutput':
-                obj = CollectionModuleOutput(
-                    id=obj_id, parent_id=parent_id)
+            #elif record_type == 'collectionmodule':
+            #    obj = CollectionModule(id=obj_id, parent_id=parent_id)
+            #elif record_type == 'collectionmoduleoutput':
+            #    obj = CollectionModuleOutput(
+            #        id=obj_id, parent_id=parent_id)
             elif record_type == 'certificate':
                 obj = Certificate(id=obj_id, parent_id=parent_id)
             elif record_type == 'subnet':
                 obj = Subnet(id=obj_id)
             else:
-                raise Exception('Invalid record type: %s' % record_type)
+                print("Unknown record type: %s" % record_type)
+                #raise Exception('Invalid record type: %s' % record_type)
+                return
 
             # Populate data
             if obj:
@@ -495,7 +601,7 @@ class Host(Record):
         try:
             if 'ipv4_addr' in input_data_dict:
                 ipv4_addr_str = input_data_dict['ipv4_addr']
-                self.ipv4_addr = int(netaddr.IPAddress(ipv4_addr_str))
+                self.ipv4_addr = str(netaddr.IPAddress(ipv4_addr_str))
             # elif 'ipv6_addr' in input_data_dict:
             #     ipv6_addr_str = input_data_dict['ipv6_addr']
             #     self.ipv6_addr = int(netaddr.IPAddress(input_data_dict['ipv6_addr_str']))
@@ -520,12 +626,14 @@ class Port(Record):
 
     def from_jsonsable(self, input_data_dict):
         try:
-            self.port = input_data_dict['port']
+            self.port = str(input_data_dict['port'])
             self.proto = int(input_data_dict['proto'])
             if 'secure' in input_data_dict:
-                secure_bool = input_data_dict['secure']
-                if secure_bool is True:
-                    self.secure = 1
+                secure_int = input_data_dict['secure']
+                if secure_int == 1:
+                    self.secure = True
+                else:
+                    self.secure = False
 
         except Exception as e:
             raise Exception('Invalid port object: %s' % str(e))
@@ -562,6 +670,14 @@ class WebComponent(Record):
             ret['version'] = self.version
         return ret
 
+    def from_jsonsable(self, input_data_dict):
+        try:
+            self.name = input_data_dict['name']
+            if 'version' in input_data_dict:
+                self.version = input_data_dict['version']
+        except Exception as e:
+            raise Exception('Invalid component object: %s' % str(e))
+
 
 class Vuln(Record):
 
@@ -586,6 +702,13 @@ class ListItem(Record):
     def _data_to_jsonable(self):
         return {'path': self.web_path,
                 'path_hash': self.web_path_hash}
+    
+    def from_jsonsable(self, input_data_dict):
+        try:
+            self.web_path = input_data_dict['path']
+            self.web_path_hash = input_data_dict['path_hash']
+        except Exception as e:
+            raise Exception('Invalid path object: %s' % str(e))
 
 
 class Screenshot(Record):
@@ -593,12 +716,12 @@ class Screenshot(Record):
     def __init__(self, id=None):
         super().__init__(id=id)
 
-        self.data = None
-        self.data_hash = None
+        self.screenshot = None
+        self.image_hash = None
 
     def _data_to_jsonable(self):
-        return {'screenshot': self.data,
-                'image_hash': self.data_hash}
+        return {'screenshot': self.screenshot,
+                'image_hash': self.image_hash}
 
 
 class HttpEndpoint(Record):
@@ -636,7 +759,7 @@ class HttpEndpoint(Record):
         try:
             self.title = input_data_dict['title']
             self.status_code = input_data_dict['status']
-            self.web_path_id = int(input_data_dict['path_id'], 16)
+            self.web_path_id = input_data_dict['path_id']
             self.screenshot_id = None
             self.last_modified = None
             self.domain_id = None
@@ -646,10 +769,10 @@ class HttpEndpoint(Record):
                 self.last_modified = int(input_data_dict['last_modified'])
 
             if 'screenshot_id' in input_data_dict:
-                self.screenshot_id = int(input_data_dict['screenshot_id'], 16)
+                self.screenshot_id = input_data_dict['screenshot_id']
 
             if 'domain_id' in input_data_dict:
-                self.domain_id = int(input_data_dict['domain_id'], 16)
+                self.domain_id = input_data_dict['domain_id']
 
             if 'fav_icon_hash' in input_data_dict:
                 self.fav_icon_hash = int(input_data_dict['fav_icon_hash'])
@@ -694,6 +817,7 @@ class Certificate(Record):
         self.expires = None
         self.fingerprint_hash = None
         self.domain_name_id_map = {}
+        self.domain_id_list = []
 
     def _data_to_jsonable(self):
         ret = {'issuer': self.issuer}
@@ -702,6 +826,17 @@ class Certificate(Record):
         ret['fingerprint_hash'] = self.fingerprint_hash
         ret['domain_id_list'] = list(self.domain_name_id_map.values())
         return ret
+
+    def from_jsonsable(self, input_data_dict):
+        try:
+            self.issuer = input_data_dict['issuer']
+            self.issued = int(input_data_dict['issued'])
+            self.expires = int(input_data_dict['expires'])
+            self.fingerprint_hash = input_data_dict['fingerprint_hash']
+            self.domain_id_list = input_data_dict['domain_id_list']
+  
+        except Exception as e:
+            raise Exception('Invalid module output object: %s' % str(e))
 
     def add_domain(self, host_id, domain_str):
 

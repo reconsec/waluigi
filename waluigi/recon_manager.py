@@ -196,15 +196,15 @@ class ScheduledScanThread(threading.Thread):
             scheduled_scan_obj.current_tool = tool_obj
 
             # Check if tool instance is already completed
-            tool_status = self.recon_manager.get_tool_status(
-                collection_tool_inst.id)
+            # tool_status = self.recon_manager.get_tool_status(
+            #    collection_tool_inst.id)
 
             # print("[*] %s tool status: %d" %(tool_obj.name, tool_status))
             # if tool_status == CollectionToolStatus.COMPLETED.value:
             #     print("[*] %s tool complete,  skipping." % tool_obj.name)
             #     continue
 
-            #scan_input = None
+            # scan_input = None
 
             # Check if scan is cancelled
             scan = self.recon_manager.get_scan(scheduled_scan_obj.scan_id)
@@ -213,25 +213,7 @@ class ScheduledScanThread(threading.Thread):
                 return False
 
             # Check if load balanced
-            #skip_load_balance_ports = self.recon_manager.is_load_balanced()
-
-            # Get scope
-            # scan_input = self.recon_manager.get_tool_scope(
-            #     scheduled_scan_obj.scan_id, collection_tool_inst.id, skip_load_balance_ports)
-
-            # print(scan_input)
-
-            # Return if there was an error getting the scope
-            # if scan_input is None:
-            #     return False
-
-            # # Skip tool if there is no input
-            # if 'scan_input' in scan_input and len(scan_input['scan_input']['target_map']) == 0:
-            #     print("[-] Scan input is empty. Skipping")
-            #     continue
-
-            # # Set the input
-            # scheduled_scan_obj.scan_target_dict = scan_input
+            # skip_load_balance_ports = self.recon_manager.is_load_balanced()
 
             # If the tool is active then connect to the target and run the scan
             if tool_obj.tool_type == 2:
@@ -264,9 +246,8 @@ class ScheduledScanThread(threading.Thread):
             finally:
                 scheduled_scan_obj.update_tool_status(
                     collection_tool_inst.id, ret_status)
-                # self.recon_manager.update_tool_status(ret_status)
 
-            # Reset the tool id
+            # Reset the current tool variable
             scheduled_scan_obj.current_tool = None
 
         # Cleanup files

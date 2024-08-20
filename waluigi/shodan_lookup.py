@@ -302,27 +302,21 @@ class ShodanScan(luigi.Task):
 
 
 @inherits(ShodanScan)
-class ImportShodanOutput(luigi.Task):
+class ImportShodanOutput(data_model.ImportToolXOutput):
 
     def requires(self):
         # Requires MassScan Task to be run prior
         return ShodanScan(scan_input=self.scan_input)
-    
-    def output(self):
 
-        tool_output_file = self.input().path
-        dir_path = os.path.dirname(tool_output_file)
-        out_file = dir_path + os.path.sep + "tool_import_json"
+    # def output(self):
 
-        return luigi.LocalTarget(out_file)
+    #     tool_output_file = self.input().path
+    #     dir_path = os.path.dirname(tool_output_file)
+    #     out_file = dir_path + os.path.sep + "tool_import_json"
+
+    #     return luigi.LocalTarget(out_file)
 
     def run(self):
-
-        scheduled_scan_obj = self.scan_input
-        scan_id = scheduled_scan_obj.scan_id
-        recon_manager = scheduled_scan_obj.scan_thread.recon_manager
-        tool_obj = scheduled_scan_obj.current_tool
-        tool_id = tool_obj.id
 
         shodan_output_file = self.input().path
         with open(shodan_output_file, 'r') as file_fd:
@@ -571,23 +565,6 @@ class ImportShodanOutput(luigi.Task):
                         # Add the endpoint
                         ret_arr.append(http_endpoint_obj)
 
-        if len(ret_arr) > 0:
-
-            record_map = {}
-            import_arr = []
-            for obj in ret_arr:
-                record_map[obj.id] = obj
-                flat_obj = obj.to_jsonable()
-                import_arr.append(flat_obj)
-
-            # Import the ports to the manager
-            updated_record_map = recon_manager.import_data(
-                scan_id, tool_id, import_arr)
-            
-            # Write imported data to file
-            tool_import_file = self.output().path
-            with open(tool_import_file, 'w') as import_fd:
-                import_fd.write(json.dumps(import_arr))
-
-            # Update the scan scope
-            scheduled_scan_obj.scan_data.update(record_map, updated_record_map)
+        # Import, Update, & Save
+        scheduled_scan_obj = self.scan_input
+        self.import_results(scheduled_scan_obj, ret_arr)

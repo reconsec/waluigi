@@ -26,7 +26,7 @@ class NmapScan(luigi.Task):
         scheduled_scan_obj = self.scan_input
         scan_id = scheduled_scan_obj.scan_id
 
-        #scan_target_dict = scheduled_scan_obj.scan_target_dict
+        # scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
         # if 'module_id' in scan_target_dict:
         #     module_id = str(scan_target_dict['module_id'])
@@ -65,49 +65,11 @@ class NmapScan(luigi.Task):
                 break
 
         nmap_scan_list = []
+        scan_port_map = {}
         if mass_scan_ran:
-            # port_num_list = scope_obj.port_number_list
-            # if len(port_num_list) > 0:
 
-            #     # Get host map and pair each host with all ports to scan
-            #     scan_obj = {}
-            #     target_set = set()
-            #     resolve_dns = False
-
-            #     host_map = scope_obj.host_map
-            #     for host_id in host_map:
-            #         host_obj = host_map[host_id]
-            #         ip_addr = host_obj.ipv4_addr
-            #         target_set.add(ip_addr)
-
-            #         if host_id in scope_obj.domain_host_id_map:
-            #             temp_domain_list = scope_obj.domain_host_id_map[host_id]
-            #             if len(temp_domain_list) > 0:
-            #                 resolve_dns = True
-            #                 for domain_obj in temp_domain_list:
-
-            #                     domain_name = domain_obj.name
-            #                     target_set.add(domain_name)
-
-            #     scan_obj['ip_set'] = target_set
-            #     scan_obj['tool_args'] = nmap_scan_args
-            #     scan_obj['resolve_dns'] = resolve_dns
-
-            #     port_set = set()
-            #     for port_str in port_num_list:
-            #         port_set.add(port_str)
-
-            #     scan_obj['port_list'] = list(port_set)
-
-            #     # Add the scan
-            #     nmap_scan_list.append(scan_obj)
-
-            # else:
-
-            scan_port_map = {}
             # Create scan jobs for each port and only scan the IPs mapped to that port
             target_map = scheduled_scan_obj.scan_data.host_port_obj_map
-            print(target_map)
             for target_key in target_map:
 
                 target_obj_dict = target_map[target_key]
@@ -235,6 +197,15 @@ class NmapScan(luigi.Task):
                                     domain_name = domain_obj.name
                                     target_set.add(domain_name)
 
+                    # Add a port entry for each domain
+                    domain_map = scope_obj.domain_map
+                    for domain_id in domain_map:
+                        domain_obj = domain_map[domain_id]
+                        domain_name = domain_obj.name
+
+                        # Add Domain to list
+                        target_set.add(domain_name)
+
                     scan_obj['ip_set'] = target_set
                     scan_obj['tool_args'] = nmap_scan_args
                     scan_obj['resolve_dns'] = resolve_dns
@@ -247,7 +218,6 @@ class NmapScan(luigi.Task):
 
                     # Add the scan
                     nmap_scan_list.append(scan_obj)
-
 
         module_id = None
         mod_str = ''
@@ -379,7 +349,7 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
 
     def requires(self):
         return NmapScan(scan_input=self.scan_input)
-    
+
     def run(self):
 
         scheduled_scan_obj = self.scan_input
@@ -657,7 +627,5 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
                                                     ret_arr.append(
                                                         module_output_obj)
 
-        
         # Import, Update, & Save
         self.import_results(scheduled_scan_obj, ret_arr)
-   

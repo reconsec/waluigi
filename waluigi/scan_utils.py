@@ -54,6 +54,25 @@ class ProcessStreamReader(Thread):
         return output_str
 
 
+def construct_url(target_str, port, secure):
+
+    port_str = str(port).strip()
+    add_port_flag = True
+    url = "http"
+    if secure:
+        url += "s"
+        if port_str == '443':
+            add_port_flag = False
+    elif port_str == '80':
+        add_port_flag = False
+
+    url += "://" + target_str
+    if add_port_flag:
+        url += ":" + port_str
+
+    return url
+
+
 def get_ports(byte_array):
     # Get byte
     port_list = []

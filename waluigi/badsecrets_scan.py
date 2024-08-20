@@ -5,14 +5,19 @@ import multiprocessing
 import traceback
 import requests
 import time
+import socket
 
 from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+from waluigi import data_model
 from badsecrets.base import carve_all_modules
 
+
 proxies = None
+
+
 def request_wrapper(url_obj):
 
     url = url_obj['url']
@@ -20,11 +25,13 @@ def request_wrapper(url_obj):
 
     print("[*} URL: %s" % url)
     multiprocessing.log_to_stderr()
-    headers = {'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"}
+    headers = {
+        'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"}
     count = 0
     while True:
         try:
-            resp = requests.get(url, headers=headers, verify=False, proxies=proxies, timeout=3)
+            resp = requests.get(url, headers=headers,
+                                verify=False, proxies=proxies, timeout=3)
 
             # Check if there are any issues
             if resp.status_code == 200:
@@ -41,18 +48,17 @@ def request_wrapper(url_obj):
     return url_obj
 
 
-
 class BadSecretsScan(luigi.Task):
 
     scan_input = luigi.Parameter()
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
@@ -61,75 +67,90 @@ class BadSecretsScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_obj = scan_input_obj.scan_target_dict        
+        scheduled_scan_obj = self.scan_input
 
         # Get output file path
         output_file_path = self.output().path
         output_file_list = []
         url_list = []
 
-        #if len(http_scan_data) > 0:
-        print(scan_obj)
-        if scan_obj:
+        target_map = scheduled_scan_obj.scan_data.host_port_obj_map
+        for target_key in target_map:
 
-            #scan_obj = json.loads(http_scan_data)
-            scan_input_data = scan_obj['scan_input']
-            print(scan_input_data)
+            target_obj_dict = target_map[target_key]
+            port_obj = target_obj_dict['port_obj']
+            port_id = port_obj.id
+            port_str = port_obj.port
+            secure = port_obj.secure
 
-            target_map = {}
-            if 'target_map' in scan_input_data:
-                target_map = scan_input_data['target_map']
+            host_obj = target_obj_dict['host_obj']
+            ip_addr = host_obj.ipv4_addr
 
+            # Get endpoint map
+            http_endpoint_list = []
+            http_endpoint_port_id_map = scheduled_scan_obj.scan_data.http_endpoint_port_id_map
+            if port_id in http_endpoint_port_id_map:
+                http_endpoint_list = http_endpoint_port_id_map[port_id]
 
-            for target_key in target_map:
+            if len(http_endpoint_list) == 0:
+                print("[*] Endpoint list is empty")
 
-                target_dict = target_map[target_key]
-                #host_id = target_dict['host_id']
-                ip_addr = target_dict['target_host']
-                domain_list = target_dict['domain_set']
+            target_arr = target_key.split(":")
+            if target_arr[0] != ip_addr:
+                domain_str = target_arr[0]
 
-                # Create a set and add the IP 
-                domain_set = set(domain_list)
-                domain_set.add(ip_addr)
+                # Get the IP of the TLD
+                try:
+                    socket.gethostbyname(domain_str).strip()
+                except Exception:
+                    print("[-] Exception resolving domain: %s" %
+                          domain_str)
+                    continue
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]
-                    port_str = str(port_obj['port'])
-                    port_id = port_obj['port_id']
-                    secure = port_obj['secure']
+                # Add for domain
+                url_str = scan_utils.construct_url(
+                    domain_str, port_str, secure)
 
-                    http_endpoint_map = port_obj['http_endpoint_map']
-                    for http_endpoint_id in http_endpoint_map:
+                for endpoint_obj in http_endpoint_list:
+                    http_endpoint_id = endpoint_obj.id
+                    path_id = endpoint_obj.web_path_id
+                    if path_id in scheduled_scan_obj.scan_data.path_map:
+                        path_obj = scheduled_scan_obj.scan_data.path_map[path_id]
+                        web_path = path_obj.web_path
+                        endpoint_url = url_str + web_path
 
-                        http_endpoint_obj = http_endpoint_map[http_endpoint_id]
-                        http_path = http_endpoint_obj['path']
-                        # Setup the path
-                        port = ":" + port_str
+                        # Add the URL
+                        url_list.append(
+                            {'port_id': port_id, 'http_endpoint_id': http_endpoint_id, 'url': endpoint_url})
+                    else:
+                        print("[*] No path obj for endpoint")
 
-                        for host in domain_set:
-                            #Add query if it exists
-                            full_path = host + port
-                            full_path += http_path
-                            #Get the right URL
-                            #print(path)
-                            if secure == False:
-                                url = "http://" + full_path
-                            else:
-                                url = "https://" + full_path
+            # ADD FOR IP
+            url_str = scan_utils.construct_url(ip_addr, port_str, secure)
 
-                            # Add the URL
-                            url_list.append({'http_endpoint_id' : http_endpoint_id, 'url' : url})
-                    
+            for endpoint_obj in http_endpoint_list:
+                http_endpoint_id = endpoint_obj.id
+                path_id = endpoint_obj.web_path_id
+                if path_id in scheduled_scan_obj.scan_data.path_map:
+                    path_obj = scheduled_scan_obj.scan_data.path_map[path_id]
+                    web_path = path_obj.web_path
+                    endpoint_url = url_str + web_path
+
+                    # Add the URL
+                    url_list.append(
+                        {'port_id': port_id, 'http_endpoint_id': http_endpoint_id, 'url': endpoint_url})
+                else:
+                    print("[*] No path obj for endpoint")
 
             # Run threaded
             pool = ThreadPool(processes=10)
             thread_list = []
 
             # Add the url
+            print(url_list)
             for url_obj in url_list:
-                thread_list.append(pool.apply_async(request_wrapper, (url_obj,)))
+                thread_list.append(pool.apply_async(
+                    request_wrapper, (url_obj,)))
 
             # Close the pool
             pool.close()
@@ -140,7 +161,6 @@ class BadSecretsScan(luigi.Task):
                 if ret_obj:
                     output_file_list.append(ret_obj)
 
-
         results_dict = {'output_list': output_file_list}
 
         # Write output file
@@ -149,7 +169,7 @@ class BadSecretsScan(luigi.Task):
 
 
 @inherits(BadSecretsScan)
-class ImportBadSecretsOutput(luigi.Task):
+class ImportBadSecretsOutput(data_model.ImportToolXOutput):
 
     def requires(self):
         # Requires BadSecretsScan Task to be run prior
@@ -157,18 +177,14 @@ class ImportBadSecretsOutput(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
-
         http_output_file = self.input().path
         with open(http_output_file, 'r') as file_fd:
             data = file_fd.read()
 
         if len(data) > 0:
 
+            ret_arr = []
             scan_data_dict = json.loads(data)
-            port_arr = []
             print(scan_data_dict)
 
             # Get data and map
@@ -180,25 +196,30 @@ class ImportBadSecretsOutput(luigi.Task):
 
                     output = entry['output']
                     http_endpoint_id = entry['http_endpoint_id']
+                    port_id = entry['port_id']
 
-                    output = json.loads(output)
                     if output and len(output) > 0:
                         for finding in output:
                             finding_type = finding['type']
                             if finding_type == 'SecretFound':
-                                port_arr.append({'http_endpoint_id' : http_endpoint_id, 'secret' : finding })        
 
-            if len(port_arr) > 0:
-                #print(port_arr)
+                                if 'secret' in finding:
+                                    secret_val = finding['secret']
 
-                # Import the ports to the manager
-                tool_obj = scan_input_obj.current_tool
-                tool_id = tool_obj.id
-                scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
+                                    if 'description' in finding:
+                                        vuln_desc = finding['description']
 
-                #print(scan_results)
-                ret_val = recon_manager.import_ports_ext(scan_results)
-                print("[+] Imported badsecrets scan to manager.")
+                                        if 'Secret' in vuln_desc:
+                                            vuln_name = vuln_desc['Secret']
 
-            else:
-                print("[*] No ports to import to manager")
+                                            # Add vuln
+                                            vuln_obj = data_model.Vuln(
+                                                parent_id=port_id)
+                                            vuln_obj.name = vuln_name
+                                            vuln_obj.vuln_details = secret_val
+                                            vuln_obj.endpoint_id = http_endpoint_id
+                                            ret_arr.append(vuln_obj)
+
+            # Import, Update, & Save
+            scheduled_scan_obj = self.scan_input
+            self.import_results(scheduled_scan_obj, ret_arr)

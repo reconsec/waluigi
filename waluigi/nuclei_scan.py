@@ -27,11 +27,11 @@ class NucleiScan(luigi.Task):
         tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
-        scan_target_dict = scheduled_scan_obj.scan_target_dict
+        # scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
-        if 'module_id' in scan_target_dict:
-            module_id = str(scan_target_dict['module_id'])
-            mod_str = "_" + module_id
+        # if 'module_id' in scan_target_dict:
+        #     module_id = str(scan_target_dict['module_id'])
+        #     mod_str = "_" + module_id
 
         nuclei_outputs_file = dir_path + os.path.sep + \
             "nuclei_outputs_" + scan_id + mod_str
@@ -116,7 +116,6 @@ class NucleiScan(luigi.Task):
                     endpoint_port_obj_map[endpoint] = port_obj_instance
                     total_endpoint_set.add(endpoint)
 
-
         template_arr = []
         for template_path in template_path_list:
 
@@ -146,7 +145,7 @@ class NucleiScan(luigi.Task):
 
             nuclei_scan_input_file_path = (
                 output_dir + os.path.sep + "nuclei_scan_in" + mod_str).strip()
-            
+
             with open(nuclei_scan_input_file_path, 'w') as file_fd:
                 for endpoint in total_endpoint_set:
                     file_fd.write(endpoint + '\n')
@@ -203,7 +202,7 @@ class ImportNucleiOutput(data_model.ImportToolXOutput):
     def requires(self):
         # Requires NucleiScan
         return NucleiScan(scan_input=self.scan_input)
-    
+
     def run(self):
 
         scheduled_scan_obj = self.scan_input
@@ -256,7 +255,7 @@ class ImportNucleiOutput(data_model.ImportToolXOutput):
                                 elif template_id.startswith("cve-"):
 
                                     # Add vuln
-                                    vuln_obj = data_model.Vulnerability(
+                                    vuln_obj = data_model.Vuln(
                                         parent_id=port_id)
                                     vuln_obj.name = template_id
                                     ret_arr.append(vuln_obj)
@@ -284,7 +283,6 @@ class ImportNucleiOutput(data_model.ImportToolXOutput):
                         else:
                             print("[-] Endpoint not in map: %s %s" %
                                   (endpoint, str(endpoint_port_obj_map)))
-
 
         # Import, Update, & Save
         self.import_results(scheduled_scan_obj, ret_arr)

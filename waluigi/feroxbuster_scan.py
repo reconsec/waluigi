@@ -19,25 +19,6 @@ from urllib.parse import urlparse
 from waluigi import data_model
 
 
-def construct_url(target_str, port, secure):
-
-    port_str = str(port).strip()
-    add_port_flag = True
-    url = "http"
-    if secure:
-        url += "s"
-        if port_str == '443':
-            add_port_flag = False
-    elif port_str == '80':
-        add_port_flag = False
-
-    url += "://" + target_str
-    if add_port_flag:
-        url += ":" + port_str
-
-    return url
-
-
 class FeroxScan(luigi.Task):
 
     scan_input = luigi.Parameter()
@@ -63,22 +44,12 @@ class FeroxScan(luigi.Task):
         output_dir = os.path.dirname(output_file_path)
 
         url_to_id_map = {}
-        # scan_target_dict = scheduled_scan_obj.scan_target_dict
         command_list = []
 
         # scan_input_data = scan_target_dict['scan_input']
         tool_args = scheduled_scan_obj.current_tool.args
         if tool_args:
             tool_args = tool_args.split(" ")
-
-        # tool_args = None
-        # if 'tool_args' in scan_target_dict:
-        #     tool_args = scan_target_dict['tool_args']
-        # print(scan_input_data)
-
-        # target_map = {}
-        # if 'target_map' in scan_input_data:
-        #     target_map = scan_input_data['target_map']
 
         scan_wordlist = None
         # wordlist_arr = scan_target_dict['wordlist']
@@ -109,25 +80,7 @@ class FeroxScan(luigi.Task):
             ip_addr = host_obj.ipv4_addr
             host_id = host_obj.id
 
-        # # for scan_inst in scan_list:
-        # for target_key in target_map:
-
-        #     target_dict = target_map[target_key]
-        #     host_id = target_dict['host_id']
-        #     ip_addr = target_dict['target_host']
-        #     domain_arr = target_dict['domain_set']
-
-        #     port_obj_map = target_dict['port_map']
-        #     for port_key in port_obj_map:
-        #         port_obj = port_obj_map[port_key]
-        #         port_str = str(port_obj['port'])
-        #         port_id = port_obj['port_id']
-        #         secure = port_obj['secure']
-
-            # if len(domain_arr) > 0:
             # NEED TO REWORK THIS TO DETERMINE THIS BEST DOMAIN TO USE. SENDING FOR ALL DOMAINS BE EXCESSIVE
-
-            # for domain_str in domain_arr:
 
             target_arr = target_key.split(":")
             if target_arr[0] != ip_addr:
@@ -141,23 +94,8 @@ class FeroxScan(luigi.Task):
                           domain_str)
                     continue
 
-                # print("[*] IP %s" % ip_str )
-                # print("[*] Domain %s" % domain_str )
-                # if ip_addr != ip_str:
-                #     continue
-
-                # If it's a wildcard skip it
-                # if "*." in domain_str:
-                #     continue
-
-                # If it's an IP skip it
-                try:
-                    ip_addr_check = int(netaddr.IPAddress(domain_str))
-                    continue
-                except:
-                    pass
-
-                url_str = construct_url(domain_str, port_str, secure)
+                url_str = scan_utils.construct_url(
+                    domain_str, port_str, secure)
                 rand_str = str(random.randint(1000000, 2000000))
 
                 # Add to port id map
@@ -165,10 +103,8 @@ class FeroxScan(luigi.Task):
                 url_to_id_map[url_str] = {
                     'port_id': port_id, 'host_id': host_id, 'output_file': scan_output_file_path}
 
-            # else:
-
             # ADD FOR IP
-            url_str = construct_url(ip_addr, port_str, secure)
+            url_str = scan_utils.construct_url(ip_addr, port_str, secure)
             rand_str = str(random.randint(1000000, 2000000))
 
             # Add to port id map
@@ -349,7 +285,5 @@ class ImportFeroxOutput(data_model.ImportToolXOutput):
                                     # Add the endpoint
                                     ret_arr.append(http_endpoint_obj)
 
-
         scheduled_scan_obj = self.scan_input
         self.import_results(scheduled_scan_obj, ret_arr)
-       

@@ -100,7 +100,7 @@ class ImportPyshotOutput(data_model.ImportToolXOutput):
     def requires(self):
         # Requires PyshotScan Task to be run prior
         return PyshotScan(scan_input=self.scan_input)
-    
+
     def run(self):
 
         meta_file = self.input().path
@@ -221,10 +221,11 @@ class ImportPyshotOutput(data_model.ImportToolXOutput):
                             scan_id, tool_id, import_arr)
 
                         # Update the records
-                        updated_import_arr = data_model.update_scope_array(record_map, updated_record_map)
-                        
-                        import_data_arr.append(updated_import_arr)
-                        
+                        updated_import_arr = data_model.update_scope_array(
+                            record_map, updated_record_map)
+
+                        import_data_arr.extend(updated_import_arr)
+
                         # Update the scan scope
                         scheduled_scan_obj.scan_data.update(record_map)
 

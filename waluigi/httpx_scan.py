@@ -63,7 +63,7 @@ class HttpXScan(luigi.Task):
     def run(self):
 
         scheduled_scan_obj = self.scan_input
-        #scan_obj = scheduled_scan_obj.scan_target_dict
+        # scan_obj = scheduled_scan_obj.scan_target_dict
 
         # Get output file path
         output_file_path = self.output().path
@@ -73,7 +73,7 @@ class HttpXScan(luigi.Task):
         # port_to_id_map = {}
 
         # print(scan_obj)
-        #if scan_obj:
+        # if scan_obj:
 
         scope_obj = scheduled_scan_obj.scan_data
         port_ip_dict = {}
@@ -85,12 +85,14 @@ class HttpXScan(luigi.Task):
             script_args = script_args.split(" ")
 
         host_map = scope_obj.host_map
+        domain_map = scope_obj.domain_map
         port_map = scope_obj.port_map
 
         scan_port_list = scope_obj.port_number_list
         if len(scan_port_list) > 0:
             port_id = None
             for port_str in scan_port_list:
+
                 # Add a port entry for each host
                 for host_id in host_map:
                     host_obj = host_map[host_id]
@@ -106,8 +108,19 @@ class HttpXScan(luigi.Task):
                     # Add IP to list
                     ip_set.add(ip_addr)
 
-                    # port_to_id_map[ip_addr+":" + port_str] = {
-                    #    'port_id': port_id, 'host_id': host_id, 'ip_addr': ip_addr}
+                 # Add a port entry for each domain
+                for domain_id in domain_map:
+                    domain_obj = domain_map[domain_id]
+                    domain_name = domain_obj.name
+
+                    if port_str in port_ip_dict:
+                        ip_set = port_ip_dict[port_str]
+                    else:
+                        ip_set = set()
+                        port_ip_dict[port_str] = ip_set
+
+                    # Add domain to list
+                    ip_set.add(domain_name)
 
         elif len(port_map) > 0:
 
@@ -217,7 +230,7 @@ class ImportHttpXOutput(data_model.ImportToolXOutput):
     def requires(self):
         # Requires HttpScan Task to be run prior
         return HttpXScan(scan_input=self.scan_input)
-    
+
     def run(self):
 
         scheduled_scan_obj = self.scan_input
@@ -499,7 +512,5 @@ class ImportHttpXOutput(data_model.ImportToolXOutput):
                 # Add the endpoint
                 ret_arr.append(http_endpoint_obj)
 
-        
         # Import, Update, & Save
         self.import_results(scheduled_scan_obj, ret_arr)
-        

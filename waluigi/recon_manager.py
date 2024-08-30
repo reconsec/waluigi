@@ -94,27 +94,25 @@ class ScheduledScan():
         self.selected_interface = None
 
         # Create a scan id if it does not exist
-        if self.scan_id is None:
-            scan_obj = self.scan_thread.recon_manager.get_scheduled_scan(
-                self.id)
-            if scan_obj is None:
-                raise RuntimeError(
-                    "[-] No scan object returned for scheduled scan.")
-            else:
-                self.scan_id = scan_obj.scan_id
+        scan_obj = self.scan_thread.recon_manager.get_scheduled_scan(
+            self.id)
+        if scan_obj is None or 'scan_id' not in scan_obj or scan_obj['scan_id'] is None:
+            raise RuntimeError(
+                "[-] No scan object returned for scheduled scan.")
+        else:
+            self.scan_id = scan_obj['scan_id']
 
         # Get scope
-        scope_dict = self.scan_thread.recon_manager.get_scheduled_scan_scope(
-            scheduled_scan.id)
-
-        if scope_dict is None:
+        if 'scope' not in scan_obj or scan_obj['scope'] is None:
             raise RuntimeError(
                 "[-] No scan scope returned for scheduled scan.")
 
+        scope_dict = scan_obj['scope']
         self.scan_data = data_model.ScanData(scope_dict)
 
         # Get the selected network interface
-        self.selected_interface = self.scan_thread.recon_manager.get_collector_interface()
+        if 'interface' in scan_obj and scan_obj['interface']:
+            self.selected_interface = scope_dict = scan_obj['interface']
 
         # Update scan status to running
         self.update_status(ScanStatus.RUNNING.value)
@@ -194,17 +192,6 @@ class ScheduledScanThread(threading.Thread):
 
             # Set the tool obj
             scheduled_scan_obj.current_tool = tool_obj
-
-            # Check if tool instance is already completed
-            # tool_status = self.recon_manager.get_tool_status(
-            #    collection_tool_inst.id)
-
-            # print("[*] %s tool status: %d" %(tool_obj.name, tool_status))
-            # if tool_status == CollectionToolStatus.COMPLETED.value:
-            #     print("[*] %s tool complete,  skipping." % tool_obj.name)
-            #     continue
-
-            # scan_input = None
 
             # Check if scan is cancelled
             scan = self.recon_manager.get_scan(scheduled_scan_obj.scan_id)
@@ -294,6 +281,7 @@ class ScheduledScanThread(threading.Thread):
             # Check that the recon manager object exists
             recon_manager = self.recon_manager
             if recon_manager:
+
                 # Set running flag
                 self._is_running = True
                 while self._is_running:
@@ -360,17 +348,27 @@ class ReconManager:
 
         # Get network interfaces
         self.network_ifaces = self.get_network_interfaces()
-        # print(self.network_ifaces)
-        if len(self.network_ifaces) > 0:
-            # Send interface list to server
-            try:
-                self.update_collector_status(self.network_ifaces)
-            except requests.exceptions.ConnectionError as e:
-                print("[-] Unable to connect to server.")
-                pass
-            except Exception as e:
-                # print(traceback.format_exc())
-                pass
+
+        # Send collector data to server
+        try:
+
+            collector_tools = []
+            tool_map = scan_pipeline.waluigi_tool_map
+            for tool_obj in tool_map.values():
+                collector_tools.append(tool_obj.to_jsonable())
+
+            collector_data = {
+                'interfaces': self.network_ifaces, 'tools': collector_tools}
+
+            # Send interfaces & tools
+            self.update_collector(collector_data)
+
+        except requests.exceptions.ConnectionError as e:
+            print("[-] Unable to connect to server.")
+            pass
+        except Exception as e:
+            print(traceback.format_exc())
+            pass
 
     def set_debug(self, debug):
         self.debug = debug
@@ -507,21 +505,22 @@ class ReconManager:
             print("[-] Error retrieving session key.")
             return session_key
 
-        ret_json = r.json()
-        if "data" in ret_json:
-            b64_session_key = ret_json['data']
-            enc_session_key = base64.b64decode(b64_session_key)
-            # print("[*] Encrypted Key: (Length: %d)\n%s" % (len(enc_session_key),binascii.hexlify(enc_session_key).decode()))
+        if r.content:
+            ret_json = r.json()
+            if "data" in ret_json:
+                b64_session_key = ret_json['data']
+                enc_session_key = base64.b64decode(b64_session_key)
+                # print("[*] Encrypted Key: (Length: %d)\n%s" % (len(enc_session_key),binascii.hexlify(enc_session_key).decode()))
 
-            # Decrypt the session key with the private RSA key
-            private_key_obj = RSA.import_key(private_key)
-            cipher_rsa = PKCS1_OAEP.new(private_key_obj)
-            session_key = cipher_rsa.decrypt(enc_session_key)
+                # Decrypt the session key with the private RSA key
+                private_key_obj = RSA.import_key(private_key)
+                cipher_rsa = PKCS1_OAEP.new(private_key_obj)
+                session_key = cipher_rsa.decrypt(enc_session_key)
 
-            print("[*] Session Key: %s" %
-                  binascii.hexlify(session_key).decode())
-            with open(os.open('session', os.O_CREAT | os.O_WRONLY, 0o777), 'w') as fh:
-                fh.write(binascii.hexlify(session_key).decode())
+                print("[*] Session Key: %s" %
+                      binascii.hexlify(session_key).decode())
+                with open(os.open('session', os.O_CREAT | os.O_WRONLY, 0o777), 'w') as fh:
+                    fh.write(binascii.hexlify(session_key).decode())
 
         return session_key
 
@@ -536,16 +535,17 @@ class ReconManager:
             print("[-] Unknown Error")
             return subnets
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        subnet_obj_arr = json.loads(
-            data, object_hook=lambda d: SimpleNamespace(**d))
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            subnet_obj_arr = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
 
-        if subnet_obj_arr:
-            for subnet in subnet_obj_arr:
-                ip = subnet.subnet
-                subnet_inst = ip + "/" + str(subnet.mask)
-                subnets.append(subnet_inst)
+            if subnet_obj_arr:
+                for subnet in subnet_obj_arr:
+                    ip = subnet.subnet
+                    subnet_inst = ip + "/" + str(subnet.mask)
+                    subnets.append(subnet_inst)
 
         return subnets
 
@@ -560,11 +560,12 @@ class ReconManager:
             print("[-] Unknown Error")
             return target_obj
 
-        content = r.json()
-        if content:
-            data = self._decrypt_json(content)
-            target_obj = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
+        if r.content:
+            content = r.json()
+            if content:
+                data = self._decrypt_json(content)
+                target_obj = json.loads(
+                    data, object_hook=lambda d: SimpleNamespace(**d))
 
         return target_obj
 
@@ -584,36 +585,17 @@ class ReconManager:
             return target_obj
 
         try:
-            content = r.json()
-            data = self._decrypt_json(content)
-            # print(data)
-            if len(data) > 0:
-                target_obj = json.loads(data)
+            if r.content:
+                content = r.json()
+                data = self._decrypt_json(content)
+                # print(data)
+                if len(data) > 0:
+                    target_obj = json.loads(data)
 
         except Exception as e:
             print(traceback.format_exc())
 
         return target_obj
-
-    def get_collector_interface(self):
-
-        interface = None
-        r = requests.get('%s/api/collector/interface' %
-                         (self.manager_url), headers=self.headers, verify=False)
-        if r.status_code == 404:
-            return interface
-        if r.status_code != 200:
-            print("[-] Unknown Error")
-            return interface
-
-        content = r.json()
-        data = self._decrypt_json(content)
-        if data:
-            interface_obj = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
-            interface = interface_obj.interface
-
-        return interface
 
     def get_urls(self, scan_id):
 
@@ -626,34 +608,18 @@ class ReconManager:
             print("[-] Unknown Error")
             return urls
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        url_obj_arr = json.loads(
-            data, object_hook=lambda d: SimpleNamespace(**d))
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            url_obj_arr = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
 
-        if url_obj_arr:
-            for url_obj in url_obj_arr:
-                url = url_obj.url
-                urls.append(url)
+            if url_obj_arr:
+                for url_obj in url_obj_arr:
+                    url = url_obj.url
+                    urls.append(url)
 
         return urls
-
-    def get_port_map(self, scan_id):
-
-        port_arr = []
-        r = requests.get('%s/api/scheduler/scan/%s/ports' % (self.manager_url, scan_id), headers=self.headers,
-                         verify=False)
-        if r.status_code == 404:
-            return port_arr
-        elif r.status_code != 200:
-            print("[-] Unknown Error")
-            return port_arr
-
-        content = r.json()
-        data = self._decrypt_json(content)
-        port_arr = json.loads(data)
-
-        return port_arr
 
     def get_scheduled_scans(self):
 
@@ -666,11 +632,12 @@ class ReconManager:
             print("[-] Unknown Error")
             return sched_scan_arr
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        if data:
-            sched_scan_arr = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            if data:
+                sched_scan_arr = json.loads(
+                    data, object_hook=lambda d: SimpleNamespace(**d))
 
         return sched_scan_arr
 
@@ -685,27 +652,10 @@ class ReconManager:
             print("[-] Unknown Error")
             return sched_scan
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        sched_scan = json.loads(
-            data, object_hook=lambda d: SimpleNamespace(**d))
-
-        return sched_scan
-
-    def get_scheduled_scan_scope(self, sched_scan_id):
-
-        sched_scan = None
-        r = requests.get('%s/api/scheduler/scope/%s' % (self.manager_url, sched_scan_id), headers=self.headers,
-                         verify=False)
-        if r.status_code == 404:
-            return sched_scan
-        elif r.status_code != 200:
-            print("[-] Unknown Error")
-            return sched_scan
-
-        content = r.json()
-        data = self._decrypt_json(content)
-        sched_scan = json.loads(data)
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            sched_scan = json.loads(data)
 
         return sched_scan
 
@@ -720,12 +670,13 @@ class ReconManager:
             print("[-] Unknown Error")
             return scan
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        scan_list = json.loads(
-            data, object_hook=lambda d: SimpleNamespace(**d))
-        if scan_list and len(scan_list) > 0:
-            scan = scan_list[0]
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            scan_list = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
+            if scan_list and len(scan_list) > 0:
+                scan = scan_list[0]
 
         return scan
 
@@ -753,10 +704,11 @@ class ReconManager:
             print("[-] Unknown Error")
             return port_arr
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        port_obj_arr = json.loads(
-            data, object_hook=lambda d: SimpleNamespace(**d))
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            port_obj_arr = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
 
         return port_obj_arr
 
@@ -771,17 +723,18 @@ class ReconManager:
             print("[-] Unknown Error")
             return port_arr
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        tool_obj_arr = json.loads(
-            data, object_hook=lambda d: SimpleNamespace(**d))
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            tool_obj_arr = json.loads(
+                data, object_hook=lambda d: SimpleNamespace(**d))
 
         return tool_obj_arr
 
-    def update_collector_status(self, network_ifaces):
+    def update_collector(self, collector_data):
 
         # Import the data to the manager
-        json_data = json.dumps(network_ifaces).encode()
+        json_data = json.dumps(collector_data).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
@@ -789,12 +742,30 @@ class ReconManager:
         # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/collector/interfaces/' % (self.manager_url),
+        r = requests.post('%s/api/collector' % (self.manager_url),
                           headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating collector interfaces.")
 
         return True
+
+    # def update_collector_status(self, network_ifaces):
+
+    #     # Import the data to the manager
+    #     json_data = json.dumps(network_ifaces).encode()
+    #     cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
+    #     ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
+    #     packet = cipher_aes.nonce + tag + ciphertext
+    #     # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
+    #     # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
+
+    #     b64_val = base64.b64encode(packet).decode()
+    #     r = requests.post('%s/api/collector/interfaces/' % (self.manager_url),
+    #                       headers=self.headers, json={"data": b64_val}, verify=False)
+    #     if r.status_code != 200:
+    #         raise RuntimeError("[-] Error updating collector interfaces.")
+
+    #     return True
 
     def update_scan_status(self, scan_id, status):
 
@@ -824,12 +795,13 @@ class ReconManager:
             print("[-] Unknown Error")
             return status
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        if data:
-            tool_inst = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
-            status = tool_inst.status
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            if data:
+                tool_inst = json.loads(
+                    data, object_hook=lambda d: SimpleNamespace(**d))
+                status = tool_inst.status
 
         return status
 
@@ -900,11 +872,12 @@ class ReconManager:
         if r.status_code != 200:
             raise RuntimeError("[-] Error importing ports to manager server.")
 
-        content = r.json()
-        data = self._decrypt_json(content)
-        record_arr = []
-        if data:
-            record_arr = json.loads(data)
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            record_arr = []
+            if data:
+                record_arr = json.loads(data)
 
         return record_arr
 

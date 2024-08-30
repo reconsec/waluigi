@@ -5,28 +5,32 @@ import traceback
 import os
 import json
 import time
-from tqdm import tqdm
+import netaddr
 
+from tqdm import tqdm
 from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+from waluigi import data_model
 
 proxies = None
 
+
 def request_wrapper(ip_addr, api_key):
 
-    domain_set = set()    
-    ret_str = {'ip_addr' : ip_addr}
+    domain_set = set()
+    ret_str = {'ip_addr': ip_addr}
     multiprocessing.log_to_stderr()
 
-    headers = {'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko", 
-               'Content-Type': "application/json", 
-               "apikey" : api_key}
-    ip_dict =  { "ipv4": ip_addr }
+    headers = {'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko",
+               'Content-Type': "application/json",
+               "apikey": api_key}
+    ip_dict = {"ipv4": ip_addr}
     try:
 
         while True:
-            r = requests.post('https://api.securitytrails.com/v1/search/list', headers=headers, json={"filter": ip_dict}, verify=False, proxies=proxies)
+            r = requests.post('https://api.securitytrails.com/v1/search/list',
+                              headers=headers, json={"filter": ip_dict}, verify=False, proxies=proxies)
             if r.status_code == 429:
                 time.sleep(1)
                 continue
@@ -61,21 +65,22 @@ class SecTrailsIPLookupScan(luigi.Task):
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
-        http_outputs_file = dir_path + os.path.sep + "sectrails-ip-lookup-outputs-" + scan_id
+        http_outputs_file = dir_path + os.path.sep + \
+            "sectrails-ip-lookup-outputs-" + scan_id
         return luigi.LocalTarget(http_outputs_file)
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_target_dict = scan_input_obj.scan_target_dict
+        scheduled_scan_obj = self.scan_input
+        scan_target_dict = scheduled_scan_obj.scan_target_dict
 
         # Get output file path
         output_file_path = self.output().path
@@ -84,7 +89,7 @@ class SecTrailsIPLookupScan(luigi.Task):
         if 'api_key' in scan_target_dict:
             api_key = scan_target_dict['api_key']
             scan_input_data = scan_target_dict['scan_input']
-            #print(scan_input_data)
+            # print(scan_input_data)
 
             target_map = {}
             if 'target_map' in scan_input_data:
@@ -97,14 +102,15 @@ class SecTrailsIPLookupScan(luigi.Task):
                     ip_addr = target_dict['target_host']
 
                     # Add to port id map
-                    ip_to_host_dict_map[ip_addr] = { 'host_id' : host_id }
+                    ip_to_host_dict_map[ip_addr] = {'host_id': host_id}
 
                 # Run threaded
                 pool = ThreadPool(processes=5)
                 thread_list = []
 
                 for ip_addr in ip_to_host_dict_map:
-                    thread_list.append(pool.apply_async(request_wrapper, (ip_addr,api_key)))
+                    thread_list.append(pool.apply_async(
+                        request_wrapper, (ip_addr, api_key)))
 
                 # Close the pool
                 pool.close()
@@ -120,11 +126,11 @@ class SecTrailsIPLookupScan(luigi.Task):
                     host_dict['domains'] = ret_dict['domains']
 
             else:
-                print("[-] No target map in scan input")            
+                print("[-] No target map in scan input")
         else:
             print("[-] No api key in scan input")
 
-        results_dict = {'ip_to_host_dict_map': ip_to_host_dict_map }
+        results_dict = {'ip_to_host_dict_map': ip_to_host_dict_map}
 
         # Write output file
         with open(output_file_path, 'w') as file_fd:
@@ -140,17 +146,13 @@ class ImportSecTrailsIPLookupOutput(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
-
         scan_output_file = self.input().path
         with open(scan_output_file, 'r') as file_fd:
             data = file_fd.read()
 
+        obj_map = {}
         if len(data) > 0:
-            scan_data_dict = json.loads(data)            
-            port_arr = []
+            scan_data_dict = json.loads(data)
 
             # Get data and map
             ip_to_host_dict_map = scan_data_dict['ip_to_host_dict_map']
@@ -158,19 +160,19 @@ class ImportSecTrailsIPLookupOutput(luigi.Task):
                 host_dict = ip_to_host_dict_map[ip_addr]
                 host_id = host_dict['host_id']
                 domains = host_dict['domains']
-                port_obj = {'host_id' : host_id, 'domains' : domains, 'ipv4_addr' : ip_addr}
-                port_arr.append(port_obj)
 
+                for domain in domains:
 
-            if len(port_arr) > 0:
-                #print(port_arr)
+                    domain_obj = data_model.Domain(
+                        parent_id=host_id)
+                    domain_obj.name = domain
 
-                # Import the ports to the manager
-                tool_obj = scan_input_obj.current_tool
-                tool_id = tool_obj.id
-                scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                
-                #print(scan_results)
-                ret_val = recon_manager.import_ports_ext(scan_results)
-                print("[+] Imported security trails ip lookup to manager.")
+                    # Add domain
+                    obj_map[domain_obj.id] = domain_obj
 
+            ret_arr = list(obj_map.values())
+
+            if len(ret_arr) > 0:
+                # Import, Update, & Save
+                scheduled_scan_obj = self.scan_input
+                self.import_results(scheduled_scan_obj, ret_arr)

@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import os
 import subprocess
@@ -7,19 +8,27 @@ import traceback
 import hashlib
 import binascii
 import base64
+import netaddr
+import time
 
 from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+from waluigi import data_model
+from urllib.parse import urlparse
+
 
 def httpx_wrapper(cmd_args):
 
     ret_value = True
-    p = subprocess.Popen(cmd_args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
-    stdout_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
-    stderr_reader = scan_utils.ProcessStreamReader(scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr)
+    p = subprocess.Popen(cmd_args, shell=False,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    stdout_reader = scan_utils.ProcessStreamReader(
+        scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
+    stderr_reader = scan_utils.ProcessStreamReader(
+        scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr)
 
     stdout_reader.start()
     stderr_reader.start()
@@ -33,17 +42,18 @@ def httpx_wrapper(cmd_args):
 
     return ret_value
 
+
 class HttpXScan(luigi.Task):
 
     scan_input = luigi.Parameter()
 
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
         # path to input file
@@ -52,46 +62,43 @@ class HttpXScan(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_obj = scan_input_obj.scan_target_dict        
+        scheduled_scan_obj = self.scan_input
+        # scan_obj = scheduled_scan_obj.scan_target_dict
 
         # Get output file path
         output_file_path = self.output().path
         output_dir = os.path.dirname(output_file_path)
 
         output_file_list = []
-        port_to_id_map = {}
+        # port_to_id_map = {}
 
-        #print(scan_obj)
-        if scan_obj:
+        # print(scan_obj)
+        # if scan_obj:
 
-            scan_input_data = scan_obj['scan_input']
-            #print(scan_input_data)
+        scope_obj = scheduled_scan_obj.scan_data
+        port_ip_dict = {}
+        command_list = []
 
-            target_map = {}
-            if 'target_map' in scan_input_data:
-                target_map = scan_input_data['target_map']
+        # script_args = None
+        script_args = scheduled_scan_obj.current_tool.args
+        if script_args:
+            script_args = script_args.split(" ")
 
-            port_ip_dict = {}
-            command_list = []
+        host_map = scope_obj.host_map
+        domain_map = scope_obj.domain_map
+        port_map = scope_obj.port_map
 
-            for target_key in target_map:
+        scan_port_list = scope_obj.port_number_list
+        if len(scan_port_list) > 0:
+            port_id = None
+            for port_str in scan_port_list:
 
-                target_dict = target_map[target_key]
-                host_id = target_dict['host_id']
-                ip_addr = target_dict['target_host']
-                domain_list = target_dict['domain_set']
+                # Add a port entry for each host
+                for host_id in host_map:
+                    host_obj = host_map[host_id]
+                    ip_addr = host_obj.ipv4_addr
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]
-                    port_str = str(port_obj['port'])
-                    port_id = port_obj['port_id']
-                    
-                    # Add to port id map
-                    port_to_id_map[ip_addr+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id, 'ip_addr': ip_addr }
-
-                    # Add to scan map
+                    # Add to ip set
                     if port_str in port_ip_dict:
                         ip_set = port_ip_dict[port_str]
                     else:
@@ -101,84 +108,124 @@ class HttpXScan(luigi.Task):
                     # Add IP to list
                     ip_set.add(ip_addr)
 
-                    # Add domains
-                    for domain in domain_list:
-                        ip_set.add(domain)
+                 # Add a port entry for each domain
+                for domain_id in domain_map:
+                    domain_obj = domain_map[domain_id]
+                    domain_name = domain_obj.name
 
-                        # Add to port id map
-                        port_to_id_map[domain+":"+port_str] = { 'port_id' : port_id, 'host_id' : host_id, 'ip_addr': ip_addr }
+                    if port_str in port_ip_dict:
+                        ip_set = port_ip_dict[port_str]
+                    else:
+                        ip_set = set()
+                        port_ip_dict[port_str] = ip_set
 
+                    # Add domain to list
+                    ip_set.add(domain_name)
 
-            for port_str in port_ip_dict:
+        elif len(port_map) > 0:
 
-                scan_output_file_path = output_dir + os.path.sep + "httpx_out_" + port_str
-                output_file_list.append(scan_output_file_path)
+            for port_id in port_map:
+                port_obj = port_map[port_id]
+                port_str = str(port_obj.port)
 
-                ip_list = port_ip_dict[port_str]
+                if port_obj.parent:
+                    host_id = port_obj.parent.id
+                    if host_id in host_map:
+                        host_obj = host_map[host_id]
+                        ip_addr = host_obj.ipv4_addr
 
-                # Write ips to file
-                scan_input_file_path = output_dir + os.path.sep + "httpx_in_" + port_str
-                f = open(scan_input_file_path, 'w')
+                        # Add to ip set
+                        if port_str in port_ip_dict:
+                            ip_set = port_ip_dict[port_str]
+                        else:
+                            ip_set = set()
+                            port_ip_dict[port_str] = ip_set
+
+                        # Add IP to list
+                        ip_set.add(ip_addr)
+
+                        # Get domains
+                        if host_id in scope_obj.domain_host_id_map:
+                            temp_domain_list = scope_obj.domain_host_id_map[host_id]
+                            for domain_obj in temp_domain_list:
+
+                                domain_name = domain_obj.name
+                                ip_set.add(domain_name)
+
+        for port_str in port_ip_dict:
+
+            scan_output_file_path = output_dir + os.path.sep + "httpx_out_" + port_str
+            output_file_list.append(scan_output_file_path)
+
+            ip_list = port_ip_dict[port_str]
+
+            # Write ips to file
+            scan_input_file_path = output_dir + os.path.sep + "httpx_in_" + port_str
+            with open(scan_input_file_path, 'w') as file_fd:
                 for ip in ip_list:
-                    f.write(ip + "\n")
-                f.close() 
+                    file_fd.write(ip + "\n")
 
-                command = []
-                if os.name != 'nt':
-                    command.append("sudo")
+            command = []
+            if os.name != 'nt':
+                command.append("sudo")
 
-                command_arr = [
-                    "httpx",
-                    "-json",
-                    "-tls-probe",
-                    "-favicon",
-                    "-td",
-                    "-irr", # Return response so Headers can be parsed
-                    # "-ss", Removed from default because it is too memory/cpu intensive for small collectors
-                    "-fhr",
-                    "-t",
-                    "100",
-                    "-nf",
-                    "-l",
-                    scan_input_file_path,
-                    "-p",
-                    port_str,
-                    "-o",
-                    scan_output_file_path
-                ]
+            command_arr = [
+                "httpx",
+                "-json",
+                "-tls-probe",
+                "-favicon",
+                "-td",
+                "-irr",  # Return response so Headers can be parsed
+                # "-ss", Removed from default because it is too memory/cpu intensive for small collectors
+                "-fhr",
+                "-t",
+                "100",
+                "-nf",
+                "-l",
+                scan_input_file_path,
+                "-p",
+                port_str,
+                "-o",
+                scan_output_file_path
+            ]
 
-                command.extend(command_arr)
+            command.extend(command_arr)
 
-                # Add process dict to process array
-                command_list.append(command)
+            # Add script args
+            if script_args and len(script_args) > 0:
+                command.extend(script_args)
 
-            # Print for debug
-            #print(command_list)
+            # Add process dict to process array
+            command_list.append(command)
 
-            # Run threaded
-            pool = ThreadPool(processes=10)
-            thread_list = []
+        # Print for debug
+        # print(command_list)
 
-            for command_args in command_list:
-                thread_list.append(pool.apply_async(httpx_wrapper, (command_args,)))
+        # Run threaded
+        pool = ThreadPool(processes=10)
+        thread_list = []
 
-            # Close the pool
-            pool.close()
+        for command_args in command_list:
+            thread_list.append(pool.apply_async(
+                httpx_wrapper, (command_args,)))
 
-            # Loop through thread function calls and update progress
-            for thread_obj in tqdm(thread_list):
-                thread_obj.get()
+        # Close the pool
+        pool.close()
 
-        results_dict = {'port_to_id_map': port_to_id_map, 'output_file_list': output_file_list}
+        # Loop through thread function calls and update progress
+        for thread_obj in tqdm(thread_list):
+            thread_obj.get()
+
+        results_dict = {  # 'port_to_id_map': port_to_id_map,
+            'output_file_list': output_file_list}
 
         # Write output file
-        f = open(output_file_path, 'w')
-        f.write(json.dumps(results_dict))
-        f.close()            
+        with open(output_file_path, 'w') as file_fd:
+            file_fd.write(json.dumps(results_dict))
 
 
 @inherits(HttpXScan)
-class ImportHttpXOutput(luigi.Task):
+class ImportHttpXOutput(data_model.ImportToolXOutput):
 
     def requires(self):
         # Requires HttpScan Task to be run prior
@@ -186,83 +233,284 @@ class ImportHttpXOutput(luigi.Task):
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
+        scheduled_scan_obj = self.scan_input
 
         http_output_file = self.input().path
-        f = open(http_output_file, 'r')
-        data = f.read()
-        f.close()
+        with open(http_output_file, 'r') as file_fd:
+            data = file_fd.read()
 
-        hash_alg=hashlib.sha1
-        if len(data) > 0:
-            scan_data_dict = json.loads(data)            
-            port_arr = []
+        if len(data) == 0:
+            print("[-] Output file is empty")
+            return
 
-            # Get data and map
-            port_to_id_map = scan_data_dict['port_to_id_map']
-            output_file_list = scan_data_dict['output_file_list']
-            if len(output_file_list) > 0:
+        hash_alg = hashlib.sha1
+        scan_data_dict = json.loads(data)
 
-                for output_file in output_file_list:
+        # Get data and map
+        ret_arr = []
+        # port_to_id_map = scan_data_dict['port_to_id_map']
+        output_file_list = scan_data_dict['output_file_list']
 
-                    obj_arr = scan_utils.parse_json_blob_file(output_file)
-                    for httpx_scan in obj_arr: 
+        path_hash_map = {}
+        screenshot_hash_map = {}
+        # domain_name_id_map = {}
 
-                        if 'input' in httpx_scan and 'port' in httpx_scan and 'host' in httpx_scan:
+        for output_file in output_file_list:
 
-                            # Attempt to get the port id
-                            target_str = httpx_scan['input']
-                            port_str = httpx_scan['port']
-                            ip_str = httpx_scan['host']
+            obj_arr = scan_utils.parse_json_blob_file(output_file)
+            for httpx_scan in obj_arr:
 
-                            if 'path' in httpx_scan:
-                                hashobj = hash_alg()
-                                hashobj.update(httpx_scan['path'].encode())
-                                path_hash = hashobj.digest()
-                                hex_str = binascii.hexlify(path_hash).decode()
-                                httpx_scan['path_hash'] = hex_str
+                # Attempt to get the port id
+                target_str = httpx_scan['input']
+                port_str = httpx_scan['port']
 
-                            if 'screenshot_bytes' in httpx_scan:
-                                screenshot_bytes_b64 = httpx_scan['screenshot_bytes']
-                                ss_data = base64.b64decode(screenshot_bytes_b64)
-                                hashobj = hash_alg()
-                                hashobj.update(ss_data)
-                                image_hash = hashobj.digest()
-                                image_hash_str = binascii.hexlify(image_hash).decode()
-                                httpx_scan['screenshot_hash'] = image_hash_str
+                host_id = None
+                port_id = None
+                host_key = '%s:%s' % (target_str, port_str)
 
-                            # If we have an IP
-                            if target_str:
-                                host_key = '%s:%s' % (target_str, port_str)
+                # See if we have an host/port mapping already for this ip and port
+                if host_key in scheduled_scan_obj.scan_data.host_port_obj_map:
+                    host_port_dict = scheduled_scan_obj.scan_data.host_port_obj_map[host_key]
+                    port_id = host_port_dict['port_obj'].id
+                    host_id = host_port_dict['host_obj'].id
+                elif target_str in scheduled_scan_obj.scan_data.host_ip_id_map:
+                    host_id = scheduled_scan_obj.scan_data.host_ip_id_map[target_str]
 
-                                if host_key in port_to_id_map:
-                                    port_id_dict = port_to_id_map[host_key]
+                ip_str = None
+                if 'host' in httpx_scan:
+                    ip_str = httpx_scan['host']
+                elif 'a' in httpx_scan:
+                    ip_str = httpx_scan['a'][0]
 
-                                    port_id = port_id_dict['port_id']
-                                    if port_id == 'None':
-                                        port_id = None
+                # If we have an IP somewhere in the scan
+                if ip_str:
+                    ip_object = netaddr.IPAddress(ip_str)
 
-                                    host_id = port_id_dict['host_id']
-                                    if host_id == 'None':
-                                        host_id = None
+                    # Create Host object
+                    host_obj = data_model.Host(id=host_id)
 
-                                    port_obj = {'port_id': port_id, 'host_id' : host_id, 'httpx_data' : httpx_scan, 'ip' : ip_str, 'port' : port_str}
-                                    port_arr.append(port_obj)
+                    ip_object = netaddr.IPAddress(ip_str)
+                    if ip_object.version == 4:
+                        host_obj.ipv4_addr = str(ip_object)
+                    elif ip_object.version == 6:
+                        host_obj.ipv6_addr = str(ip_object)
+
+                    host_id = host_obj.id
+
+                    # Add host
+                    ret_arr.append(host_obj)
+
+                # Create Port object
+                port_obj = data_model.Port(
+                    parent_id=host_id, id=port_id)
+                port_obj.proto = 0
+                port_obj.port = port_str
+                port_id = port_obj.id
+
+                # If TLS
+                if 'scheme' in httpx_scan and httpx_scan['scheme'] == "https":
+                    port_obj.secure = True
+
+                # Set data
+                title = None
+                if 'title' in httpx_scan:
+                    title = httpx_scan['title']
+
+                status_code = None
+                if 'status_code' in httpx_scan:
+                    try:
+                        status_code = int(httpx_scan['status_code'])
+                    except:
+                        status_code = None
+
+                # Add secure flag if a 400 was returned and it has a certain title
+                if (status_code and status_code == 400) and (title and 'The plain HTTP request was sent to HTTPS port' in title):
+                    port_obj.secure = True
+
+                # Add port
+                ret_arr.append(port_obj)
+
+                last_modified = None
+                if 'header' in httpx_scan:
+                    header_dict = httpx_scan['header']
+                    # print(header_dict)
+                    if 'last_modified' in header_dict:
+                        last_modified_str = header_dict['last_modified']
+                        timestamp_datetime = datetime.strptime(
+                            last_modified_str, "%a, %d %b %Y %H:%M:%S GMT")
+                        last_modified = int(time.mktime(
+                            timestamp_datetime.timetuple()))
+
+                favicon_hash = None
+                tmp_fav_hash = None
+                if 'favicon' in httpx_scan:
+                    favicon_hash = httpx_scan['favicon']
+                    tmp_fav_hash = favicon_hash
+
+                web_path_id = None
+                if 'path' in httpx_scan:
+                    web_path = httpx_scan['path'].strip()
+                    hashobj = hash_alg()
+                    hashobj.update(web_path.encode())
+                    path_hash = hashobj.digest()
+                    hex_str = binascii.hexlify(path_hash).decode()
+                    web_path_hash = hex_str
+
+                    # Attach the favicon to the root path
+                    if tmp_fav_hash and web_path == "/":
+                        favicon_hash = tmp_fav_hash
+
+                    if web_path_hash in path_hash_map:
+                        path_obj = path_hash_map[web_path_hash]
+                    else:
+                        path_obj = data_model.ListItem()
+                        path_obj.web_path = web_path
+                        path_obj.web_path_hash = web_path_hash
+
+                        # Add to map and the object list
+                        path_hash_map[web_path_hash] = path_obj
+                        ret_arr.append(path_obj)
+
+                    web_path_id = path_obj.id
+
+                screenshot_id = None
+                if 'screenshot_bytes' in httpx_scan:
+                    screenshot_bytes_b64 = httpx_scan['screenshot_bytes']
+                    ss_data = base64.b64decode(screenshot_bytes_b64)
+                    hashobj = hash_alg()
+                    hashobj.update(ss_data)
+                    image_hash = hashobj.digest()
+                    image_hash_str = binascii.hexlify(image_hash).decode()
+
+                    if image_hash_str in screenshot_hash_map:
+                        screenshot_obj = screenshot_hash_map[image_hash_str]
+                    else:
+                        screenshot_obj = data_model.Screenshot()
+                        screenshot_obj.data = screenshot_bytes_b64
+                        screenshot_obj.data_hash = image_hash_str
+
+                        # Add to map and the object list
+                        screenshot_hash_map[image_hash_str] = screenshot_obj
+                        ret_arr.append(screenshot_obj)
+
+                    screenshot_id = screenshot_obj.id
+
+                domain_used = None
+                if 'url' in httpx_scan:
+                    url = httpx_scan['url'].lower()
+                    u = urlparse(url)
+                    host = u.netloc
+                    if ":" in host:
+                        domain_used = host.split(":")[0]
+
+                # Add domains
+                cert_obj = None
+                if 'tls' in httpx_scan:
+                    tls_data = httpx_scan['tls']
+
+                    # Create a certificate object
+                    cert_obj = data_model.Certificate(
+                        parent_id=port_obj.id)
+
+                    if 'subject_an' in tls_data:
+                        dns_names = tls_data['subject_an']
+                        for dns_name in dns_names:
+                            domain_obj = cert_obj.add_domain(host_id, dns_name)
+                            if domain_obj:
+                                ret_arr.append(domain_obj)
+
+                    if 'host' in tls_data:
+                        common_name = tls_data['host']
+                        if type(common_name) == list:
+                            for common_name_inst in common_name:
+                                domain_obj = cert_obj.add_domain(host_id,
+                                                                 common_name_inst)
+                                if domain_obj:
+                                    ret_arr.append(domain_obj)
                         else:
-                            print("[-] No input and/or port field in output: %s" % httpx_scan)
+                            domain_obj = cert_obj.add_domain(
+                                host_id, common_name)
+                            if domain_obj:
+                                ret_arr.append(domain_obj)
 
-            if len(port_arr) > 0:
-                #print(port_arr)
+                    if 'subject_cn' in tls_data:
+                        common_name = tls_data['subject_cn']
+                        if type(common_name) == list:
+                            for common_name_inst in common_name:
+                                domain_obj = cert_obj.add_domain(host_id,
+                                                                 common_name_inst)
+                                if domain_obj:
+                                    ret_arr.append(domain_obj)
 
-                # Import the ports to the manager
-                tool_obj = scan_input_obj.current_tool
-                tool_id = tool_obj.id
-                scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                
-                #print(scan_results)
-                ret_val = recon_manager.import_ports_ext(scan_results)
-                print("[+] Imported httpx scan to manager.")
-            else:
-                print("[*] No ports to import to manager")
+                        else:
+                            domain_obj = cert_obj.add_domain(
+                                host_id, common_name)
+                            if domain_obj:
+                                ret_arr.append(domain_obj)
+
+                    if 'issuer_dn' in tls_data:
+                        issuer = tls_data['issuer_dn']
+                        cert_obj.issuer = issuer
+
+                    if 'not_before' in tls_data:
+                        issued = tls_data['not_before']
+                        # Parse the time string into a datetime object in UTC
+                        dt = datetime.strptime(issued, '%Y-%m-%dT%H:%M:%SZ')
+                        cert_obj.issued = int(time.mktime(dt.timetuple()))
+
+                    if 'not_after' in tls_data:
+                        expires = tls_data['not_after']
+                        dt = datetime.strptime(expires, '%Y-%m-%dT%H:%M:%SZ')
+                        cert_obj.expires = int(time.mktime(dt.timetuple()))
+
+                    if 'fingerprint_hash' in tls_data:
+                        cert_hash_map = tls_data['fingerprint_hash']
+                        if 'sha1' in cert_hash_map:
+                            sha_cert_hash = cert_hash_map['sha1']
+                            cert_obj.fingerprint_hash = sha_cert_hash
+
+                    # Add the cert object
+                    ret_arr.append(cert_obj)
+
+                endpoint_domain_id = None
+                if cert_obj and domain_used in cert_obj.domain_name_id_map:
+                    endpoint_domain_id = cert_obj.domain_name_id_map[domain_used]
+
+                # Add http component
+                component_obj = data_model.WebComponent(
+                    parent_id=port_obj.id)
+                component_obj.name = 'http'
+                ret_arr.append(component_obj)
+
+                if 'tech' in httpx_scan:
+                    tech_list = httpx_scan['tech']
+                    for tech_entry in tech_list:
+
+                        component_obj = data_model.WebComponent(
+                            parent_id=port_obj.id)
+
+                        if ":" in tech_entry:
+                            tech_entry_arr = tech_entry.split(":")
+                            component_obj.name = tech_entry_arr[0]
+                            component_obj.version = tech_entry_arr[1]
+                        else:
+                            component_obj.name = tech_entry
+
+                        ret_arr.append(component_obj)
+
+                # Add http endpoint
+                http_endpoint_obj = data_model.HttpEndpoint(
+                    parent_id=port_obj.id)
+                http_endpoint_obj.domain_id = endpoint_domain_id
+                http_endpoint_obj.title = title
+                http_endpoint_obj.status_code = status_code
+                http_endpoint_obj.last_modified = last_modified
+                http_endpoint_obj.web_path_id = web_path_id
+                http_endpoint_obj.screenshot_id = screenshot_id
+                http_endpoint_obj.fav_icon_hash = favicon_hash
+
+                # Add the endpoint
+                ret_arr.append(http_endpoint_obj)
+
+        # Import, Update, & Save
+        self.import_results(scheduled_scan_obj, ret_arr)

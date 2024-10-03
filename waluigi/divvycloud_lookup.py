@@ -257,9 +257,8 @@ class DivyCloudLookup(luigi.Task):
         results_dict = {'output_list': output_file_list}
 
         # Write output file
-        f = open(output_file_path, 'w')
-        f.write(json.dumps(results_dict))
-        f.close()            
+        with open(output_file_path, 'w') as file_fd:
+            file_fd.write(json.dumps(results_dict))
 
 
 @inherits(DivyCloudLookup)
@@ -276,9 +275,8 @@ class ImportDivyCloudOutput(luigi.Task):
         recon_manager = scan_input_obj.scan_thread.recon_manager
 
         http_output_file = self.input().path
-        f = open(http_output_file, 'r')
-        data = f.read()
-        f.close()
+        with open(http_output_file, 'r') as file_fd:
+            data = file_fd.read()
 
         if len(data) > 0:
 

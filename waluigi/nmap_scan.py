@@ -6,135 +6,152 @@ import netaddr
 import concurrent.futures
 import luigi
 import traceback
+import time
 
 from luigi.util import inherits
 from libnmap.parser import NmapParser
 from waluigi import scan_utils
+from waluigi import data_model
+from datetime import datetime
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
+
 class NmapScan(luigi.Task):
-    
+
     scan_input = luigi.Parameter()
+
     def output(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
+        scheduled_scan_obj = self.scan_input
+        scan_id = scheduled_scan_obj.scan_id
 
-        scan_target_dict = scan_input_obj.scan_target_dict
+        # scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
-        if 'module_id' in scan_target_dict:
-            module_id = str(scan_target_dict['module_id'])
-            mod_str = "_" + module_id
+        # if 'module_id' in scan_target_dict:
+        #     module_id = str(scan_target_dict['module_id'])
+        #     mod_str = "_" + module_id
 
         # Init directory
-        tool_name = scan_input_obj.current_tool.name
+        tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
-        meta_file_path = dir_path + os.path.sep + "nmap_scan_"+ scan_id + mod_str + ".meta"
+        meta_file_path = dir_path + os.path.sep + \
+            "nmap_scan_" + scan_id + mod_str + ".meta"
 
         return luigi.LocalTarget(meta_file_path)
 
     def run(self):
 
-        scan_input_obj = self.scan_input        
-        selected_interface = scan_input_obj.selected_interface
+        scheduled_scan_obj = self.scan_input
+        selected_interface = scheduled_scan_obj.selected_interface
 
         # Ensure output folder exists
         meta_file_path = self.output().path
         dir_path = os.path.dirname(meta_file_path)
 
-        scan_target_dict = scan_input_obj.scan_target_dict
-        print(scan_target_dict)
+        # load input file
+        scope_obj = scheduled_scan_obj.scan_data
 
-        #load input file
         nmap_scan_data = None
-        scan_input = scan_target_dict['scan_input']
-        nmap_scan_args = scan_target_dict['tool_args']
+        nmap_scan_args = scheduled_scan_obj.current_tool.args
+        if nmap_scan_args:
+            nmap_scan_args = nmap_scan_args.split(" ")
 
-        target_map = {}
-        if 'target_map' in scan_input:
-            target_map = scan_input['target_map']
-
-        module_id = None
-        mod_str = ''
-        if 'module_id' in scan_target_dict:
-            module_id = str(scan_target_dict['module_id'])
-            mod_str = "_" + module_id
-
-        #print(input_nmap_scan_list)
-        # Output structure for scan jobs
-        nmap_scan_cmd_list = []
-        nmap_scan_data = {'nmap_input_map': target_map}
+        # Check if massscan was already run
+        mass_scan_ran = False
+        for collection_tool in scheduled_scan_obj.collection_tool_map.values():
+            if collection_tool.collection_tool.name == 'masscan':
+                mass_scan_ran = True
+                break
 
         nmap_scan_list = []
-        if len(target_map) < 20:
+        scan_port_map = {}
+        if mass_scan_ran:
 
-            print("[*] Dividing NMAP jobs by target")                
+            # Create scan jobs for each port and only scan the IPs mapped to that port
+            target_map = scheduled_scan_obj.scan_data.host_port_obj_map
             for target_key in target_map:
 
-                scan_obj = {}
-                target_dict = target_map[target_key]
-                #print(target_dict)
-                # Add target
-                target_str = target_dict['target_host']
-                target_set = set()
-                target_set.add(target_str)
+                target_obj_dict = target_map[target_key]
+                port_obj = target_obj_dict['port_obj']
+                port_str = port_obj.port
 
-                # Add domains
-                domain_list = target_dict['domain_set']
-                if len(domain_list) > 0:
-                    target_set.update(domain_list)
+                host_obj = target_obj_dict['host_obj']
+                ip_addr = host_obj.ipv4_addr
 
-                scan_obj['ip_set'] = target_set
+                # Get dict for port or create it
+                if port_str in scan_port_map:
+                    scan_obj = scan_port_map[port_str]
+                else:
+                    scan_obj = {'port_list': [
+                        str(port_str)], 'tool_args': nmap_scan_args}
+                    scan_obj['resolve_dns'] = False
+                    scan_port_map[port_str] = scan_obj
 
-                scan_obj['tool_args'] = nmap_scan_args
-                scan_obj['resolve_dns'] = False
+                # Add the targets
+                if 'ip_set' in scan_obj:
+                    ip_set = scan_obj['ip_set']
+                else:
+                    ip_set = set()
+                    scan_obj['ip_set'] = ip_set
 
-                port_list = []
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
-                    port_obj = port_obj_map[port_key]
-                    port_int = port_obj['port']
-                    resolve_dns = port_obj['resolve_dns']
-                    # If any ports require DNS resolution then flip the flag for the scan
-                    if resolve_dns == True:
-                        scan_obj['resolve_dns'] = True
+                # Add IP
+                ip_set.add(ip_addr)
 
-                    port_list.append(str(port_int))
-                    
-                scan_obj['port_list'] = port_list
+                target_arr = target_key.split(":")
+                if target_arr[0] != ip_addr:
+                    domain_str = target_arr[0]
+                    scan_obj['resolve_dns'] = True
+                    ip_set.add(domain_str)
 
-                # Add the scan
-                nmap_scan_list.append(scan_obj)
+                # Add each to the scan list
+            nmap_scan_list.extend(list(scan_port_map.values()))
 
         else:
 
-            print("[*] Dividing NMAP jobs by port")
-            scan_port_map = {}
-            for target_key in target_map:
+            # Use original scope for scan
+            target_map = scheduled_scan_obj.scan_data.host_port_obj_map
 
-                # Add target
-                target_dict = target_map[target_key]
-                target_str = target_dict['target_host']
+            # Use original scope for scan
+            # Create scan for each subnet, for all ports to scan
+            subnet_map = scope_obj.subnet_map
+            if len(subnet_map) > 0:
+                for subnet_id in subnet_map:
+                    subnet_obj = subnet_map[subnet_id]
+                    subnet_str = "%s/%s" % (subnet_obj.subnet, subnet_obj.mask)
 
-                port_obj_map = target_dict['port_map']
-                for port_key in port_obj_map:
+                    scan_obj = {}
+                    scan_obj['ip_set'] = [subnet_str]
+                    scan_obj['tool_args'] = nmap_scan_args
+                    scan_obj['resolve_dns'] = False
 
-                    port_obj = port_obj_map[port_key]
-                    port_int = port_obj['port']
+                    port_set = set()
+                    for port_str in scope_obj.port_number_list:
+                        port_set.add(port_str)
+
+                    scan_obj['port_list'] = list(port_set)
+
+                    # Add the scan
+                    nmap_scan_list.append(scan_obj)
+
+            elif len(target_map) > 0:
+                for target_key in target_map:
+
+                    target_obj_dict = target_map[target_key]
+                    port_obj = target_obj_dict['port_obj']
+                    port_str = port_obj.port
+
+                    host_obj = target_obj_dict['host_obj']
+                    ip_addr = host_obj.ipv4_addr
 
                     # Get dict for port or create it
-                    if port_int in scan_port_map:
-                        scan_obj = scan_port_map[port_int]
+                    if port_str in scan_port_map:
+                        scan_obj = scan_port_map[port_str]
                     else:
-                        scan_obj = {'port_list': [str(port_int)], 'tool_args' : nmap_scan_args}
+                        scan_obj = {'port_list': [
+                            str(port_str)], 'tool_args': nmap_scan_args}
                         scan_obj['resolve_dns'] = False
-                        scan_port_map[port_int] = scan_obj
-
-                    resolve_dns = port_obj['resolve_dns']
-                    # If any ports require DNS resolution then flip the flag for the scan
-                    if resolve_dns == True:
-                        scan_obj['resolve_dns'] = True
+                        scan_port_map[port_str] = scan_obj
 
                     # Add the targets
                     if 'ip_set' in scan_obj:
@@ -143,43 +160,103 @@ class NmapScan(luigi.Task):
                         ip_set = set()
                         scan_obj['ip_set'] = ip_set
 
-                    # Add target
-                    ip_set.add(target_str)
+                    # Add IP
+                    ip_set.add(ip_addr)
 
-                    # Add domains
-                    domain_list = target_dict['domain_set']
-                    ip_set.update(domain_list)
+                    target_arr = target_key.split(":")
+                    if target_arr[0] != ip_addr:
+                        domain_str = target_arr[0]
+                        scan_obj['resolve_dns'] = True
+                        ip_set.add(domain_str)
 
-            # Add each to the scan list
-            nmap_scan_list.extend(list(scan_port_map.values()))
+                    # Add each to the scan list
+                nmap_scan_list.extend(list(scan_port_map.values()))
+
+            else:
+
+                port_num_list = scope_obj.port_number_list
+                if len(port_num_list) > 0:
+
+                    # Get host map and pair each host with all ports to scan
+                    scan_obj = {}
+                    target_set = set()
+                    resolve_dns = False
+
+                    host_map = scope_obj.host_map
+                    for host_id in host_map:
+                        host_obj = host_map[host_id]
+                        ip_addr = host_obj.ipv4_addr
+                        target_set.add(ip_addr)
+
+                        if host_id in scope_obj.domain_host_id_map:
+                            temp_domain_list = scope_obj.domain_host_id_map[host_id]
+                            if len(temp_domain_list) > 0:
+                                resolve_dns = True
+                                for domain_obj in temp_domain_list:
+
+                                    domain_name = domain_obj.name
+                                    target_set.add(domain_name)
+
+                    # Add a port entry for each domain
+                    domain_map = scope_obj.domain_map
+                    for domain_id in domain_map:
+                        domain_obj = domain_map[domain_id]
+                        domain_name = domain_obj.name
+
+                        # Add Domain to list
+                        target_set.add(domain_name)
+
+                    scan_obj['ip_set'] = target_set
+                    scan_obj['tool_args'] = nmap_scan_args
+                    scan_obj['resolve_dns'] = resolve_dns
+
+                    port_set = set()
+                    for port_str in port_num_list:
+                        port_set.add(port_str)
+
+                    scan_obj['port_list'] = list(port_set)
+
+                    # Add the scan
+                    nmap_scan_list.append(scan_obj)
+
+        module_id = None
+        mod_str = ''
+        # if 'module_id' in scan_target_dict:
+        #     module_id = str(scan_target_dict['module_id'])
+        #     mod_str = "_" + module_id
+
+        # Output structure for scan jobs
+        nmap_scan_cmd_list = []
+        nmap_scan_data = {}
 
         # Loop through map and create nmap command array
-        counter = 0            
+        counter = 0
         commands = []
-        #print(nmap_scan_list)
+        # print(nmap_scan_list)
         for scan_obj in nmap_scan_list:
 
             nmap_scan_inst = {}
             script_args = None
             port_list = scan_obj['port_list']
             port_comma_list = ','.join(port_list)
-            ip_list_path = dir_path + os.path.sep + "nmap_in_" + str(counter) + mod_str
+            ip_list_path = dir_path + os.path.sep + \
+                "nmap_in_" + str(counter) + mod_str
 
             # Write IPs to a file
             ip_list = scan_obj['ip_set']
             if len(ip_list) == 0:
                 continue
 
-            f = open(ip_list_path, 'w')
-            for ip in ip_list:                
-                f.write(ip + "\n")
-            f.close()
+            with open(ip_list_path, 'w') as in_file_fd:
+                for ip in ip_list:
+                    in_file_fd.write(ip + "\n")
 
             if 'tool_args' in scan_obj:
                 script_args = scan_obj['tool_args']
 
             # Nmap command args
-            nmap_output_xml_file = dir_path + os.path.sep + "nmap_out_"+ str(counter) + mod_str
+            nmap_output_xml_file = dir_path + os.path.sep + \
+                "nmap_out_" + str(counter) + mod_str
 
             # Add sudo if on linux based system
             command = []
@@ -211,7 +288,7 @@ class NmapScan(luigi.Task):
             if selected_interface:
                 int_name = selected_interface.name.strip()
                 command_arr.extend(['-e', int_name])
-            
+
             # Add base arguments
             command.extend(command_arr)
 
@@ -234,12 +311,12 @@ class NmapScan(luigi.Task):
 
             nmap_scan_cmd_list.append(nmap_scan_inst)
 
-            #print(command)
+            # print(command)
             commands.append(command)
             counter += 1
 
         # Run threaded
-        #print(commands)
+        # print(commands)
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             executor.map(subprocess.run, commands)
 
@@ -247,10 +324,9 @@ class NmapScan(luigi.Task):
         nmap_scan_data['nmap_scan_list'] = nmap_scan_cmd_list
 
         # Write out meta data file
-        f = open(meta_file_path, 'w')
         if nmap_scan_data:
-            f.write(json.dumps(nmap_scan_data))
-        f.close()
+            with open(meta_file_path, 'w') as meta_file_fd:
+                meta_file_fd.write(json.dumps(nmap_scan_data))
 
 
 def remove_dups_from_dict(dict_array):
@@ -269,42 +345,43 @@ def remove_dups_from_dict(dict_array):
 
 
 @inherits(NmapScan)
-class ImportNmapOutput(luigi.Task):
+class ImportNmapOutput(data_model.ImportToolXOutput):
 
     def requires(self):
-        # Requires MassScan Task to be run prior
         return NmapScan(scan_input=self.scan_input)
 
     def run(self):
 
-        scan_input_obj = self.scan_input
-        scan_id = scan_input_obj.scan_id
-        recon_manager = scan_input_obj.scan_thread.recon_manager
+        scheduled_scan_obj = self.scan_input
+        tool_obj = scheduled_scan_obj.current_tool
+        tool_id = tool_obj.id
+
+        ret_arr = []
 
         meta_file = self.input().path
         if os.path.exists(meta_file):
-            f = open(meta_file)
-            json_input = f.read()
-            f.close()
 
-            #load input file
+            with open(meta_file) as file_fd:
+                json_input = file_fd.read()
+
+            # load input file
             if len(json_input) > 0:
                 nmap_scan_obj = json.loads(json_input)
                 nmap_json_arr = nmap_scan_obj['nmap_scan_list']
-                nmap_input_map = nmap_scan_obj['nmap_input_map']
-                #print(nmap_scan_obj)
+                # nmap_input_map = nmap_scan_obj['nmap_input_map']
+                # print(nmap_scan_obj)
 
                 for nmap_scan_entry in nmap_json_arr:
 
                     # For each file
-                    nmap_out = nmap_scan_entry['output_file']                
+                    nmap_out = nmap_scan_entry['output_file']
                     nmap_report = None
                     try:
                         nmap_report = NmapParser.parse_fromfile(nmap_out)
                     except Exception as e:
                         print("[-] Failed parsing nmap output: %s" % nmap_out)
                         print(traceback.format_exc())
-                        
+
                         try:
                             dir_path = os.path.dirname(meta_file)
                             shutil.rmtree(dir_path)
@@ -314,133 +391,241 @@ class ImportNmapOutput(luigi.Task):
                         raise
 
                     # Loop through hosts
-                    port_arr = []
                     for host in nmap_report.hosts:
 
                         host_ip = host.id
                         # Get the host entry for the IP address in the results
-                        host_entry = None
                         host_id = None
-                        port_map = None
-                        if host_ip in nmap_input_map:
-                            host_entry = nmap_input_map[host_ip]
-                            host_id = host_entry['host_id']
-                            port_map = host_entry['port_map']
-
-                        ip_addr_int = int(netaddr.IPAddress(host_ip))
 
                         # Loop through ports
                         for port in host.get_open_ports():
-
-                            domain_set = set()
 
                             port_str = str(port[0])
                             port_service_id = port[1] + "." + port_str
 
                             # Check if we have a port_id
                             port_id = None
-                            if port_map and port_str in port_map:
-                                port_entry = port_map[port_str]
-                                port_id = port_entry['port_id']
+                            host_key = '%s:%s' % (host_ip, port_str)
 
-                            # Create basic port object
-                            port_obj = { 'scan_id' : scan_id,
-                                         'host_id' : host_id,
-                                         'port' : port_str,
-                                         'port_id' : port_id,
-                                         'ipv4_addr' : ip_addr_int }
+                            if host_key in scheduled_scan_obj.scan_data.host_port_obj_map:
+                                host_port_dict = scheduled_scan_obj.scan_data.host_port_obj_map[
+                                    host_key]
+                                port_id = host_port_dict['port_obj'].id
+                                host_id = host_port_dict['host_obj'].id
+
+                            # See if we have a host/port mapping already for this domain and port
+                            elif host_ip in scheduled_scan_obj.scan_data.host_ip_id_map:
+                                host_id = scheduled_scan_obj.scan_data.host_ip_id_map[host_ip]
+
+                            # Create Host object if one doesn't exists already
+                            if host_id is None:
+                                ip_object = netaddr.IPAddress(host_ip)
+
+                                host_obj = data_model.Host(id=host_id)
+                                if ip_object.version == 4:
+                                    host_obj.ipv4_addr = str(ip_object)
+                                elif ip_object.version == 6:
+                                    host_obj.ipv6_addr = str(ip_object)
+
+                                host_id = host_obj.id
+
+                                # Add host
+                                ret_arr.append(host_obj)
+
+                            port_obj = data_model.Port(
+                                parent_id=host_id, id=port_id)
+                            port_obj.proto = 0
+                            port_obj.port = port_str
+                            port_id = port_obj.id
+
+                            # Add port
+                            ret_arr.append(port_obj)
 
                             # Get hostnames
                             hostnames = host.hostnames
                             for hostname in hostnames:
-                                #print(hostname)
+
                                 if type(hostname) is dict:
-                                    hostname_str = hostname['name']
-                                    domain_set.add(hostname_str)
-                                    if hostname['type'] == 'user':
-                                        port_obj['hostname'] = hostname_str
-                                else:
-                                    domain_set.add(hostname)
-                                    port_obj['hostname'] = hostname
+                                    hostname = hostname['name']
+
+                                domain_obj = data_model.Domain(
+                                    parent_id=host_id)
+                                domain_obj.name = hostname
+
+                                # Add domain
+                                ret_arr.append(domain_obj)
 
                             # Get service details if present
                             svc = host.get_service_byid(port_service_id)
                             if svc:
 
-                                if svc.banner and len(svc.banner) > 0:
-                                    port_obj['banner'] = svc.banner
+                                # if svc.banner and len(svc.banner) > 0:
+                                #     port_obj['banner'] = svc.banner
 
                                 # Set the service dictionary
                                 svc_dict = svc.service_dict
-                                if 'name' in svc.service_dict and 'http' in svc.service_dict['name']:
-                                    svc_dict['name'] = ''
+                                if 'name' in svc.service_dict:
+                                    service_name = svc.service_dict['name']
+                                    if service_name:
+                                        component_name = service_name.lower().strip()
+                                        # print("[*] Service name: %s" % component_name)
+                                        if len(component_name) > 0 and component_name != "unknown":
+                                            # svc_dict['name'] = ''
+                                            component_obj = data_model.WebComponent(
+                                                parent_id=port_id)
+
+                                            component_obj.name = component_name
+                                            ret_arr.append(component_obj)
+
+                                if 'product' in svc_dict:
+                                    component_name = svc_dict['product']
+                                    component_name = component_name.replace(
+                                        " httpd", "").lower().strip()
+                                    if len(component_name) > 0 and component_name != "unknown":
+
+                                        component_obj = data_model.WebComponent(
+                                            parent_id=port_id)
+
+                                        component_obj.name = component_name
+
+                                        # Add the version
+                                        if 'version' in svc_dict:
+                                            component_version = svc_dict['version']
+                                            if len(component_version) > 0:
+                                                component_obj.version = component_version
+
+                                        ret_arr.append(component_obj)
 
                                 script_res_arr = svc.scripts_results
                                 if len(script_res_arr) > 0:
 
                                     # Remove dups
-                                    script_res = remove_dups_from_dict(script_res_arr)
+                                    script_res = remove_dups_from_dict(
+                                        script_res_arr)
 
                                     # Add domains in certificate to port if SSL
                                     for script in script_res:
 
                                         script_id = script['id']
-                                        #port_int = int(port_str)
                                         if script_id == 'ssl-cert':
 
-                                            port_obj['secure'] = 1
-                                            output = script['output']
-                                            lines = output.split("\n")
+                                            # port_obj['secure'] = 1
+                                            if port_obj:
+                                                port_obj.secure = True
 
-                                            for line in lines:
+                                            # Create a certificate object
+                                            cert_obj = data_model.Certificate(
+                                                parent_id=port_obj.id)
 
-                                                if "Subject Alternative Name:" in line:
+                                            if 'elements' in script:
+                                                elements = script['elements']
+                                                if 'validity' in elements:
+                                                    validity = elements['validity']
+                                                    if 'notBefore' in validity:
+                                                        issued = validity['notBefore']
 
-                                                    line = line.replace("Subject Alternative Name:","")
-                                                    line_arr = line.split(",")
-                                                    for dns_entry in line_arr:
-                                                        if "DNS" in dns_entry:
-                                                            dns_stripped = dns_entry.replace("DNS:","").strip()
-                                                            domain_set.add(dns_stripped)
+                                                        dt = datetime.strptime(
+                                                            issued, '%Y-%m-%dT%H:%M:%S')
+                                                        cert_obj.issued = int(
+                                                            time.mktime(dt.timetuple()))
 
-                                                    break
+                                                    if 'notAfter' in validity:
+                                                        expires = validity['notAfter']
 
-                                                #print(domains)
+                                                        dt = datetime.strptime(
+                                                            expires, '%Y-%m-%dT%H:%M:%S')
+                                                        cert_obj.expires = int(
+                                                            time.mktime(dt.timetuple()))
+
+                                                if 'sha1' in elements:
+                                                    fingerprint_hash = elements['sha1']
+                                                    cert_obj.fingerprint_hash = fingerprint_hash
+
+                                                if 'subject' in elements:
+                                                    subject = elements['subject']
+                                                    if 'commonName' in subject:
+                                                        common_name = subject['commonName']
+                                                        domain_obj = cert_obj.add_domain(
+                                                            host_id, common_name)
+                                                        if domain_obj:
+                                                            ret_arr.append(
+                                                                domain_obj)
+
+                                                if 'issuer' in elements:
+                                                    issuer = elements['issuer']
+                                                    cert_obj.issuer = json.dumps(
+                                                        issuer)
+
+                                                if 'extensions' in elements:
+                                                    extensions = elements['extensions']
+                                                    if 'null' in extensions:
+                                                        null_ext = extensions['null']
+                                                        if not isinstance(null_ext, list):
+                                                            null_ext = [
+                                                                null_ext]
+
+                                                        for ext_inst in null_ext:
+                                                            if 'name' in ext_inst:
+                                                                ext_name = ext_inst['name']
+                                                                if 'X509v3 Subject Alternative Name' == ext_name:
+                                                                    san_value = ext_inst['value']
+                                                                    if ":" in san_value:
+                                                                        dns_name = san_value.split(":")[
+                                                                            1]
+                                                                        domain_obj = cert_obj.add_domain(
+                                                                            host_id, dns_name)
+                                                                        if domain_obj:
+                                                                            ret_arr.append(
+                                                                                domain_obj)
+
+                                            # Add the cert object
+                                            ret_arr.append(cert_obj)
+
                                         elif 'http' in script_id:
                                             # Set to http if nmap detected http in a script
-                                            svc_dict['name'] = 'http'
-
-                                    # Add the output of the script results we care about
-                                    script_dict = {'results' : script_res}
+                                            component_obj = data_model.WebComponent(
+                                                parent_id=port_id)
+                                            component_obj.name = 'http'
+                                            ret_arr.append(component_obj)
 
                                     # Add module id if it exists
                                     if 'module_id' in nmap_scan_entry:
                                         module_id = nmap_scan_entry['module_id']
-                                        script_dict['module_id'] = module_id
 
-                                    port_obj['nmap_script_dict'] = script_dict
+                                        module_output_obj = data_model.CollectionModuleOutput(
+                                            parent_id=module_id)
+                                        module_output_obj.data = script_res
+                                        module_output_obj.port_id = port_id
 
+                                        ret_arr.append(module_output_obj)
+                                    else:
 
-                                # Set the service dictionary
-                                port_obj['service'] = svc_dict
+                                        # Iterate over script entries
+                                        for script_out in script_res:
+                                            # print(script_out)
+                                            if 'id' in script_out and 'output' in script_out:
 
+                                                script_id = script_out['id']
+                                                output = script_out['output']
+                                                if len(output) > 0:
 
-                            # Add domains
-                            if len(domain_set) > 0:
-                                port_obj['domains'] = list(domain_set)
+                                                    # Add collection module
+                                                    args_str = "--script +%s" % script_id
+                                                    module_obj = data_model.CollectionModule(
+                                                        parent_id=tool_id)
+                                                    module_obj.name = script_id
+                                                    module_obj.args = args_str
 
-                            # Add to list
-                            port_arr.append(port_obj)
+                                                    ret_arr.append(module_obj)
 
-                    # Add the IP list
-                    if len(port_arr) > 0:
-                        #print(port_arr)
+                                                    # Add module output
+                                                    module_output_obj = data_model.CollectionModuleOutput(
+                                                        parent_id=module_obj.id)
+                                                    module_output_obj.data = output
+                                                    module_output_obj.port_id = port_id
 
-                        tool_obj = scan_input_obj.current_tool
-                        tool_id = tool_obj.id
-                        scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
-                        #print(scan_results)
-                        ret_val = recon_manager.import_ports_ext(scan_results)
+                                                    ret_arr.append(
+                                                        module_output_obj)
 
-        print("[+] Updated ports database with Nmap results.")
-
+        # Import, Update, & Save
+        self.import_results(scheduled_scan_obj, ret_arr)

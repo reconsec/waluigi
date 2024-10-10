@@ -2,8 +2,21 @@ from Cryptodome.PublicKey import RSA
 from Cryptodome.Cipher import AES, PKCS1_OAEP
 from types import SimpleNamespace
 from threading import Event
-from waluigi import scan_pipeline
+from waluigi import scan_cleanup
 from waluigi import data_model
+
+from waluigi import masscan
+from waluigi import nmap_scan
+from waluigi import pyshot_scan
+from waluigi import nuclei_scan
+from waluigi import subfinder_scan
+from waluigi import feroxbuster_scan
+from waluigi import shodan_lookup
+from waluigi import httpx_scan
+from waluigi import sectrails_ip_lookup
+from waluigi import badsecrets_scan
+from waluigi import divvycloud_lookup
+from waluigi import module_scan
 
 import requests
 import base64
@@ -17,12 +30,61 @@ import enum
 import functools
 
 
+tool_classes = [
+    masscan.Masscan,
+    nmap_scan.Nmap,
+    pyshot_scan.Pyshot,
+    nuclei_scan.Nuclei,
+    subfinder_scan.Subfinder,
+    feroxbuster_scan.Feroxbuster,
+    shodan_lookup.Shodan,
+    httpx_scan.Httpx,
+    sectrails_ip_lookup.Sectrails,
+    module_scan.Module,
+    badsecrets_scan.Badsecrets,
+    divvycloud_lookup.Divvycloud
+]
+
 # User Agent
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
 # Set to bypass errors if the target site has SSL issues
 requests.packages.urllib3.disable_warnings()
 recon_mgr_inst = None
+
+
+# def scan_func(scan_input):
+
+#     # Get the tool
+#     ret_val = False
+#     tool_obj = scan_input.current_tool
+#     tool_name = tool_obj.name
+#     if tool_name in waluigi_tool_map:
+#         tool_inst = waluigi_tool_map[tool_name]
+
+#         # Call the scan function
+#         ret_val = tool_inst.scan_func(scan_input)
+#     else:
+#         print("[-] %s tool does not exist in table." % tool_name)
+
+#     return ret_val
+
+
+# def import_func(scan_input):
+
+#     ret_val = False
+#     # Get the tool
+#     tool_obj = scan_input.current_tool
+#     tool_name = tool_obj.name
+#     if tool_name in waluigi_tool_map:
+#         tool_inst = waluigi_tool_map[tool_name]
+
+#         # Call the scan function
+#         ret_val = tool_inst.import_func(scan_input)
+#     else:
+#         print("[-] %s tool does not exist in table." % tool_name)
+
+#     return ret_val
 
 
 def tool_order_cmp(x, y):
@@ -211,7 +273,7 @@ class ScheduledScanThread(threading.Thread):
 
                 try:
                     # Execute scan func
-                    if scan_pipeline.scan_func(scheduled_scan_obj) == False:
+                    if self.recon_manager.scan_func(scheduled_scan_obj) == False:
                         ret_status = CollectionToolStatus.ERROR.value
                         break
 
@@ -225,7 +287,7 @@ class ScheduledScanThread(threading.Thread):
 
             # Import results
             try:
-                if scan_pipeline.import_func(scheduled_scan_obj) == False:
+                if self.recon_manager.import_func(scheduled_scan_obj) == False:
                     ret_status = CollectionToolStatus.ERROR.value
                     break
                 else:
@@ -239,7 +301,7 @@ class ScheduledScanThread(threading.Thread):
 
         # Cleanup files
         if ret_status == CollectionToolStatus.COMPLETED.value:
-            scan_pipeline.scan_cleanup_func(scheduled_scan_obj.scan_id)
+            scan_cleanup.scan_cleanup_func(scheduled_scan_obj.scan_id)
             ret_val = True
 
         return ret_val
@@ -349,11 +411,16 @@ class ReconManager:
         # Get network interfaces
         self.network_ifaces = self.get_network_interfaces()
 
+        # Tool map
+        self.waluigi_tool_map = {}
+        for tool_class in tool_classes:
+            self.register_tool(tool_class)
+
         # Send collector data to server
         try:
 
             collector_tools = []
-            tool_map = scan_pipeline.waluigi_tool_map
+            tool_map = self.waluigi_tool_map
             for tool_obj in tool_map.values():
                 collector_tools.append(tool_obj.to_jsonable())
 
@@ -369,6 +436,42 @@ class ReconManager:
         except Exception as e:
             print(traceback.format_exc())
             pass
+
+    def register_tool(self, tool_class):
+        tool_inst = tool_class()
+        self.waluigi_tool_map[tool_inst.name] = tool_inst
+
+    def scan_func(self, scan_input):
+
+        # Get the tool
+        ret_val = False
+        tool_obj = scan_input.current_tool
+        tool_name = tool_obj.name
+        if tool_name in self.waluigi_tool_map:
+            tool_inst = self.waluigi_tool_map[tool_name]
+
+            # Call the scan function
+            ret_val = tool_inst.scan_func(scan_input)
+        else:
+            print("[-] %s tool does not exist in table." % tool_name)
+
+        return ret_val
+
+    def import_func(self, scan_input):
+
+        ret_val = False
+        # Get the tool
+        tool_obj = scan_input.current_tool
+        tool_name = tool_obj.name
+        if tool_name in self.waluigi_tool_map:
+            tool_inst = self.waluigi_tool_map[tool_name]
+
+            # Call the scan function
+            ret_val = tool_inst.import_func(scan_input)
+        else:
+            print("[-] %s tool does not exist in table." % tool_name)
+
+        return ret_val
 
     def set_debug(self, debug):
         self.debug = debug

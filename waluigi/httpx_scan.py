@@ -19,6 +19,33 @@ from waluigi import data_model
 from urllib.parse import urlparse
 
 
+class Httpx(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'httpx'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 4
+        self.args = ""
+        self.scan_func = Httpx.httpx_scan_func
+        self.import_func = Httpx.httpx_import
+
+    @staticmethod
+    def httpx_scan_func(scan_input):
+        luigi_run_result = luigi.build([HttpXScan(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def httpx_import(scan_input):
+        luigi_run_result = luigi.build([ImportHttpXOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 def httpx_wrapper(cmd_args):
 
     ret_value = True
@@ -248,12 +275,10 @@ class ImportHttpXOutput(data_model.ImportToolXOutput):
 
         # Get data and map
         ret_arr = []
-        # port_to_id_map = scan_data_dict['port_to_id_map']
         output_file_list = scan_data_dict['output_file_list']
 
         path_hash_map = {}
         screenshot_hash_map = {}
-        # domain_name_id_map = {}
 
         for output_file in output_file_list:
 

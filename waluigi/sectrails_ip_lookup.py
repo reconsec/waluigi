@@ -16,6 +16,24 @@ from waluigi import data_model
 proxies = None
 
 
+class Sectrails(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'sectrails'
+        self.collector_type = data_model.CollectorType.PASSIVE.value
+        self.scan_order = 5
+        self.args = ""
+        self.import_func = Sectrails.import_sectrailsiplookup
+
+    @staticmethod
+    def import_sectrailsiplookup(scan_input):
+        luigi_run_result = luigi.build([ImportSecTrailsIPLookupOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 def request_wrapper(ip_addr, api_key):
 
     domain_set = set()

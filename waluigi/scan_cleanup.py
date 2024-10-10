@@ -7,6 +7,14 @@ import shutil
 from datetime import datetime
 
 
+def scan_cleanup_func(scan_id):
+    luigi_run_result = luigi.build([ScanCleanup(
+        scan_id=scan_id)], local_scheduler=True, detailed_summary=True)
+    if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+        return False
+    return True
+
+
 class ExternalDataDirectory(luigi.ExternalTask):
     directory_path = luigi.Parameter()
 
@@ -17,7 +25,7 @@ class ExternalDataDirectory(luigi.ExternalTask):
         # Custom completeness check to ensure the directory exists
         return os.path.exists(self.directory_path) and os.path.isdir(self.directory_path)
 
-    
+
 class ScanCleanup(luigi.ExternalTask):
 
     scan_id = luigi.Parameter()
@@ -32,14 +40,14 @@ class ScanCleanup(luigi.ExternalTask):
 
         archive_zip_file = None
         if self.scan_id:
-            
+
             dir_path = self.input().path
 
             # Delete all the files defined in the cleanup file
             try:
                 # Ensure archive dir exists
                 cwd = os.getcwd()
-                archive_dir =  cwd + os.path.sep + "archive"
+                archive_dir = cwd + os.path.sep + "archive"
                 if not os.path.isdir(archive_dir):
                     os.makedirs(archive_dir)
                     os.chmod(archive_dir, 0o777)
@@ -59,9 +67,4 @@ class ScanCleanup(luigi.ExternalTask):
                 print("[-] Error deleting output directory: %s" % str(e))
                 pass
 
-
         return luigi.LocalTarget(archive_zip_file)
-
-
-
-

@@ -3,7 +3,6 @@ import os
 import luigi
 import traceback
 import errno
-import copy
 
 from luigi.util import inherits
 from multiprocessing.pool import ThreadPool
@@ -12,6 +11,33 @@ from waluigi import scan_utils
 from waluigi import data_model
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
+
+
+class Nuclei(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'nuclei'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 7
+        self.args = "http/technologies/fingerprinthub-web-fingerprints.yaml"
+        self.scan_func = Nuclei.nuclei_scan_func
+        self.import_func = Nuclei.nuclei_import
+
+    @staticmethod
+    def nuclei_scan_func(scan_input):
+        luigi_run_result = luigi.build([NucleiScan(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def nuclei_import(scan_input):
+        luigi_run_result = luigi.build([ImportNucleiOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
 
 
 class NucleiScan(luigi.Task):

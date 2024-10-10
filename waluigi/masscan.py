@@ -1,4 +1,3 @@
-import base64
 import netifaces as ni
 import re
 import os
@@ -6,14 +5,41 @@ import subprocess
 import netaddr
 import xml.etree.ElementTree as ET
 import luigi
-import json
 
 from luigi.util import inherits
 from waluigi import scan_utils
 from waluigi import data_model
 
+
 TCP = 'tcp'
 UDP = 'udp'
+
+
+class Masscan(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'masscan'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 2
+        self.args = "--rate 1000"
+        self.scan_func = Masscan.scan
+        self.import_func = Masscan.import_scan
+
+    @staticmethod
+    def scan(scan_input):
+        luigi_run_result = luigi.build(
+            [MasscanScan(scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def import_scan(scan_input):
+        luigi_run_result = luigi.build([ImportMasscanOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
 
 
 def get_mac_address(ip_address):
@@ -197,7 +223,7 @@ class ImportMasscanOutput(data_model.ImportToolXOutput):
     def requires(self):
         # Requires MassScan Task to be run prior
         return MasscanScan(scan_input=self.scan_input)
-    
+
     def run(self):
 
         obj_arr = []

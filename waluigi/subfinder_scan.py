@@ -15,6 +15,32 @@ from tqdm import tqdm
 from waluigi import data_model
 
 
+class Subfinder(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'subfinder'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 8
+        self.args = ""
+        self.import_func = Subfinder.subfinder_import
+
+    @staticmethod
+    def subfinder_lookup(scan_input):
+        luigi_run_result = luigi.build([SubfinderScan(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def subfinder_import(scan_input):
+        luigi_run_result = luigi.build([SubfinderImport(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
 
     ret_list = []
@@ -326,4 +352,3 @@ class SubfinderImport(data_model.ImportToolXOutput):
         # Import, Update, & Save
         scheduled_scan_obj = self.scan_input
         self.import_results(scheduled_scan_obj, ret_arr)
-             

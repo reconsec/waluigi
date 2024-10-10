@@ -1,4 +1,5 @@
 import base64
+import enum
 import uuid
 import netaddr
 import luigi
@@ -6,6 +7,39 @@ import os
 import json
 
 from waluigi import scan_utils
+
+
+class CollectorType(enum.Enum):
+    PASSIVE = 1
+    ACTIVE = 2
+
+    def __str__(self):
+        if (self == CollectorType.PASSIVE):
+            return "PASSIVE"
+        elif (self == CollectorType.ACTIVE):
+            return "ACTIVE"
+        else:
+            return None
+
+
+class WaluigiTool():
+
+    def __init__(self):
+        self.name = None
+        self.collector_type = None
+        self.scan_order = None
+        self.args = None
+        self.scope_func = None
+        self.scan_func = None
+        self.import_func = None
+
+    def to_jsonable(self) -> dict:
+        ret_dict = {}
+        ret_dict['name'] = self.name
+        ret_dict['tool_type'] = self.collector_type
+        ret_dict['scan_order'] = self.scan_order
+        ret_dict['args'] = self.args
+        return ret_dict
 
 
 class ImportToolXOutput(luigi.Task):
@@ -618,7 +652,7 @@ class Port(Record):
 
         self.proto = None
         self.port = None
-        self.secure = None
+        self.secure = False
 
     def _data_to_jsonable(self):
         ret = {'port': self.port, 'proto': self.proto}

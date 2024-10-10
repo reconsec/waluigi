@@ -19,6 +19,24 @@ from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
 
+class Shodan(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'shodan'
+        self.collector_type = data_model.CollectorType.PASSIVE.value
+        self.scan_order = 3
+        self.args = ""
+        self.import_func = Shodan.import_shodan
+
+    @staticmethod
+    def import_shodan(scan_input):
+        luigi_run_result = luigi.build([ImportShodanOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 class ShodanScope(luigi.ExternalTask):
 
     scan_input = luigi.Parameter()

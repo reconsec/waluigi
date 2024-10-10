@@ -19,6 +19,33 @@ from urllib.parse import urlparse
 from waluigi import data_model
 
 
+class Feroxbuster(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'feroxbuster'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 3
+        self.args = ""
+        self.scan_func = Feroxbuster.feroxbuster_scan_func
+        self.import_func = Feroxbuster.feroxbuster_import
+
+    @staticmethod
+    def feroxbuster_scan_func(scan_input):
+        luigi_run_result = luigi.build([FeroxScan(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def feroxbuster_import(scan_input):
+        luigi_run_result = luigi.build([ImportFeroxOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 class FeroxScan(luigi.Task):
 
     scan_input = luigi.Parameter()

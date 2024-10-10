@@ -17,6 +17,33 @@ from datetime import datetime
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
 
+class Nmap(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'nmap'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 6
+        self.args = "-sV --script +ssl-cert --script-args ssl=True"
+        self.scan_func = Nmap.nmap_scan_func
+        self.import_func = Nmap.nmap_import
+
+    @staticmethod
+    def nmap_scan_func(scan_input):
+        luigi_run_result = luigi.build([NmapScan(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def nmap_import(scan_input):
+        luigi_run_result = luigi.build([ImportNmapOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 class NmapScan(luigi.Task):
 
     scan_input = luigi.Parameter()
@@ -418,19 +445,18 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
                                 host_id = scheduled_scan_obj.scan_data.host_ip_id_map[host_ip]
 
                             # Create Host object if one doesn't exists already
-                            if host_id is None:
-                                ip_object = netaddr.IPAddress(host_ip)
+                            ip_object = netaddr.IPAddress(host_ip)
 
-                                host_obj = data_model.Host(id=host_id)
-                                if ip_object.version == 4:
-                                    host_obj.ipv4_addr = str(ip_object)
-                                elif ip_object.version == 6:
-                                    host_obj.ipv6_addr = str(ip_object)
+                            host_obj = data_model.Host(id=host_id)
+                            if ip_object.version == 4:
+                                host_obj.ipv4_addr = str(ip_object)
+                            elif ip_object.version == 6:
+                                host_obj.ipv6_addr = str(ip_object)
 
-                                host_id = host_obj.id
+                            host_id = host_obj.id
 
-                                # Add host
-                                ret_arr.append(host_obj)
+                            # Add host
+                            ret_arr.append(host_obj)
 
                             port_obj = data_model.Port(
                                 parent_id=host_id, id=port_id)

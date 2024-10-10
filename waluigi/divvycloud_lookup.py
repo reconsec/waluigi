@@ -11,27 +11,49 @@ from luigi.util import inherits
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
+from waluigi import data_model
 
 proxies = None
 requests.packages.urllib3.disable_warnings()
 
 # Get Resources
+
+
+class Divvycloud(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'divvycloud'
+        self.collector_type = data_model.CollectorType.PASSIVE.value
+        self.scan_order = 1
+        self.args = ""
+        self.import_func = Divvycloud.divvycloud_import
+
+    @staticmethod
+    def divvycloud_import(scan_input):
+        luigi_run_result = luigi.build([ImportDivyCloudOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
+# Get Resources
 def resource_query(base_url, resource_type, headers, offset=0):
-    data = {'limit' : 100, 'selected_resource_type': resource_type, 'offset' : offset }
-        
+    data = {'limit': 100, 'selected_resource_type': resource_type, 'offset': offset}
+
     resource_map = None
     response = None
-    try:        
+    try:
         response = requests.post(
-            url = base_url + '/v2/public/resource/query',
-            data = json.dumps(data),
-            verify = False,
-            headers = headers,
+            url=base_url + '/v2/public/resource/query',
+            data=json.dumps(data),
+            verify=False,
+            headers=headers,
             proxies=proxies
         )
     except Exception as e:
         print(traceback.format_exc())
-        
+
     if response is not None:
         try:
             resource_map = response.json()
@@ -39,24 +61,26 @@ def resource_query(base_url, resource_type, headers, offset=0):
             print(traceback.format_exc())
     else:
         print("[-] No response received")
-    
+
     return resource_map
-    
+
 # Records
+
+
 def dns_records(base_url, resource_id, headers):
 
-    record_map = None 
+    record_map = None
     response = None
     try:
         response = requests.post(
-            url = base_url + '/v2/public/dnszone/%s/dnsrecords/list' % resource_id,
-            verify = False,
-            headers = headers,
+            url=base_url + '/v2/public/dnszone/%s/dnsrecords/list' % resource_id,
+            verify=False,
+            headers=headers,
             proxies=proxies
         )
     except Exception as e:
         print(traceback.format_exc())
-        
+
     if response is not None:
         try:
             record_map = response.json()
@@ -64,8 +88,9 @@ def dns_records(base_url, resource_id, headers):
             print(traceback.format_exc())
     else:
         print("[-] No response received")
-    
+
     return record_map
+
 
 def get_dnszone_resource_ids(base_url, headers):
     resource_type = 'dnszone'
@@ -79,35 +104,36 @@ def get_dnszone_resource_ids(base_url, headers):
             if 'resources' in result_dict:
                 resources = result_dict['resources']
                 resource_count = len(resources)
-                #print("[+] Resources: %d" % len(resource_count))
+                # print("[+] Resources: %d" % len(resource_count))
                 if resource_count == 0:
-                    break            
-                
+                    break
+
                 for resource in resources:
                     dnszone = resource['dnszone']
                     common = dnszone['common']
                     domain = dnszone['domain']
-                    
+
                     # Add resource id to the set
                     resource_id = common['resource_id']
-                    resource_id_set.add(resource_id)                
+                    resource_id_set.add(resource_id)
             else:
                 print('[-] No resources in response')
                 print(result_dict)
                 break
         else:
             print('[-] No query response')
-            break            
-                
+            break
+
         # Iterate 100 records
         offset += 100
-            
+
     else:
         print("[-] No dnszones found")
-        
+
     return resource_id_set
 
-def get_dns_for_resource_id(base_url, resource_id, headers): 
+
+def get_dns_for_resource_id(base_url, resource_id, headers):
 
     ret_dict_list = []
     record_dict = dns_records(base_url, resource_id, headers)
@@ -129,15 +155,15 @@ def get_dns_for_resource_id(base_url, resource_id, headers):
                         net_inst = netaddr.IPAddress(ip_addr.strip())
                         dns_data = ip_addr
                     except:
-                        #msg = str(traceback.format_exc())
-                        #print("[-] Error resolving %s: %s" % (dns_name, msg))
+                        # msg = str(traceback.format_exc())
+                        # print("[-] Error resolving %s: %s" % (dns_name, msg))
                         continue
 
-                #Skip private IPs
+                # Skip private IPs
                 if net_inst.is_private():
                     continue
 
-                ret_dict_list.append({'domain' : dns_name , 'ip_addr' : dns_data})
+                ret_dict_list.append({'domain': dns_name, 'ip_addr': dns_data})
 
             elif dns_type == 'CNAME':
 
@@ -148,21 +174,21 @@ def get_dns_for_resource_id(base_url, resource_id, headers):
                     ip_addr = socket.gethostbyname(dns_name)
                     net_inst = netaddr.IPAddress(ip_addr.strip())
                 except:
-                    #msg = str(traceback.format_exc())
-                    #print("[-] Error resolving %s: %s" % (dns_name, msg))
+                    # msg = str(traceback.format_exc())
+                    # print("[-] Error resolving %s: %s" % (dns_name, msg))
                     continue
 
-                #Skip private IPs
+                # Skip private IPs
                 if net_inst.is_private():
-                    #print("[*] IP %s is private. Skipping" % ip_addr)
+                    # print("[*] IP %s is private. Skipping" % ip_addr)
                     continue
 
-                ret_dict_list.append({'domain' : dns_name , 'ip_addr' : ip_addr})
+                ret_dict_list.append({'domain': dns_name, 'ip_addr': ip_addr})
     else:
         print("[-] No records for resource %s" % resource_id)
-        
+
     return ret_dict_list
-    
+
 
 class DivyCloudLookup(luigi.Task):
 
@@ -184,7 +210,7 @@ class DivyCloudLookup(luigi.Task):
     def run(self):
 
         scan_input_obj = self.scan_input
-        scan_target_dict = scan_input_obj.scan_target_dict        
+        scan_target_dict = scan_input_obj.scan_target_dict
 
         # Get output file path
         output_file_path = self.output().path
@@ -192,8 +218,8 @@ class DivyCloudLookup(luigi.Task):
 
         if scan_target_dict:
 
-            scan_input_data = scan_target_dict['scan_input']
-            #print(scan_input_data)
+            # scan_input_data = scan_target_dict['scan_input']
+            # print(scan_input_data)
             base_url = None
             resource_type = None
             api_key = None
@@ -207,7 +233,7 @@ class DivyCloudLookup(luigi.Task):
 
             # Assume json object here for simplicity
             tool_args = scan_target_dict['tool_args']
-            #print(tool_args)
+            # print(tool_args)
             for idx in range(len(tool_args)):
                 arg_val = tool_args[idx]
                 if arg_val == "-u":
@@ -216,7 +242,7 @@ class DivyCloudLookup(luigi.Task):
                 elif arg_val == "-r":
                     if len(tool_args) > idx + 1:
                         resource_type = tool_args[idx + 1]
-                    
+
             if base_url is None:
                 print("[-] No Base URL. Aborting.")
                 return
@@ -224,7 +250,7 @@ class DivyCloudLookup(luigi.Task):
             if resource_type is None:
                 print("[-] No resource type given. Aborting.")
                 return
-               
+
             # Set headers
             headers = {
                 'Content-Type': 'application/json;charset=UTF-8',
@@ -242,7 +268,8 @@ class DivyCloudLookup(luigi.Task):
 
                 # Add the url
                 for resource_id in resource_id_list:
-                    thread_list.append(pool.apply_async(get_dns_for_resource_id, (base_url, resource_id, headers)))
+                    thread_list.append(pool.apply_async(
+                        get_dns_for_resource_id, (base_url, resource_id, headers)))
 
                 # Close the pool
                 pool.close()
@@ -252,7 +279,6 @@ class DivyCloudLookup(luigi.Task):
                     ret_list = thread_obj.get()
                     if len(ret_list) > 0:
                         output_file_list.extend(ret_list)
-
 
         results_dict = {'output_list': output_file_list}
 
@@ -282,14 +308,14 @@ class ImportDivyCloudOutput(luigi.Task):
 
             scan_data_dict = json.loads(data)
             port_arr = []
-            #print(scan_data_dict)
+            # print(scan_data_dict)
 
             # Get data and map
             output_list = scan_data_dict['output_list']
             if len(output_list) > 0:
 
                 ip_map = {}
-                #Convert from domain to ip map to ip to domain map
+                # Convert from domain to ip map to ip to domain map
                 for dns_entry in output_list:
 
                     # Get IP for domain
@@ -304,7 +330,6 @@ class ImportDivyCloudOutput(luigi.Task):
 
                     domain_list.add(domain_str)
 
-
                 port_arr = []
                 for ip_addr in ip_map:
 
@@ -312,21 +337,22 @@ class ImportDivyCloudOutput(luigi.Task):
                     domains = list(domain_set)
 
                     ip_addr_int = int(netaddr.IPAddress(ip_addr))
-                    #print(domains)
+                    # print(domains)
                     port_obj = {'ipv4_addr': ip_addr_int, 'domains': domains}
 
                     # Add to list
                     port_arr.append(port_obj)
 
             if len(port_arr) > 0:
-                #print(port_arr)
+                # print(port_arr)
 
                 # Import the ports to the manager
                 tool_obj = scan_input_obj.current_tool
                 tool_id = tool_obj.id
-                scan_results = {'tool_id': tool_id, 'scan_id' : scan_id, 'port_list': port_arr}
+                scan_results = {'tool_id': tool_id,
+                                'scan_id': scan_id, 'port_list': port_arr}
 
-                #print(scan_results)
+                # print(scan_results)
                 ret_val = recon_manager.import_ports_ext(scan_results)
                 print("[+] Imported badsecrets scan to manager.")
 

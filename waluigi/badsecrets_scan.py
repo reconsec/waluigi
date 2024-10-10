@@ -18,6 +18,33 @@ from badsecrets.base import carve_all_modules
 proxies = None
 
 
+class Badsecrets(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'badsecrets'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 7
+        self.args = ""
+        self.scan_func = Badsecrets.badsecrets_scan_func
+        self.import_func = Badsecrets.badsecrets_import
+
+    @staticmethod
+    def badsecrets_scan_func(scan_input):
+        luigi_run_result = luigi.build([BadSecretsScan(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def badsecrets_import(scan_input):
+        luigi_run_result = luigi.build([ImportBadSecretsOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 def request_wrapper(url_obj):
 
     url = url_obj['url']

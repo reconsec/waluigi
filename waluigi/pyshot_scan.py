@@ -8,7 +8,7 @@ import hashlib
 import base64
 
 from luigi.util import inherits
-from pyshot import pyshot
+from pyshot import pyshot as pyshot_lib
 from waluigi import scan_utils
 from tqdm import tqdm
 from multiprocessing.pool import ThreadPool
@@ -16,12 +16,39 @@ from os.path import exists
 from waluigi import data_model
 
 
+class Pyshot(data_model.WaluigiTool):
+
+    def __init__(self):
+        self.name = 'pyshot'
+        self.collector_type = data_model.CollectorType.ACTIVE.value
+        self.scan_order = 6
+        self.args = ""
+        self.scan_func = Pyshot.pyshot_scan_func
+        self.import_func = Pyshot.pyshot_import
+
+    @staticmethod
+    def pyshot_scan_func(scan_input):
+        luigi_run_result = luigi.build([PyshotScan(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+    @staticmethod
+    def pyshot_import(scan_input):
+        luigi_run_result = luigi.build([ImportPyshotOutput(
+            scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
+        if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            return False
+        return True
+
+
 def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
 
     ret_msg = ""
     try:
-        pyshot.take_screenshot(host=ip_addr, port_arg=port, query_arg="",
-                               dest_dir=dir_path, secure=ssl_val, port_id=port_id, domain=domain)
+        pyshot_lib.take_screenshot(host=ip_addr, port_arg=port, query_arg="",
+                                   dest_dir=dir_path, secure=ssl_val, port_id=port_id, domain=domain)
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
@@ -67,6 +94,7 @@ class PyshotScan(luigi.Task):
 
             target_obj_dict = target_map[target_key]
             port_obj = target_obj_dict['port_obj']
+
             port_id = port_obj.id
             port_str = port_obj.port
             secure = port_obj.secure

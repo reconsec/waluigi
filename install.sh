@@ -25,7 +25,7 @@ while getopts ":a:" opt; do
   esac
 done
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$( dirname "${BASH_SOURCE[0]}" )"
 
 # Check if python3 command is available
 if command -v python3 &>/dev/null; then
@@ -100,8 +100,8 @@ echo "[worker]" | sudo tee /opt/collector/luigi.cfg
 echo "no_install_shutdown_handler=True" | sudo tee -a /opt/collector/luigi.cfg
 
 sudo mkdir /opt/waluigi
-sudo cp "$SCRIPT_DIR"/setup.py /opt/waluigi/
-sudo cp -r "$SCRIPT_DIR"/waluigi /opt/waluigi/
+sudo cp ./setup.py /opt/waluigi/
+sudo cp -r ./waluigi /opt/waluigi/
 #sudo git clone -c http.sslVerify=false https://github.com/securifera/waluigi.git
 cd /opt/waluigi && python3 setup.py install
 
@@ -131,7 +131,7 @@ sudo chmod +x /usr/local/bin/nuclei
 # Install nuclei templates
 cd /opt
 sudo git clone -c http.sslVerify=false https://github.com/reconsec/nuclei-templates.git
-    
+
 # Screenshot dependencies
 install_packages fonts-liberation libgbm1 libappindicator3-1 openssl libasound2
 

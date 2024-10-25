@@ -15,10 +15,11 @@ LABEL desription="Collector Docker Image"
 # Setup initial environment
 ENV DEBIAN_FRONTEND noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-WORKDIR /root
+WORKDIR /tmp
 
 RUN apt update
 RUN apt install -y sudo
+ADD setup.py /tmp/setup.py
 ADD waluigi /tmp/waluigi
 ADD install.sh /tmp/collector_install.sh
 RUN chmod +x /tmp/collector_install.sh

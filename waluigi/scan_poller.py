@@ -73,6 +73,11 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-x", "--token", help="Collector Token", required=True)
+    parser.add_argument('-t', dest='test', help='Test flag', action='store_true')
     args = parser.parse_args()
+
+    if args.test:
+        print("[*] Test successful")
+        sys.exit(0)
 
     main(args)

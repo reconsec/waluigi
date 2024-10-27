@@ -136,7 +136,7 @@ sudo git clone -c http.sslVerify=false https://github.com/reconsec/nuclei-templa
 install_packages fonts-liberation libgbm1 libappindicator3-1 openssl libasound2
 
 # Pyshot
-cd /tmp
+cd /opt
 sudo git clone -c http.sslVerify=false https://github.com/securifera/pyshot.git
 cd pyshot && python3 setup.py install
 

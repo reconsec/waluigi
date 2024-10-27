@@ -8,7 +8,7 @@ test -f /usr/bin/screen || exit 0
 
 case "$1" in
 start)
-    /usr/bin/screen -L -dmS poller /bin/bash -c "source /root/venv/bin/activate; cd /opt/collector; python3 /opt/waluigi/waluigi/scan_poller.py -x $(cat /root/.collector_api_key)"
+    /usr/bin/screen -dmS poller /bin/bash -c "source /root/venv/bin/activate; cd /opt/collector; python3 /opt/waluigi/waluigi/scan_poller.py -x $(cat /root/.collector_api_key)"
     ;;
 stop)
     /usr/bin/screen screen -S poller -X quit

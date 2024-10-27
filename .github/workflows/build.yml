@@ -18,5 +18,5 @@ jobs:
       run: |
         cd /opt/collector
         source ~/venv/bin/activate
-        python3 /opt/waluigi/waluigi/scan_poller.py -h
+        python3 /opt/waluigi/waluigi/scan_poller.py -x 1337 -t
       

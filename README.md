@@ -1,7 +1,7 @@
-Dockerfile for manual installation of Recon collector tools
+Dockerfile for manual installation of Recon collector tools 
 
 
-### BUILD INSTRUCTIONS & README
+### BUILD INSTRUCTIONS & README 
 
 #######################################################################
 

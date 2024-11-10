@@ -5,8 +5,34 @@ import netaddr
 import luigi
 import os
 import json
+import importlib
 
 from waluigi import scan_utils
+
+waluigi_tools = [
+    ('waluigi.masscan', 'Masscan'),
+    ('waluigi.nmap_scan', 'Nmap'),
+    ('waluigi.pyshot_scan', 'Pyshot'),
+    ('waluigi.nuclei_scan', 'Nuclei'),
+    ('waluigi.subfinder_scan', 'Subfinder'),
+    ('waluigi.feroxbuster_scan', 'Feroxbuster'),
+    ('waluigi.shodan_lookup', 'Shodan'),
+    ('waluigi.httpx_scan', 'Httpx'),
+    ('waluigi.sectrails_ip_lookup', 'Sectrails'),
+    ('waluigi.module_scan', 'Module'),
+    ('waluigi.badsecrets_scan', 'Badsecrets'),
+    ('waluigi.divvycloud_lookup', 'Divvycloud')
+]
+
+
+def get_tool_classes():
+    tool_classes = []
+
+    for module_name, class_name in waluigi_tools:
+        module = importlib.import_module(module_name)
+        tool_class = getattr(module, class_name)
+        tool_classes.append(tool_class)
+    return tool_classes
 
 
 class CollectorType(enum.Enum):
@@ -94,9 +120,13 @@ class ImportToolXOutput(luigi.Task):
                 scan_id, tool_id, import_arr)
 
             # Update the records
+            print("Importing:")
+            print(import_arr)
             updated_import_arr = update_scope_array(
                 record_map, updated_record_map)
 
+            print("DB return:")
+            print(updated_import_arr)
             # Write imported data to file
             tool_import_file = self.output().path
             with open(tool_import_file, 'w') as import_fd:
@@ -148,7 +178,7 @@ def update_scope_array(record_map, updated_record_map=None):
 
 class ScanData():
 
-    def update(self, record_map, updated_record_map=None):
+    def update(self, record_map):
 
         # Parse the data
         import_list = []
@@ -157,9 +187,14 @@ class ScanData():
         else:
             import_list = record_map
 
+        print("Updating records: *********************************************")
+        print(import_list)
         self._process_data(import_list)
 
         self._post_process()
+
+        print("Component Map")
+        print(self.component_map)
 
     def _post_process(self):
 
@@ -288,13 +323,26 @@ class ScanData():
                 # Get port id
                 port_id = record_obj.parent.id
                 if port_id in self.component_port_id_map:
-                    temp_endpoint_list = self.component_port_id_map[port_id]
+                    temp_list = self.component_port_id_map[port_id]
                 else:
-                    temp_endpoint_list = []
-                    self.component_port_id_map[port_id] = temp_endpoint_list
+                    temp_list = []
+                    self.component_port_id_map[port_id] = temp_list
+                # Add port obj to list to be updated
+                temp_list.append(record_obj)
+
+                # Create a mapping of component name to port id
+                component_key = record_obj.name
+                if record_obj.version:
+                    component_key += ":" + record_obj.version
+
+                if component_key in self.component_name_port_id_map:
+                    temp_list = self.component_name_port_id_map[component_key]
+                else:
+                    temp_list = []
+                    self.component_name_port_id_map[component_key] = temp_list
 
                 # Add port obj to list to be updated
-                temp_endpoint_list.append(record_obj)
+                temp_list.append(port_id)
 
                 # Add component obj to list for being imported
                 self.component_map[record_obj.id] = record_obj
@@ -465,6 +513,9 @@ class ScanData():
 
         self.component_map = {}
         self.component_port_id_map = {}
+        self.component_name_port_id_map = {}
+
+        self.module_name_component_map = {}
 
         self.path_map = {}
         self.path_hash_id_map = {}
@@ -494,6 +545,9 @@ class ScanData():
 
         self.host_count = 0
 
+        self.module_map = {}
+        self.component_name_module_map = {}
+
         # Decode the port map
         if 'b64_port_bitmap' in scan_data and scan_data['b64_port_bitmap']:
             b64_port_bitmap = scan_data['b64_port_bitmap']
@@ -506,9 +560,6 @@ class ScanData():
 
             # Parse the data
             self._process_data(obj_list)
-
-        # Initialize port map
-        # self._init_port_map()
 
         # Post process
         self._post_process()
@@ -544,7 +595,7 @@ class Record():
     def from_jsonsable(input_dict):
         obj = None
         try:
-            print(input_dict)
+
             obj_id = input_dict['id']
             record_data = input_dict['data']
             parent_id = None
@@ -567,12 +618,12 @@ class Record():
                 obj = HttpEndpoint(id=obj_id, parent_id=parent_id)
             # elif record_type == 'screenshot':
             #    obj = Screenshot(id=obj_id)
-            elif record_type == 'component':
+            elif record_type == 'webcomponent':
                 obj = WebComponent(id=obj_id, parent_id=parent_id)
             elif record_type == 'vuln':
                 obj = Vuln(id=obj_id, parent_id=parent_id)
-            # elif record_type == 'collectionmodule':
-            #    obj = CollectionModule(id=obj_id, parent_id=parent_id)
+            elif record_type == 'collectionmodule':
+                obj = CollectionModule(id=obj_id, parent_id=parent_id)
             # elif record_type == 'collectionmoduleoutput':
             #    obj = CollectionModuleOutput(
             #        id=obj_id, parent_id=parent_id)
@@ -590,6 +641,7 @@ class Record():
                 obj.from_jsonsable(record_data)
 
         except Exception as e:
+            print(input_dict)
             raise Exception('Invalid scan object: %s' % str(e))
 
         return obj
@@ -830,10 +882,28 @@ class CollectionModule(Record):
 
         self.name = None
         self.args = None
+        self.collection_tool_id = None
+        self.bindings = None
+        self.outputs = None
 
     def _data_to_jsonable(self):
         ret = {'name': self.name, 'args': self.args}
         return ret
+
+    def from_jsonsable(self, input_data_dict):
+        try:
+            print(input_data_dict)
+            self.name = str(input_data_dict['name'])
+            self.args = str(input_data_dict['args'])
+            self.collection_tool_id = str(
+                input_data_dict['collection_tool_id'])
+            if 'bindings' in input_data_dict:
+                self.bindings = input_data_dict['bindings']
+            if 'outputs' in input_data_dict:
+                self.outputs = input_data_dict['outputs']
+
+        except Exception as e:
+            raise Exception('Invalid port object: %s' % str(e))
 
 
 class CollectionModuleOutput(Record):

@@ -2,6 +2,11 @@ from waluigi import data_model
 from types import SimpleNamespace
 from waluigi import nmap_scan
 from waluigi import nuclei_scan
+from waluigi.recon_manager import ScheduledScan
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Module(data_model.WaluigiTool):
@@ -15,34 +20,66 @@ class Module(data_model.WaluigiTool):
         self.import_func = Module.module_import
 
     @staticmethod
-    def module_scan_func(scan_input_obj):
+    def module_scan_func(scan_input_obj: ScheduledScan):
 
         ret_val = True
         # Get scope
         module_tool = scan_input_obj.current_tool
-        scan_input = scan_input_obj.scan_target_dict
+        # scan_input = scan_input_obj.scan_target_dict
 
         # Iterate over tool list
-        if scan_input:
+        # if scan_input:
 
-            scan_obj = scan_input['scan_input']
-            module_arr = scan_obj['target_map']
+        # scan_obj = scan_input['scan_input']
+        # module_arr = scan_obj['target_map']
 
-            print("[*] Iterating over modules.")
-            for module_scan_inst in module_arr:
+        scheduled_scan_obj = scan_input_obj
+        scope_obj = scheduled_scan_obj.scan_data
 
-                # Set the input
-                scan_input_obj.scan_target_dict = module_scan_inst['scan_input']
-                if 'module_id' in module_scan_inst:
-                    scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
+        collection_module_map = scope_obj.collection_module_map
+        module_arr = list(collection_module_map.values())
 
-                tool_inst = module_scan_inst['tool']
-                tool_obj = SimpleNamespace(
-                    id=tool_inst['id'], name=tool_inst['name'])
+        for module_scan_inst in module_arr:
+
+            component_arr = module_scan_inst.bindings
+            if component_arr is None:
+                continue
+            print("Bindings")
+            print(component_arr)
+            print("Component map")
+            print(scope_obj.component_map)
+            for component_key in scope_obj.component_map:
+                component_obj = scope_obj.component_map[component_key]
+                print("Component obj")
+                print(component_obj)
+
+            # Component map
+            print("Component port id map")
+            component_name_port_id_map = scope_obj.component_name_port_id_map
+            for component_key in component_name_port_id_map:
+                port_id_list = component_name_port_id_map[component_key]
+                for port_id in port_id_list:
+                    if port_id in scope_obj.port_map:
+                        port_obj = scope_obj.port_map[port_id]
+                        print("Port obj")
+                        print(port_obj)
+                    else:
+                        print("Port id not found %s" % port_id)
+
+            # Get the module id
+            module_id = module_scan_inst.id
+            tool_id = module_scan_inst.collection_tool_id
+
+            tool_map = scan_input_obj.collection_tool_map
+            if tool_id in tool_map:
+                tool_obj = tool_map[tool_id].collection_tool
                 scan_input_obj.current_tool = tool_obj
 
-                ret = None
-                tool_name = tool_inst['name']
+                tool_name = tool_obj.name
+                logger.debug("Tool name: %s" % tool_name)
+
+                # Set scan input
+                wtf
                 if tool_name == 'nmap':
 
                     # Execute nmap
@@ -60,12 +97,13 @@ class Module(data_model.WaluigiTool):
                 # Reset values
                 scan_input_obj.current_tool = module_tool
 
-            scan_input_obj.scan_target_dict = scan_input
+            else:
+                logger.error("Tool id not found %s" % tool_id)
 
         return ret_val
 
     @staticmethod
-    def module_import(scan_input_obj):
+    def module_import(scan_input_obj: ScheduledScan):
 
         ret_val = True
         # Get scope

@@ -4,8 +4,10 @@ import argparse
 import threading
 import time
 import sys
+import logging
 
 local_extender_port = 33333
+
 
 def print_usage():
     print("Help:")
@@ -14,6 +16,22 @@ def print_usage():
     print(" d - debug")
     print(" x - Toggle Scanner Thread")
     print("")
+
+
+def setup_logging():
+
+    # Setup logging
+    log_level = logging.DEBUG
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        datefmt='%Y-%m-%d_%H:%M:%S')
+
+    # Setting up file handler
+    file_handler = logging.FileHandler('waluigi.log')
+
+    # Add handlers
+    logger = logging.getLogger()
+    logger.addHandler(file_handler)
+
 
 def main(args):
 
@@ -24,7 +42,8 @@ def main(args):
     while exit_loop == False:
         try:
             # Create instance of recon manager
-            recon_manager_inst =  recon_manager.get_recon_manager(args.token, "http://127.0.0.1:%d" % local_extender_port)
+            recon_manager_inst = recon_manager.get_recon_manager(
+                args.token, "http://127.0.0.1:%d" % local_extender_port)
 
             # Create the scheduled scan thread
             scan_thread = recon_manager.ScheduledScanThread(recon_manager_inst)
@@ -34,7 +53,7 @@ def main(args):
             while exit_loop == False:
                 print("Enter a command")
                 # Only works in Python3
-                print(">", end = '')
+                print(">", end='')
                 # For Python 2.7 - notice the space between print
                 # print (">", end = '')
                 command = input()
@@ -55,11 +74,10 @@ def main(args):
                     # Toggle the scan poller
                     scan_thread.toggle_poller()
 
-
-        except Exception as e: 
+        except Exception as e:
             if "refused" in str(e):
                 print("[*] Connection refused. Retrying in 30 seconds")
-                time.sleep(30) # Stop scan scheduler thread
+                time.sleep(30)  # Stop scan scheduler thread
                 continue
             else:
                 print(traceback.format_exc())
@@ -75,4 +93,5 @@ if __name__ == "__main__":
     parser.add_argument("-x", "--token", help="Collector Token", required=True)
     args = parser.parse_args()
 
+    setup_logging()
     main(args)

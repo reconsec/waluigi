@@ -535,7 +535,6 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
                                         script_id = script['id']
                                         if script_id == 'ssl-cert':
 
-                                            # port_obj['secure'] = 1
                                             if port_obj:
                                                 port_obj.secure = True
 

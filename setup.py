@@ -2,7 +2,7 @@
 
 
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 
@@ -18,7 +18,10 @@ setup(name='waluigi',
 
       url='https://www.securifera.com',
 
-      packages=['waluigi'],
+      packages=find_packages(),
+
+      zip_safe=False,
+      
       install_requires=[
 
           'luigi',

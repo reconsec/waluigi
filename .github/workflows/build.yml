@@ -1,0 +1,22 @@
+name: Build
+
+on: 
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install
+      run: |
+        ./install.sh
+    - name: Execute
+      run: |
+        cd /opt/collector
+        source ~/venv/bin/activate
+        python3 /opt/waluigi/waluigi/scan_poller.py -x 1337 -t
+      

@@ -1,12 +1,11 @@
 import json
 import os
-import subprocess
 import shutil
 import netaddr
-import concurrent.futures
 import luigi
 import traceback
 import time
+import logging
 
 from luigi.util import inherits
 from libnmap.parser import NmapParser
@@ -14,8 +13,9 @@ from waluigi import scan_utils
 from waluigi import data_model
 from datetime import datetime
 
-custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
+logger = logging.getLogger(__name__)
 
+custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
 class Nmap(data_model.WaluigiTool):
 
@@ -258,7 +258,7 @@ class NmapScan(luigi.Task):
 
         # Loop through map and create nmap command array
         counter = 0
-        commands = []
+        futures = []
         # print(nmap_scan_list)
         for scan_obj in nmap_scan_list:
 
@@ -338,14 +338,13 @@ class NmapScan(luigi.Task):
 
             nmap_scan_cmd_list.append(nmap_scan_inst)
 
-            # print(command)
-            commands.append(command)
+            futures.append(scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=command))
             counter += 1
 
-        # Run threaded
-        # print(commands)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            executor.map(subprocess.run, commands)
+
+        # Wait for the tasks to complete and retrieve results
+        for future in futures:
+            future.result()  # This blocks until the individual task is complete
 
         # Add the command list to the output file
         nmap_scan_data['nmap_scan_list'] = nmap_scan_cmd_list

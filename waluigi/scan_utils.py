@@ -1,15 +1,73 @@
 import os
 import subprocess
 import re
+import threading
+import traceback
 import netaddr
+import logging
 
 from json import JSONDecoder, JSONDecodeError
 from threading import Thread
 from queue import Queue
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor, Future
 
 NOT_WHITESPACE = re.compile(r'\S')
+logger = logging.getLogger(__name__)
 
+class ThreadExecutorWrapper():
+
+    def __init__(self, max_workers=10):
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.results = []
+        self.exceptions = []
+        self.futures_map = {}  
+        self.lock = threading.Lock()  
+        self.task_counter = 0  
+
+    def _internal_callback(self, future: Future):
+
+        with self.lock:
+            task_id = self.futures_map.pop(future, None)
+
+        if task_id is None:
+            logger.warning("Future not found in the map.")
+            return
+
+        try:
+            result = future.result()
+            with self.lock:
+                self.results.append((task_id, result))
+            logger.debug(f"Task {task_id} completed with result: {result}")
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            with self.lock:
+                self.exceptions.append((task_id, e, tb))
+            logger.debug(f"Task {task_id} raised an exception: {e}")
+            logger.debug(f"Traceback:\n{tb}")
+
+    def submit(self, fn, *args, **kwargs):
+
+        with self.lock:
+            task_id = self.task_counter
+            self.task_counter += 1
+
+        future = self.executor.submit(fn, *args, **kwargs)
+        with self.lock:
+            self.futures_map[future] = task_id
+        future.add_done_callback(self._internal_callback)
+
+        return future
+
+    def shutdown(self, wait=True):
+        """
+        Shuts down the executor, optionally waiting for currently executing tasks to finish.
+
+        :param wait: If True, wait for all pending futures to finish.
+        """
+        self.executor.shutdown(wait=wait)
+        logger.debug("Executor has been shut down.")
 
 class ProcessStreamReader(Thread):
 
@@ -47,9 +105,15 @@ class ProcessStreamReader(Thread):
 
     def get_output(self):
 
-        output_str = b''
-        for line in iter(self.output_queue.get, None):
-            output_str += line
+        output_str = ''
+        try:
+            output_bytes = b''
+            for line in iter(self.output_queue.get, None):
+                output_bytes += line
+
+            output_str = output_bytes.decode()
+        except Exception as e:
+            logger.error("Error getting process output: %s" % str(e))
 
         return output_str
 
@@ -115,17 +179,16 @@ def init_tool_folder(tool_name, desc, scan_id):
     return dir_path
 
 
-def process_wrapper(cmd_args, use_shell=False, my_env=None):
+def process_wrapper(cmd_args, use_shell=False, my_env=None, print_output=False):
 
-    ret_value = True
-    print("[*] Executing '%s'" % str(cmd_args))
+    logger.debug("Executing '%s'" % str(cmd_args))
     p = subprocess.Popen(cmd_args, shell=use_shell, stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=my_env)
 
     stdout_reader = ProcessStreamReader(
-        ProcessStreamReader.StreamType.STDOUT, p.stdout, True)
+        ProcessStreamReader.StreamType.STDOUT, p.stdout, print_output)
     stderr_reader = ProcessStreamReader(
-        ProcessStreamReader.StreamType.STDERR, p.stderr, True)
+        ProcessStreamReader.StreamType.STDERR, p.stderr, print_output)
 
     p.stdin.close()
 
@@ -133,13 +196,9 @@ def process_wrapper(cmd_args, use_shell=False, my_env=None):
     stderr_reader.start()
 
     exit_code = p.wait()
-    if exit_code != 0:
-        print("[*] Exit code: %s" % str(exit_code))
-        output_bytes = stderr_reader.get_output()
-        print("[-] Error: %s " % output_bytes.decode())
-        ret_value = False
 
-    return ret_value
+    ret_data = {"exit_code": exit_code, "stdout": stdout_reader.get_output(),"stderr": stderr_reader.get_output()}
+    return ret_data
 
 # Parse a file that contains multiple JSON blogs and return a list of objects
 
@@ -177,3 +236,7 @@ def parse_json_blob_file(output_file):
                 obj_arr.append(obj)
 
     return obj_arr
+
+
+# Create thread executor
+executor = ThreadExecutorWrapper()

@@ -21,7 +21,7 @@ class Sectrails(data_model.WaluigiTool):
     def __init__(self):
         self.name = 'sectrails'
         self.collector_type = data_model.CollectorType.PASSIVE.value
-        self.scan_order = 5
+        self.scan_order = 2
         self.args = ""
         self.import_func = Sectrails.import_sectrailsiplookup
 

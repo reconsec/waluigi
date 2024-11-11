@@ -15,7 +15,11 @@ import os
 import netifaces
 import enum
 import functools
+import logging
+import luigi
 
+
+logger = logging.getLogger(__name__)
 
 # User Agent
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
@@ -118,10 +122,10 @@ class ScheduledScan():
         self.update_status(ScanStatus.RUNNING.value)
 
     # Update the scan status
-    def update_status(self, scan_status):
+    def update_status(self, scan_status, err_msg=None):
         # Send update to the server
         self.scan_thread.recon_manager.update_scan_status(
-            self.scan_id, scan_status)
+            self.scan_id, scan_status, err_msg)
 
     def update_tool_status(self, tool_id, tool_status):
         # Send update to the server
@@ -140,6 +144,9 @@ class ScheduledScan():
 
 class ScheduledScanThread(threading.Thread):
 
+    # Static variable to hold luigi exceptions
+    failed_task_exception = None
+
     def __init__(self, recon_manager, connection_manager=None):
         threading.Thread.__init__(self)
         self._is_running = False
@@ -149,18 +156,23 @@ class ScheduledScanThread(threading.Thread):
         self.connection_manager = connection_manager
         self.exit_event = Event()
 
+    # Event handler to catch luigi task failures
+    @luigi.Task.event_handler(luigi.Event.FAILURE)
+    def catch_failure(task, exception):
+        ScheduledScanThread.failed_task_exception = (task, exception)
+
     def toggle_poller(self):
 
         if self._enabled:
             self._enabled = False
-            print("[*] Scan poller disabled.")
+            logger.debug("Scan poller disabled.")
         else:
             self._enabled = True
-            print("[*] Scan poller enabled.")
+            logger.debug("Scan poller enabled.")
 
     def execute_scan_jobs(self, scheduled_scan_obj: ScheduledScan):
 
-        ret_val = False
+        err_msg = None
         # Set connection target in connection manager to this target
         target_id = scheduled_scan_obj.target_id
         self.recon_manager.set_current_target(
@@ -173,8 +185,9 @@ class ScheduledScanThread(threading.Thread):
 
         # Connect to extender to see if scan has been cancelled and get tool scope
         if self.connection_manager and self.connection_manager.connect_to_extender() == False:
-            print("[-] Failed connecting to extender")
-            return False
+            err_msg = "Failed connecting to extender"
+            logger.error(err_msg)
+            return err_msg
 
         ret_status = None
         for collection_tool_inst in sorted_list:
@@ -196,8 +209,9 @@ class ScheduledScanThread(threading.Thread):
             # Check if scan is cancelled
             scan = self.recon_manager.get_scan(scheduled_scan_obj.scan_id)
             if scan is None or scan.status_int == ScanStatus.CANCELLED.value:
-                print("[-] Scan cancelled or doesn't exist. Returning.")
-                return False
+                err_msg = "Scan cancelled or doesn't exist"
+                logger.debug(err_msg)
+                return err_msg
 
             # Check if load balanced
             # skip_load_balance_ports = self.recon_manager.is_load_balanced()
@@ -206,8 +220,9 @@ class ScheduledScanThread(threading.Thread):
             if tool_obj.tool_type == 2:
 
                 if self.connection_manager and self.connection_manager.connect_to_target() == False:
-                    print("[-] Failed connecting to target")
-                    return False
+                    err_msg = "Failed connecting to target"
+                    logger.error(err_msg)
+                    return err_msg
 
                 try:
                     # Execute scan func
@@ -215,21 +230,33 @@ class ScheduledScanThread(threading.Thread):
                         ret_status = CollectionToolStatus.ERROR.value
                         break
 
+                except Exception as e:
+                    err_msg = "Error calling scan function: %s" % str(e)
+                    logger.error(err_msg)
+                    logger.debug(traceback.format_exc())
+                    ret_status = CollectionToolStatus.ERROR.value
                 finally:
                     scheduled_scan_obj.update_tool_status(
                         collection_tool_inst.id, ret_status)
-                    # elf.recon_manager.update_tool_status(ret_status)
                     if self.connection_manager and self.connection_manager.connect_to_extender() == False:
-                        print("[-] Failed connecting to extender")
-                        return False
+                        err_msg = "Failed connecting to extender"
+                        logger.error(err_msg)
+                        return err_msg
 
             # Import results
             try:
                 if self.recon_manager.import_func(scheduled_scan_obj) == False:
+                    err_msg = "Import function failed"
+                    logger.debug(err_msg)
                     ret_status = CollectionToolStatus.ERROR.value
                     break
                 else:
                     ret_status = CollectionToolStatus.COMPLETED.value
+            except Exception as e:
+                err_msg = "Error calling import function: %s" % str(e)
+                logger.error(err_msg)
+                logger.debug(traceback.format_exc())
+                ret_status = CollectionToolStatus.ERROR.value
             finally:
                 scheduled_scan_obj.update_tool_status(
                     collection_tool_inst.id, ret_status)
@@ -237,30 +264,34 @@ class ScheduledScanThread(threading.Thread):
             # Reset the current tool variable
             scheduled_scan_obj.current_tool = None
 
+        if ScheduledScanThread.failed_task_exception:
+            err_msg = f"{ScheduledScanThread.failed_task_exception[0]}\n{ScheduledScanThread.failed_task_exception[1]}"
+            ScheduledScanThread.failed_task_exception = None
+
+
         # Cleanup files
         if ret_status == CollectionToolStatus.COMPLETED.value:
             scan_cleanup.scan_cleanup_func(scheduled_scan_obj.scan_id)
-            ret_val = True
+            err_msg = None
 
-        return ret_val
+        return err_msg
 
     def process_scan_obj(self, sched_scan_obj):
 
         # Create scan object
         scheduled_scan_obj = ScheduledScan(self, sched_scan_obj)
-        self.recon_manager.dbg_print(scheduled_scan_obj)
 
         # Execute scan jobs
         scan_status = ScanStatus.ERROR.value
         try:
-            ret_val = self.execute_scan_jobs(scheduled_scan_obj)
+            err_msg = self.execute_scan_jobs(scheduled_scan_obj)
 
             # Set status
             if self.connection_manager and self.connection_manager.connect_to_extender() == False:
-                print("[-] Failed connecting to extender")
+                logger.error("Failed connecting to extender")
                 return False
 
-            if ret_val:
+            if err_msg is None:
                 # Remove scheduled scan
                 self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
 
@@ -268,10 +299,11 @@ class ScheduledScanThread(threading.Thread):
                 scan_status = ScanStatus.COMPLETED.value
 
         except Exception as e:
-            print(traceback.format_exc())
+            logger.error("Error executing scan job")
+            logger.debug(traceback.format_exc())
 
         # Update scan status
-        scheduled_scan_obj.update_status(scan_status)
+        scheduled_scan_obj.update_status(scan_status, err_msg)
         return
 
     def run(self):
@@ -289,7 +321,7 @@ class ScheduledScanThread(threading.Thread):
                     # Add the wait up here so the continues will sleep for 60 seconds
                     self.exit_event.wait(60)
                     if self._enabled:
-                        print("[*] Checking for any scheduled scans")
+                        logger.debug("Checking for any scheduled scans")
                         lock_val = None
                         try:
 
@@ -298,12 +330,10 @@ class ScheduledScanThread(threading.Thread):
                                 if lock_val:
                                     ret_val = self.connection_manager.connect_to_extender()
                                     if ret_val == False:
-                                        print(
-                                            "[-] Failed connecting to extender")
+                                        logger.error("Failed connecting to extender")
                                         continue
                                 else:
-                                    print(
-                                        "[-] Connection lock is currently held. Retrying later")
+                                    logger.debug("Connection lock is currently held. Retrying later")
                                     continue
 
                             sched_scan_obj_arr = recon_manager.get_scheduled_scans()
@@ -311,10 +341,10 @@ class ScheduledScanThread(threading.Thread):
                                 sched_scan_obj = sched_scan_obj_arr[0]
                                 self.process_scan_obj(sched_scan_obj)
                         except requests.exceptions.ConnectionError as e:
-                            print("[-] Unable to connect to server.")
+                            logger.error("Unable to connect to server.")
                             pass
                         except Exception as e:
-                            print(traceback.format_exc())
+                            logger.debug(traceback.format_exc())
                             pass
                         finally:
                             # Release the lock if we have it
@@ -370,10 +400,10 @@ class ReconManager:
             self.update_collector(collector_data)
 
         except requests.exceptions.ConnectionError as e:
-            print("[-] Unable to connect to server.")
+            logger.error("Unable to connect to server")
             pass
         except Exception as e:
-            print(traceback.format_exc())
+            logger.debug(traceback.format_exc())
             pass
 
     def register_tool(self, tool_class):
@@ -391,8 +421,9 @@ class ReconManager:
 
             # Call the scan function
             ret_val = tool_inst.scan_func(scan_input)
+
         else:
-            print("[-] %s tool does not exist in table." % tool_name)
+            logger.debug("%s tool does not exist in table." % tool_name)
 
         return ret_val
 
@@ -407,17 +438,11 @@ class ReconManager:
 
             # Call the scan function
             ret_val = tool_inst.import_func(scan_input)
+
         else:
-            print("[-] %s tool does not exist in table." % tool_name)
+            logger.debug(f"Error: {tool_name} tool does not exist in table.")
 
         return ret_val
-
-    def set_debug(self, debug):
-        self.debug = debug
-
-    def dbg_print(self, output):
-        if self.debug:
-            print(output)
 
     def get_network_interfaces(self):
 
@@ -490,7 +515,7 @@ class ReconManager:
             try:
                 data = cipher_aes.decrypt_and_verify(ciphertext, tag).decode()
             except Exception as e:
-                print("[-] Error decrypting response: %s" % str(e))
+                logger.error("Error decrypting response: %s" % str(e))
 
                 # Attempting to decrypt from the session key on disk
                 session_key = self._get_session_key_from_disk()
@@ -502,8 +527,8 @@ class ReconManager:
                         self.session_key = session_key
                         return data
                     except Exception as e:
-                        print(
-                            "[-] Error decrypting response with session from disk. Refreshing session: %s" % str(e))
+                        logger.error(
+                            "Error decrypting response with session from disk. Refreshing session: %s" % str(e))
 
                 # Remove the previous session file
                 os.remove('session')
@@ -521,7 +546,7 @@ class ReconManager:
             with open("session", "r") as file_fd:
                 hex_session = file_fd.read().strip()
 
-            print("[*] Session Key File Exists. Key: %s" % hex_session)
+            logger.debug("Session Key File Exists. Key: %s" % hex_session)
 
             session_key = binascii.unhexlify(hex_session)
 
@@ -544,7 +569,7 @@ class ReconManager:
         r = requests.post('%s/api/session' % self.manager_url, headers=self.headers, json={"data": b64_val},
                           verify=False)
         if r.status_code != 200:
-            print("[-] Error retrieving session key.")
+            logger.error("Error retrieving session key.")
             return session_key
 
         if r.content:
@@ -559,8 +584,9 @@ class ReconManager:
                 cipher_rsa = PKCS1_OAEP.new(private_key_obj)
                 session_key = cipher_rsa.decrypt(enc_session_key)
 
-                print("[*] Session Key: %s" %
-                      binascii.hexlify(session_key).decode())
+                #logger.debug("Session Key: %s" %
+                #      binascii.hexlify(session_key).decode())
+
                 with open(os.open('session', os.O_CREAT | os.O_WRONLY, 0o777), 'w') as fh:
                     fh.write(binascii.hexlify(session_key).decode())
 
@@ -574,7 +600,7 @@ class ReconManager:
         if r.status_code == 404:
             return subnets
         if r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retriving subnets")
             return subnets
 
         if r.content:
@@ -599,7 +625,7 @@ class ReconManager:
         if r.status_code == 404:
             return target_obj
         if r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving targets")
             return target_obj
 
         if r.content:
@@ -623,19 +649,18 @@ class ReconManager:
         if r.status_code == 404:
             return target_obj
         if r.status_code != 200:
-            print("[-] Error retrieving tool scope.")
+            logger.error("Error retrieving tool scope.")
             return target_obj
 
         try:
             if r.content:
                 content = r.json()
                 data = self._decrypt_json(content)
-                # print(data)
                 if len(data) > 0:
                     target_obj = json.loads(data)
 
         except Exception as e:
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
 
         return target_obj
 
@@ -647,7 +672,7 @@ class ReconManager:
         if r.status_code == 404:
             return urls
         if r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving urls")
             return urls
 
         if r.content:
@@ -671,7 +696,7 @@ class ReconManager:
         if r.status_code == 404:
             return sched_scan_arr
         elif r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving scheduled scans")
             return sched_scan_arr
 
         if r.content:
@@ -691,7 +716,7 @@ class ReconManager:
         if r.status_code == 404:
             return sched_scan
         elif r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving scan")
             return sched_scan
 
         if r.content:
@@ -709,7 +734,7 @@ class ReconManager:
         if r.status_code == 404:
             return scan
         elif r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving scan")
             return scan
 
         if r.content:
@@ -730,7 +755,7 @@ class ReconManager:
         if r.status_code == 404:
             return False
         elif r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error removing scheduled scan")
             return False
 
         return ret_val
@@ -743,7 +768,7 @@ class ReconManager:
         if r.status_code == 404:
             return port_arr
         elif r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving hosts")
             return port_arr
 
         if r.content:
@@ -762,7 +787,7 @@ class ReconManager:
         if r.status_code == 404:
             return port_arr
         elif r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving tools")
             return port_arr
 
         if r.content:
@@ -791,28 +816,10 @@ class ReconManager:
 
         return True
 
-    # def update_collector_status(self, network_ifaces):
-
-    #     # Import the data to the manager
-    #     json_data = json.dumps(network_ifaces).encode()
-    #     cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
-    #     ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
-    #     packet = cipher_aes.nonce + tag + ciphertext
-    #     # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-    #     # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
-
-    #     b64_val = base64.b64encode(packet).decode()
-    #     r = requests.post('%s/api/collector/interfaces/' % (self.manager_url),
-    #                       headers=self.headers, json={"data": b64_val}, verify=False)
-    #     if r.status_code != 200:
-    #         raise RuntimeError("[-] Error updating collector interfaces.")
-
-    #     return True
-
-    def update_scan_status(self, scan_id, status):
+    def update_scan_status(self, scan_id, status, err_msg=None):
 
         # Import the data to the manager
-        status_dict = {'status': status}
+        status_dict = {'status': status, 'error_message': err_msg}
         json_data = json.dumps(status_dict).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
@@ -834,7 +841,7 @@ class ReconManager:
         if r.status_code == 404:
             return status
         if r.status_code != 200:
-            print("[-] Unknown Error")
+            logger.error("Unknown Error retrieving tool status")
             return status
 
         if r.content:
@@ -901,7 +908,6 @@ class ReconManager:
         scan_results_dict = {'tool_id': tool_id,
                              'scan_id': scan_id, 'obj_list': scan_results}
 
-        # print(scan_results_dict)
         # Import the data to the manager
         json_data = json.dumps(scan_results_dict).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
@@ -944,7 +950,6 @@ class ReconManager:
         # Import the data to the manager
         obj_data = [data_dict]
 
-        # print(b64_image)
         json_data = json.dumps(obj_data).encode()
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)

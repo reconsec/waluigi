@@ -9,6 +9,7 @@ import traceback
 import ipaddress
 import hashlib
 import binascii
+import logging
 
 from luigi.util import inherits
 from tqdm import tqdm
@@ -17,6 +18,17 @@ from waluigi import scan_utils
 from waluigi import data_model
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
+
+logger = logging.getLogger(__name__)
+
+# List to store exceptions from failed tasks
+# failed_tasks_exception = None
+
+# # Event handler to catch task failures
+# @luigi.Task.event_handler(luigi.Event.FAILURE)
+# def catch_failure(task, exception):
+#     global failed_tasks_exception
+#     failed_tasks_exception = (task, exception)
 
 
 class Shodan(data_model.WaluigiTool):
@@ -33,6 +45,21 @@ class Shodan(data_model.WaluigiTool):
         luigi_run_result = luigi.build([ImportShodanOutput(
             scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
         if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
+            #logger.error("Some tasks failed.")
+
+            # Access collected exceptions from the event handler
+            #if failed_tasks_exception:
+            #    logger.debug(f"{failed_tasks_exception[0]} {failed_tasks_exception[1]}")
+            
+            # Access failure events to retrieve exceptions
+            # failure_events = luigi_run_result.worker._status_reporter.get_task_failure_events()
+            # logger.error("Failure events: %d" % len(failure_events))
+            # for event in failure_events:
+            #     task_name = event.task_id
+            #     exception = event.exception
+            #     traceback = event.traceback
+            #     logger.debug(f"Task {task_name} failed with exception: {exception}")
+            #     logger.debug(f"Traceback:\n{traceback}")
             return False
         return True
 
@@ -93,7 +120,7 @@ def shodan_dns_query(api, domain):
             if "invalid api key" in err_msg:
                 raise e
             if "no information" not in err_msg:
-                print("[-] Shodan API Error: %s" % err_msg)
+                logger.error("Shodan API Error: %s" % err_msg)
             break
 
     # Grab the host information for any IP records that were returned
@@ -128,7 +155,7 @@ def shodan_host_query(api, ip):
             if "invalid api key" in err_msg:
                 raise e
             if "no information" not in err_msg:
-                print("[-] Shodan API Error: %s" % err_msg)
+                logger.error("Shodan API Error: %s" % err_msg)
             break
 
     return service_list
@@ -144,7 +171,6 @@ def shodan_subnet_query(api, subnet, cidr):
     while True:
         try:
             for service in api.search_cursor(query):
-                # print(service)
                 service_list.append(service)
             break
         except shodan.exception.APIError as e:
@@ -156,7 +182,7 @@ def shodan_subnet_query(api, subnet, cidr):
             if "invalid api key" in err_msg:
                 raise e
             if "no information" not in err_msg:
-                print("[-] Shodan API Error: %s" % err_msg)
+                logger.error("[-] Shodan API Error: %s" % err_msg)
             break
 
     return service_list
@@ -181,8 +207,8 @@ def shodan_wrapper(shodan_key, ip, cidr):
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
-        print("[-] Shodan scan thread exception.")
-        print(traceback.format_exc())
+        logger.error("[-] Shodan scan thread exception.")
+        logger.error(traceback.format_exc())
         # Re-raise the original exception so the Pool worker can
         # clean up
         return None
@@ -199,7 +225,6 @@ def reduce_subnets(ip_subnets):
     subnet_list = []
     for subnet in ip_subnets:
         # Add class C networks for all IPs
-        # print(subnet)
         net_inst = netaddr.IPNetwork(subnet.strip())
 
         # Skip private IPs
@@ -209,9 +234,7 @@ def reduce_subnets(ip_subnets):
         net_ip = str(net_inst.network)
 
         if net_inst.prefixlen < i:
-            # print(net_ip)
             network = netaddr.IPNetwork(net_ip + "/%d" % i)
-            # print(c_network)
             c_network = network.cidr
             subnet_list.append(c_network)
         else:
@@ -252,20 +275,20 @@ class ShodanScan(luigi.Task):
             ip_subnets = file_fd.readlines()
 
         # Attempt to consolidate subnets to reduce the number of shodan calls
-        print("[*] Attempting to reduce subnets queried by Shodan")
+        logger.debug("Consolidating subnets queried by Shodan")
 
         if len(ip_subnets) > 50:
-            print("CIDRS Before: %d" % len(ip_subnets))
+            logger.debug("CIDRS Before: %d" % len(ip_subnets))
             ip_subnets = reduce_subnets(ip_subnets)
-            print("CIDRS After: %d" % len(ip_subnets))
+            logger.debug("CIDRS After: %d" % len(ip_subnets))
 
         # Get the shodan key
-        print("[*] Retrieving Shodan data")
+        logger.debug("Retrieving Shodan data")
 
         # Write the output
         shodan_key = scheduled_scan_obj.current_tool.api_key
-        print("Key: " + shodan_key)
         if shodan_key and len(shodan_key) > 0:
+
             # Do a test lookup to make sure our key is good and we have connectivity
             result = shodan_wrapper(shodan_key, "8.8.8.8", 32)
             if result is not None:
@@ -274,7 +297,6 @@ class ShodanScan(luigi.Task):
                 thread_list = []
                 for subnet in ip_subnets:
 
-                    print(subnet)
                     # Get the subnet
                     subnet = str(subnet)
                     subnet_arr = subnet.split("/")
@@ -316,7 +338,8 @@ class ShodanScan(luigi.Task):
                 f_out.close()
 
         else:
-            print("[-] No shodan API key provided.")
+            logger.error("No shodan API key provided.")
+            raise Exception("No shodan API key provided")
 
 
 @inherits(ShodanScan)
@@ -325,14 +348,6 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
     def requires(self):
         # Requires MassScan Task to be run prior
         return ShodanScan(scan_input=self.scan_input)
-
-    # def output(self):
-
-    #     tool_output_file = self.input().path
-    #     dir_path = os.path.dirname(tool_output_file)
-    #     out_file = dir_path + os.path.sep + "tool_import_json"
-
-    #     return luigi.LocalTarget(out_file)
 
     def run(self):
 
@@ -351,7 +366,6 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
 
                 for service in json_data:
 
-                    # print(service)
                     host_id = None
                     port_id = None
                     ip_int = service['ip']
@@ -370,7 +384,6 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
 
                     # See if a port exists for this service
                     port = service['port']
-                    # print("[*] PORT: %s" % str(port))
                     port_obj = data_model.Port(
                         parent_id=host_id)
                     port_obj.proto = 0
@@ -408,7 +421,6 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
                     # Get http data
                     if 'http' in service:
                         http_dict = service['http']
-                        # print(http_dict)
 
                         endpoint_domain_id = None
                         if 'status' in http_dict:
@@ -421,7 +433,6 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
                             server_str = http_dict['server']
                             if server_str:
                                 server = server_str.strip().lower()
-                                # print(server)
                                 if len(server) > 0:
                                     if " " in server:
                                         server_tech = server.split(" ")[0]
@@ -524,7 +535,6 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
 
                         hostname_arr = service['hostnames']
                         for domain_name in hostname_arr:
-                            # print(domain_name)
                             # Convert the domain to a lower since case doesn't matter
                             if len(domain_name) > 0:
                                 domain_name = domain_name.lower()

@@ -22,6 +22,7 @@ class Subfinder(data_model.WaluigiTool):
         self.collector_type = data_model.CollectorType.ACTIVE.value
         self.scan_order = 8
         self.args = ""
+        self.scan_func = Subfinder.subfinder_lookup
         self.import_func = Subfinder.subfinder_import
 
     @staticmethod

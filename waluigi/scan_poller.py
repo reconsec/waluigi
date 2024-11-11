@@ -8,6 +8,7 @@ import logging
 
 local_extender_port = 33333
 
+logger = logging.getLogger(__name__)
 
 def print_usage():
     print("Help:")
@@ -29,7 +30,6 @@ def setup_logging():
     file_handler = logging.FileHandler('waluigi.log')
 
     # Add handlers
-    logger = logging.getLogger()
     logger.addHandler(file_handler)
 
 

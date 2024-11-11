@@ -1,6 +1,5 @@
 import json
 import os
-import subprocess
 import netaddr
 import socket
 import luigi
@@ -20,7 +19,7 @@ class Subfinder(data_model.WaluigiTool):
     def __init__(self):
         self.name = 'subfinder'
         self.collector_type = data_model.CollectorType.ACTIVE.value
-        self.scan_order = 8
+        self.scan_order = 1
         self.args = ""
         self.scan_func = Subfinder.subfinder_lookup
         self.import_func = Subfinder.subfinder_import
@@ -92,9 +91,13 @@ def update_config_file(collection_tools, my_env):
 
     # If no file then run subfinder to generate the template
     if os.path.isfile(config_file_path) == False:
-        subprocess.run(["subfinder", "-d", "localhost",
-                       "-timeout", "1"], env=my_env)
-        subprocess.run(["subfinder", "-h"], env=my_env)
+        cmd_arr = ["subfinder", "-d", "localhost", "-timeout", "1"]
+        future = scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=cmd_arr, my_env=my_env)
+        future.result()
+
+        cmd_arr = ["subfinder", "-h"]
+        future = scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=cmd_arr, my_env=my_env)
+        future.result()
 
     # Update provider config file
     with open(config_file_path, 'r') as file_fd:
@@ -169,9 +172,6 @@ def dns_wrapper(domain_set):
                 print("[*] Adding IP %s for hostname %s" %
                       (ip_str, domain_str))
 
-    except subprocess.CalledProcessError as e:
-        print("[*] called process error")
-        pass
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback

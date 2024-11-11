@@ -1,7 +1,6 @@
 import netifaces as ni
 import re
 import os
-import subprocess
 import netaddr
 import xml.etree.ElementTree as ET
 import luigi
@@ -45,20 +44,23 @@ class Masscan(data_model.WaluigiTool):
 
 
 def get_mac_address(ip_address):
+
+    ret = None
     # Run the arp command to get the ARP table entries
-    try:
-        output = subprocess.check_output(["arp", "-n", ip_address], text=True)
-    except subprocess.CalledProcessError as e:
-        return None
+    arp_cmd = ["arp", "-n", ip_address]
+    
+    future = scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=arp_cmd)
+    output_json = future.result()
+    output = output_json['stdout']
 
-    # Use regular expression to extract the MAC address
-    mac_regex = r"(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))"
-    match = re.search(mac_regex, output)
-
-    if match:
-        return match.group(0)
-    else:
-        return None
+    if output:
+        # Use regular expression to extract the MAC address
+        mac_regex = r"(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))"
+        match = re.search(mac_regex, output)
+        if match:
+            ret = match.group(0)
+        
+    return ret
 
 
 def get_default_gateway():
@@ -206,7 +208,9 @@ class MasscanScan(luigi.Task):
             command.extend(command_arr)
 
             # Execute process
-            subprocess.run(command)
+            future = scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=command)
+            # Wait for the process to finish
+            future.result() 
 
         else:
             logger.error("No targets to scan with masscan")

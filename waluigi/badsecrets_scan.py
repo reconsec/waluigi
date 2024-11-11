@@ -23,7 +23,7 @@ class Badsecrets(data_model.WaluigiTool):
     def __init__(self):
         self.name = 'badsecrets'
         self.collector_type = data_model.CollectorType.ACTIVE.value
-        self.scan_order = 7
+        self.scan_order = 10
         self.args = ""
         self.scan_func = Badsecrets.badsecrets_scan_func
         self.import_func = Badsecrets.badsecrets_import

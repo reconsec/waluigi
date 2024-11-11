@@ -1,10 +1,7 @@
 from datetime import datetime
 import json
 import os
-import subprocess
 import luigi
-import multiprocessing
-import traceback
 import hashlib
 import binascii
 import base64
@@ -12,8 +9,6 @@ import netaddr
 import time
 
 from luigi.util import inherits
-from tqdm import tqdm
-from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 from waluigi import data_model
 from urllib.parse import urlparse
@@ -45,31 +40,6 @@ class Httpx(data_model.WaluigiTool):
             return False
         return True
 
-
-def httpx_wrapper(cmd_args):
-
-    ret_value = True
-    p = subprocess.Popen(cmd_args, shell=False,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    stdout_reader = scan_utils.ProcessStreamReader(
-        scan_utils.ProcessStreamReader.StreamType.STDOUT, p.stdout)
-    stderr_reader = scan_utils.ProcessStreamReader(
-        scan_utils.ProcessStreamReader.StreamType.STDERR, p.stderr)
-
-    stdout_reader.start()
-    stderr_reader.start()
-
-    exit_code = p.wait()
-    if exit_code != 0:
-        print("[*] Exit code: %s" % str(exit_code))
-        output_bytes = stderr_reader.get_output()
-        print("[-] Error: %s " % output_bytes.decode())
-        ret_value = False
-
-    return ret_value
-
-
 class HttpXScan(luigi.Task):
 
     scan_input = luigi.Parameter()
@@ -90,21 +60,15 @@ class HttpXScan(luigi.Task):
     def run(self):
 
         scheduled_scan_obj = self.scan_input
-        # scan_obj = scheduled_scan_obj.scan_target_dict
 
         # Get output file path
         output_file_path = self.output().path
         output_dir = os.path.dirname(output_file_path)
 
         output_file_list = []
-        # port_to_id_map = {}
-
-        # print(scan_obj)
-        # if scan_obj:
 
         scope_obj = scheduled_scan_obj.scan_data
         port_ip_dict = {}
-        command_list = []
 
         # script_args = None
         script_args = scheduled_scan_obj.current_tool.args
@@ -115,49 +79,43 @@ class HttpXScan(luigi.Task):
         domain_map = scope_obj.domain_map
         port_map = scope_obj.port_map
 
-        scan_port_list = scope_obj.port_number_list
-        if len(scan_port_list) > 0:
-            port_id = None
-            for port_str in scan_port_list:
+        # Check if massscan was already run
+        mass_scan_ran = False
+        for collection_tool in scheduled_scan_obj.collection_tool_map.values():
+            if collection_tool.collection_tool.name == 'masscan':
+                mass_scan_ran = True
+                break
 
-                # Add a port entry for each host
-                for host_id in host_map:
-                    host_obj = host_map[host_id]
-                    ip_addr = host_obj.ipv4_addr
+        if mass_scan_ran:
+            # Create scan jobs for each port and only scan the IPs mapped to that port
+            target_map = scheduled_scan_obj.scan_data.host_port_obj_map
+            for target_key in target_map:
 
-                    # Add to ip set
-                    if port_str in port_ip_dict:
-                        ip_set = port_ip_dict[port_str]
-                    else:
-                        ip_set = set()
-                        port_ip_dict[port_str] = ip_set
+                target_obj_dict = target_map[target_key]
+                port_obj = target_obj_dict['port_obj']
+                port_str = port_obj.port
 
-                    # Add IP to list
-                    ip_set.add(ip_addr)
+                host_obj = target_obj_dict['host_obj']
+                ip_addr = host_obj.ipv4_addr
 
-                 # Add a port entry for each domain
-                for domain_id in domain_map:
-                    domain_obj = domain_map[domain_id]
-                    domain_name = domain_obj.name
+                 # Add to ip set
+                if port_str in port_ip_dict:
+                    ip_set = port_ip_dict[port_str]
+                else:
+                    ip_set = set()
+                    port_ip_dict[port_str] = ip_set
 
-                    if port_str in port_ip_dict:
-                        ip_set = port_ip_dict[port_str]
-                    else:
-                        ip_set = set()
-                        port_ip_dict[port_str] = ip_set
+                # Add IP to list
+                ip_set.add(ip_addr)
 
-                    # Add domain to list
-                    ip_set.add(domain_name)
+        else:
+            scan_port_list = scope_obj.port_number_list
+            if len(scan_port_list) > 0:
+                port_id = None
+                for port_str in scan_port_list:
 
-        elif len(port_map) > 0:
-
-            for port_id in port_map:
-                port_obj = port_map[port_id]
-                port_str = str(port_obj.port)
-
-                if port_obj.parent:
-                    host_id = port_obj.parent.id
-                    if host_id in host_map:
+                    # Add a port entry for each host
+                    for host_id in host_map:
                         host_obj = host_map[host_id]
                         ip_addr = host_obj.ipv4_addr
 
@@ -171,14 +129,51 @@ class HttpXScan(luigi.Task):
                         # Add IP to list
                         ip_set.add(ip_addr)
 
-                        # Get domains
-                        if host_id in scope_obj.domain_host_id_map:
-                            temp_domain_list = scope_obj.domain_host_id_map[host_id]
-                            for domain_obj in temp_domain_list:
+                    # Add a port entry for each domain
+                    for domain_id in domain_map:
+                        domain_obj = domain_map[domain_id]
+                        domain_name = domain_obj.name
 
-                                domain_name = domain_obj.name
-                                ip_set.add(domain_name)
+                        if port_str in port_ip_dict:
+                            ip_set = port_ip_dict[port_str]
+                        else:
+                            ip_set = set()
+                            port_ip_dict[port_str] = ip_set
 
+                        # Add domain to list
+                        ip_set.add(domain_name)
+
+            elif len(port_map) > 0:
+
+                for port_id in port_map:
+                    port_obj = port_map[port_id]
+                    port_str = str(port_obj.port)
+
+                    if port_obj.parent:
+                        host_id = port_obj.parent.id
+                        if host_id in host_map:
+                            host_obj = host_map[host_id]
+                            ip_addr = host_obj.ipv4_addr
+
+                            # Add to ip set
+                            if port_str in port_ip_dict:
+                                ip_set = port_ip_dict[port_str]
+                            else:
+                                ip_set = set()
+                                port_ip_dict[port_str] = ip_set
+
+                            # Add IP to list
+                            ip_set.add(ip_addr)
+
+                            # Get domains
+                            if host_id in scope_obj.domain_host_id_map:
+                                temp_domain_list = scope_obj.domain_host_id_map[host_id]
+                                for domain_obj in temp_domain_list:
+
+                                    domain_name = domain_obj.name
+                                    ip_set.add(domain_name)
+
+        futures = []
         for port_str in port_ip_dict:
 
             scan_output_file_path = output_dir + os.path.sep + "httpx_out_" + port_str
@@ -223,25 +218,12 @@ class HttpXScan(luigi.Task):
                 command.extend(script_args)
 
             # Add process dict to process array
-            command_list.append(command)
+            futures.append(scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=command))
 
-        # Print for debug
-        # print(command_list)
 
-        # Run threaded
-        pool = ThreadPool(processes=10)
-        thread_list = []
-
-        for command_args in command_list:
-            thread_list.append(pool.apply_async(
-                httpx_wrapper, (command_args,)))
-
-        # Close the pool
-        pool.close()
-
-        # Loop through thread function calls and update progress
-        for thread_obj in tqdm(thread_list):
-            thread_obj.get()
+        # Wait for the tasks to complete and retrieve results
+        for future in futures:
+            future.result()  # This blocks until the individual task is complete
 
         results_dict = {  # 'port_to_id_map': port_to_id_map,
             'output_file_list': output_file_list}

@@ -24,7 +24,7 @@ class Feroxbuster(data_model.WaluigiTool):
     def __init__(self):
         self.name = 'feroxbuster'
         self.collector_type = data_model.CollectorType.ACTIVE.value
-        self.scan_order = 3
+        self.scan_order = 10
         self.args = ""
         self.scan_func = Feroxbuster.feroxbuster_scan_func
         self.import_func = Feroxbuster.feroxbuster_import

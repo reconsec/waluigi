@@ -212,9 +212,6 @@ class MasscanScan(luigi.Task):
             logger.error("No targets to scan with masscan")
             with open(masscan_output_file_path, 'w') as f:
                 pass
-            #f_output = open(masscan_output_file_path, 'w')
-            # Close output file
-            #f_output.close()
 
 
 @inherits(MasscanScan)

@@ -5,11 +5,13 @@ import subprocess
 import netaddr
 import xml.etree.ElementTree as ET
 import luigi
+import logging
 
 from luigi.util import inherits
 from waluigi import scan_utils
 from waluigi import data_model
 
+logger = logging.getLogger(__name__)
 
 TCP = 'tcp'
 UDP = 'udp'
@@ -104,14 +106,17 @@ def get_masscan_input(scheduled_scan_obj):
 
     # Create config files
     masscan_config_file = dir_path + os.path.sep + "mass_conf_" + scan_id
-    masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
-
+    masscan_ip_file = None
     if len(target_list) > 0:
+
+        masscan_ip_file = dir_path + os.path.sep + "mass_ips_" + scan_id
 
         # Write subnets/IPs to file
         with open(masscan_ip_file, 'w') as mass_scan_fd:
             for target_inst in target_list:
                 mass_scan_fd.write(target_inst + '\n')
+    else:
+        logger.error("Target list is empty")
 
     # Construct ports conf line
     port_line = "ports = "
@@ -156,65 +161,60 @@ class MasscanScan(luigi.Task):
         masscan_output_file_path = self.output().path
 
         scan_config_dict = get_masscan_input(scheduled_scan_obj)
-        if scan_config_dict:
 
-            # print(scan_json)
-            conf_file_path = scan_config_dict['config_path']
-            ips_file_path = scan_config_dict['input_path']
-            tool_args = scan_config_dict['tool_args']
+        conf_file_path = scan_config_dict['config_path']
+        ips_file_path = scan_config_dict['input_path']
+        tool_args = scan_config_dict['tool_args']
 
-            # Get and print the default gateway IP
-            router_mac = None
-            default_gateway_ip = get_default_gateway()
-            if default_gateway_ip:
-                mac_address = get_mac_address(default_gateway_ip)
-                if mac_address:
-                    router_mac = mac_address.replace(":", "-")
+        # Get the default gateway IP
+        router_mac = None
+        default_gateway_ip = get_default_gateway()
+        if default_gateway_ip:
+            mac_address = get_mac_address(default_gateway_ip)
+            if mac_address:
+                router_mac = mac_address.replace(":", "-")
 
-            if conf_file_path and ips_file_path:
+        if conf_file_path and ips_file_path:
 
-                command = []
-                if os.name != 'nt':
-                    command.append("sudo")
+            command = []
+            if os.name != 'nt':
+                command.append("sudo")
 
-                command_arr = [
-                    "masscan",
-                    "--open",
-                    "-oX",
-                    masscan_output_file_path,
-                    "-c",
-                    conf_file_path,
-                    "-iL",
-                    ips_file_path
-                ]
+            command_arr = [
+                "masscan",
+                "--open",
+                "-oX",
+                masscan_output_file_path,
+                "-c",
+                conf_file_path,
+                "-iL",
+                ips_file_path
+            ]
 
-                # Add the specific interface to scan from if its selected
-                if selected_interface:
-                    int_name = selected_interface.name.strip()
-                    command_arr.extend(['-e', int_name])
+            # Add the specific interface to scan from if its selected
+            if selected_interface:
+                int_name = selected_interface.name.strip()
+                command_arr.extend(['-e', int_name])
 
-                if router_mac:
-                    command_arr.extend(['--router-mac', router_mac])
+            if router_mac:
+                command_arr.extend(['--router-mac', router_mac])
 
-                # Add tool args
-                if tool_args and len(tool_args) > 0:
-                    command_arr.extend(tool_args)
+            # Add tool args
+            if tool_args and len(tool_args) > 0:
+                command_arr.extend(tool_args)
 
-                command.extend(command_arr)
+            command.extend(command_arr)
 
-                # print(command)
-                # Execute process
-                subprocess.run(command)
-
-            else:
-                f_output = open(masscan_output_file_path, 'w')
-                # Close output file
-                f_output.close()
+            # Execute process
+            subprocess.run(command)
 
         else:
-            f_output = open(masscan_output_file_path, 'w')
+            logger.error("No targets to scan with masscan")
+            with open(masscan_output_file_path, 'w') as f:
+                pass
+            #f_output = open(masscan_output_file_path, 'w')
             # Close output file
-            f_output.close()
+            #f_output.close()
 
 
 @inherits(MasscanScan)
@@ -277,11 +277,11 @@ class ImportMasscanOutput(data_model.ImportToolXOutput):
                         obj_arr.append(port_obj)
 
             except Exception as e:
-                print('[-] Masscan results parsing error: %s' % str(e))
+                logger.error('Masscan results parsing error: %s' % str(e))
                 os.remove(masscan_output_file)
                 raise e
         else:
-            print("[*] Masscan output file is empty. Ensure inputs were provided.")
+            logger.error("Masscan output file is empty. Ensure inputs were provided.")
 
         # Import, Update, & Save
         scheduled_scan_obj = self.scan_input

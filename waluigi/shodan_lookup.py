@@ -45,12 +45,12 @@ class Shodan(data_model.WaluigiTool):
         luigi_run_result = luigi.build([ImportShodanOutput(
             scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
         if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-            #logger.error("Some tasks failed.")
+            # logger.error("Some tasks failed.")
 
             # Access collected exceptions from the event handler
-            #if failed_tasks_exception:
+            # if failed_tasks_exception:
             #    logger.debug(f"{failed_tasks_exception[0]} {failed_tasks_exception[1]}")
-            
+
             # Access failure events to retrieve exceptions
             # failure_events = luigi_run_result.worker._status_reporter.get_task_failure_events()
             # logger.error("Failure events: %d" % len(failure_events))
@@ -580,18 +580,23 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
 
                                 web_path_id = path_obj.id
 
-                                # Add http endpoint
+                        # Add http endpoint
                         http_endpoint_obj = data_model.HttpEndpoint(
                             parent_id=port_obj.id)
-                        http_endpoint_obj.domain_id = endpoint_domain_id
-                        http_endpoint_obj.title = title
-                        http_endpoint_obj.status_code = status_code
-                        # http_endpoint_obj.last_modified = last_modified
                         http_endpoint_obj.web_path_id = web_path_id
-                        http_endpoint_obj.fav_icon_hash = favicon_hash
 
                         # Add the endpoint
                         ret_arr.append(http_endpoint_obj)
+
+                        http_endpoint_data_obj = data_model.HttpEndpointData(
+                            parent_id=http_endpoint_obj.id)
+                        http_endpoint_data_obj.domain_id = endpoint_domain_id
+                        http_endpoint_data_obj.title = title
+                        http_endpoint_data_obj.status = status_code
+                        http_endpoint_data_obj.fav_icon_hash = favicon_hash
+
+                        # Add the endpoint
+                        ret_arr.append(http_endpoint_data_obj)
 
         # Import, Update, & Save
         scheduled_scan_obj = self.scan_input

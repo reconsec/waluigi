@@ -15,15 +15,16 @@ from concurrent.futures import ThreadPoolExecutor, Future
 NOT_WHITESPACE = re.compile(r'\S')
 logger = logging.getLogger(__name__)
 
+
 class ThreadExecutorWrapper():
 
     def __init__(self, max_workers=10):
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.results = []
         self.exceptions = []
-        self.futures_map = {}  
-        self.lock = threading.Lock()  
-        self.task_counter = 0  
+        self.futures_map = {}
+        self.lock = threading.Lock()
+        self.task_counter = 0
 
     def _internal_callback(self, future: Future):
 
@@ -38,7 +39,8 @@ class ThreadExecutorWrapper():
             result = future.result()
             with self.lock:
                 self.results.append((task_id, result))
-            logger.debug(f"Task {task_id} completed with result: {result}")
+            # logger.debug(f"Task {task_id} completed with result: {result}")
+            logger.debug(f"Task {task_id} completed")
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -68,6 +70,7 @@ class ThreadExecutorWrapper():
         """
         self.executor.shutdown(wait=wait)
         logger.debug("Executor has been shut down.")
+
 
 class ProcessStreamReader(Thread):
 
@@ -197,7 +200,8 @@ def process_wrapper(cmd_args, use_shell=False, my_env=None, print_output=False):
 
     exit_code = p.wait()
 
-    ret_data = {"exit_code": exit_code, "stdout": stdout_reader.get_output(),"stderr": stderr_reader.get_output()}
+    ret_data = {"exit_code": exit_code, "stdout": stdout_reader.get_output(
+    ), "stderr": stderr_reader.get_output()}
     return ret_data
 
 # Parse a file that contains multiple JSON blogs and return a list of objects

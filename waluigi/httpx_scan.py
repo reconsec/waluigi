@@ -7,11 +7,14 @@ import binascii
 import base64
 import netaddr
 import time
+import logging
 
 from luigi.util import inherits
 from waluigi import scan_utils
 from waluigi import data_model
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 class Httpx(data_model.WaluigiTool):
@@ -39,6 +42,7 @@ class Httpx(data_model.WaluigiTool):
         if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
             return False
         return True
+
 
 class HttpXScan(luigi.Task):
 
@@ -98,7 +102,7 @@ class HttpXScan(luigi.Task):
                 host_obj = target_obj_dict['host_obj']
                 ip_addr = host_obj.ipv4_addr
 
-                 # Add to ip set
+                # Add to ip set
                 if port_str in port_ip_dict:
                     ip_set = port_ip_dict[port_str]
                 else:
@@ -218,8 +222,8 @@ class HttpXScan(luigi.Task):
                 command.extend(script_args)
 
             # Add process dict to process array
-            futures.append(scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=command))
-
+            futures.append(scan_utils.executor.submit(
+                scan_utils.process_wrapper, cmd_args=command))
 
         # Wait for the tasks to complete and retrieve results
         for future in futures:
@@ -249,7 +253,7 @@ class ImportHttpXOutput(data_model.ImportToolXOutput):
             data = file_fd.read()
 
         if len(data) == 0:
-            print("[-] Output file is empty")
+            logger.error("Httpx scan output file is empty")
             return
 
         hash_alg = hashlib.sha1
@@ -340,7 +344,6 @@ class ImportHttpXOutput(data_model.ImportToolXOutput):
                 last_modified = None
                 if 'header' in httpx_scan:
                     header_dict = httpx_scan['header']
-                    # print(header_dict)
                     if 'last_modified' in header_dict:
                         last_modified_str = header_dict['last_modified']
                         timestamp_datetime = datetime.strptime(
@@ -481,6 +484,7 @@ class ImportHttpXOutput(data_model.ImportToolXOutput):
 
                 endpoint_domain_id = None
                 if cert_obj and domain_used in cert_obj.domain_name_id_map:
+                    logger.debug("Found domain in cert: %s" % domain_used)
                     endpoint_domain_id = cert_obj.domain_name_id_map[domain_used]
 
                 # Add http component
@@ -508,16 +512,22 @@ class ImportHttpXOutput(data_model.ImportToolXOutput):
                 # Add http endpoint
                 http_endpoint_obj = data_model.HttpEndpoint(
                     parent_id=port_obj.id)
-                http_endpoint_obj.domain_id = endpoint_domain_id
-                http_endpoint_obj.title = title
-                http_endpoint_obj.status_code = status_code
-                http_endpoint_obj.last_modified = last_modified
                 http_endpoint_obj.web_path_id = web_path_id
-                http_endpoint_obj.screenshot_id = screenshot_id
-                http_endpoint_obj.fav_icon_hash = favicon_hash
 
                 # Add the endpoint
                 ret_arr.append(http_endpoint_obj)
+
+                http_endpoint_data_obj = data_model.HttpEndpointData(
+                    parent_id=http_endpoint_obj.id)
+                http_endpoint_data_obj.domain_id = endpoint_domain_id
+                http_endpoint_data_obj.title = title
+                http_endpoint_data_obj.status = status_code
+                http_endpoint_data_obj.last_modified = last_modified
+                http_endpoint_data_obj.screenshot_id = screenshot_id
+                http_endpoint_data_obj.fav_icon_hash = favicon_hash
+
+                # Add the endpoint data
+                ret_arr.append(http_endpoint_data_obj)
 
         # Import, Update, & Save
         self.import_results(scheduled_scan_obj, ret_arr)

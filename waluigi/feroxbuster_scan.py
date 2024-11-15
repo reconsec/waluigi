@@ -3,20 +3,21 @@ import os
 import netaddr
 import socket
 import luigi
-import multiprocessing
 import traceback
 import socket
 import random
 import tempfile
 import hashlib
 import binascii
+import logging
 
 from luigi.util import inherits
-from tqdm import tqdm
-from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 from urllib.parse import urlparse
 from waluigi import data_model
+
+logger = logging.getLogger(__name__)
+url_set = set()
 
 
 class Feroxbuster(data_model.WaluigiTool):
@@ -25,7 +26,7 @@ class Feroxbuster(data_model.WaluigiTool):
         self.name = 'feroxbuster'
         self.collector_type = data_model.CollectorType.ACTIVE.value
         self.scan_order = 10
-        self.args = ""
+        self.args = "--rate-limit 50 -s 200 -n"
         self.scan_func = Feroxbuster.feroxbuster_scan_func
         self.import_func = Feroxbuster.feroxbuster_import
 
@@ -46,6 +47,21 @@ class Feroxbuster(data_model.WaluigiTool):
         return True
 
 
+def queue_url(url_to_id_map, domain_str, port_str, secure, output_dir, host_id, port_id):
+
+    global url_set
+    url_str = scan_utils.construct_url(domain_str, port_str, secure)
+
+    if url_str not in url_set:
+        url_set.add(url_str)
+        rand_str = str(random.randint(1000000, 2000000))
+
+        # Add to port id map
+        scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
+        url_to_id_map[url_str] = {
+            'port_id': port_id, 'host_id': host_id, 'output_file': scan_output_file_path}
+
+
 class FeroxScan(luigi.Task):
 
     scan_input = luigi.Parameter()
@@ -64,6 +80,9 @@ class FeroxScan(luigi.Task):
 
     def run(self):
 
+        global url_set
+        url_set = set()
+
         scheduled_scan_obj = self.scan_input
 
         # Get output file path
@@ -71,9 +90,6 @@ class FeroxScan(luigi.Task):
         output_dir = os.path.dirname(output_file_path)
 
         url_to_id_map = {}
-        command_list = []
-
-        # scan_input_data = scan_target_dict['scan_input']
         tool_args = scheduled_scan_obj.current_tool.args
         if tool_args:
             tool_args = tool_args.split(" ")
@@ -91,10 +107,8 @@ class FeroxScan(luigi.Task):
         #     f.close()
 
         target_map = scheduled_scan_obj.scan_data.host_port_obj_map
+        domain_host_id_map = scheduled_scan_obj.scan_data.domain_host_id_map
 
-        pool = ThreadPool(processes=10)
-        thread_list = []
-        # for scan_inst in scan_arr:
         for target_key in target_map:
 
             target_obj_dict = target_map[target_key]
@@ -107,42 +121,41 @@ class FeroxScan(luigi.Task):
             ip_addr = host_obj.ipv4_addr
             host_id = host_obj.id
 
-            # NEED TO REWORK THIS TO DETERMINE THIS BEST DOMAIN TO USE. SENDING FOR ALL DOMAINS BE EXCESSIVE
-
+            # NEED TO REWORK THIS TO DETERMINE THIS BEST DOMAIN TO USE. SENDING FOR ALL DOMAINS IS EXCESSIVE
+            # ADD FOR IP
             target_arr = target_key.split(":")
             if target_arr[0] != ip_addr:
                 domain_str = target_arr[0]
 
                 # Get the IP of the TLD
                 try:
-                    ip_str = socket.gethostbyname(domain_str).strip()
+                    socket.gethostbyname(domain_str).strip()
+                    ip_addr = domain_str
                 except Exception:
-                    print("[-] Exception resolving domain: %s" %
-                          domain_str)
+                    print("[-] Exception resolving domain: %s" % domain_str)
                     continue
 
-                url_str = scan_utils.construct_url(
-                    domain_str, port_str, secure)
-                rand_str = str(random.randint(1000000, 2000000))
+                queue_url(url_to_id_map, ip_addr, port_str,
+                          secure, output_dir, host_id, port_id)
 
-                # Add to port id map
-                scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
-                url_to_id_map[url_str] = {
-                    'port_id': port_id, 'host_id': host_id, 'output_file': scan_output_file_path}
+            else:
+                # Add for IP
+                queue_url(url_to_id_map, ip_addr, port_str,
+                          secure, output_dir, host_id, port_id)
 
-            # ADD FOR IP
-            url_str = scan_utils.construct_url(ip_addr, port_str, secure)
-            rand_str = str(random.randint(1000000, 2000000))
+                # Add for each domain
+                if host_id in domain_host_id_map:
+                    domain_list = domain_host_id_map[host_id]
+                    for domain_obj in domain_list:
+                        domain_str = domain_obj.name
+                        queue_url(url_to_id_map, domain_str, port_str,
+                                  secure, output_dir, host_id, port_id)
 
-            # Add to port id map
-            scan_output_file_path = output_dir + os.path.sep + "ferox_out_" + rand_str
-            url_to_id_map[url_str] = {
-                'port_id': port_id, 'host_id': host_id, 'output_file': scan_output_file_path}
-
+        futures = []
         for target_url in url_to_id_map:
 
             # Get output file
-            scan_output_file_path = url_to_id_map[url_str]['output_file']
+            scan_output_file_path = url_to_id_map[target_url]['output_file']
 
             command = []
             if os.name != 'nt':
@@ -154,14 +167,9 @@ class FeroxScan(luigi.Task):
                 "-k",  # Disable cert validation
                 # "-q", # Quiet
                 "-A",  # Random User Agent
-                "-n",  # No recursion
                 # "--thorough", # Collects words, extensions, and links in content
                 # "--auto-tune", # Resets speed based on errors
                 "--auto-bail",  # Quits after too many errors
-                "--rate-limit",  # Rate limit
-                "50",
-                "-s",  # Status codes to include
-                "200",
                 "-u",
                 target_url,
                 "-o",
@@ -178,26 +186,12 @@ class FeroxScan(luigi.Task):
             if scan_wordlist:
                 command.extend(['-w', scan_wordlist])
 
-            # Add process dict to process array
-            command_list.append(command)
+            futures.append(scan_utils.executor.submit(
+                scan_utils.process_wrapper, cmd_args=command))
 
-        # Print for debug
-        print(command_list)
-
-        # Run threaded
-        pool = ThreadPool(processes=5)
-        thread_list = []
-
-        for command_args in command_list:
-            thread_list.append(pool.apply_async(
-                scan_utils.process_wrapper, (command_args,)))
-
-        # Close the pool
-        pool.close()
-
-        # Loop through thread function calls and update progress
-        for thread_obj in tqdm(thread_list):
-            thread_obj.get()
+        # Wait for the tasks to complete and retrieve results
+        for future in futures:
+            future.result()
 
         results_dict = {'url_to_id_map': url_to_id_map}
 
@@ -247,7 +241,6 @@ class ImportFeroxOutput(data_model.ImportToolXOutput):
                             if 'status' in web_result:
                                 status_code = web_result['status']
                                 endpoint_url = None
-                                # path_hash_hex = None
 
                                 if 'url' in web_result:
                                     endpoint_url = web_result['url']
@@ -305,12 +298,18 @@ class ImportFeroxOutput(data_model.ImportToolXOutput):
                                     # Create http endpoint
                                     http_endpoint_obj = data_model.HttpEndpoint(
                                         parent_id=port_id)
-                                    http_endpoint_obj.domain_id = endpoint_domain_id
-                                    http_endpoint_obj.status_code = status_code
                                     http_endpoint_obj.web_path_id = web_path_id
 
                                     # Add the endpoint
                                     ret_arr.append(http_endpoint_obj)
+
+                                    http_endpoint_data_obj = data_model.HttpEndpointData(
+                                        parent_id=http_endpoint_obj.id)
+                                    http_endpoint_data_obj.domain_id = endpoint_domain_id
+                                    http_endpoint_data_obj.status = status_code
+
+                                    # Add the endpoint
+                                    ret_arr.append(http_endpoint_data_obj)
 
         scheduled_scan_obj = self.scan_input
         self.import_results(scheduled_scan_obj, ret_arr)

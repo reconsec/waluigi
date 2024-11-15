@@ -6,14 +6,44 @@ import multiprocessing
 import traceback
 import hashlib
 import base64
+import logging
 
 from luigi.util import inherits
 from pyshot import pyshot as pyshot_lib
 from waluigi import scan_utils
-from tqdm import tqdm
-from multiprocessing.pool import ThreadPool
 from os.path import exists
 from waluigi import data_model
+
+
+logger = logging.getLogger(__name__)
+url_set = set()
+
+
+def get_url(host, port_arg, secure, query_arg, domain=None):
+    port = ""
+    if port_arg:
+        port = ":" + port_arg
+        # Default port 443 to secure
+        if port_arg == '443':
+            secure = True
+
+    # Add query if it exists
+    if domain:
+        host = domain
+    full_path = host + port
+
+    path = ""
+    if query_arg:
+        path += query_arg
+
+    full_path += path
+
+    url = "http"
+    if secure == True:
+        url += "s"
+    url += "://" + full_path
+
+    return url
 
 
 class Pyshot(data_model.WaluigiTool):
@@ -43,12 +73,17 @@ class Pyshot(data_model.WaluigiTool):
         return True
 
 
-def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
+def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, query_arg="", domain=None, http_endpoint_data_id=None):
 
     ret_msg = ""
     try:
-        pyshot_lib.take_screenshot(host=ip_addr, port_arg=port, query_arg="",
-                                   dest_dir=dir_path, secure=ssl_val, port_id=port_id, domain=domain)
+        domain_str = ''
+        if domain:
+            domain_str = domain
+        logger.debug("[+] Running Pyshot scan on %s:%s%s (%s)" %
+                     (ip_addr, port, query_arg, domain_str))
+        pyshot_lib.take_screenshot(host=ip_addr, port_arg=port, query_arg=query_arg,
+                                   dest_dir=dir_path, secure=ssl_val, port_id=port_id, domain=domain, endpoint_id=http_endpoint_data_id)
     except Exception as e:
         # Here we add some debugging help. If multiprocessing's
         # debugging is on, it will arrange to log the traceback
@@ -58,6 +93,17 @@ def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, domain=None):
         # clean up
 
     return ret_msg
+
+
+def queue_scan(futures, host, port_str, dir_path, secure, port_id, query_arg="", domain_str=None, http_endpoint_data_id=None):
+
+    global url_set
+    url = get_url(host, port_str, secure, query_arg)
+
+    if url not in url_set:
+        url_set.add(url)
+        futures.append(scan_utils.executor.submit(pyshot_wrapper, host, port_str,
+                       dir_path, secure, port_id, query_arg, domain_str, http_endpoint_data_id))
 
 
 class PyshotScan(luigi.Task):
@@ -80,18 +126,24 @@ class PyshotScan(luigi.Task):
 
     def run(self):
 
+        global url_set
+        url_set = set()
+
         # Ensure output folder exists
         dir_path = os.path.dirname(self.output().path)
 
         scheduled_scan_obj = self.scan_input
 
         target_map = scheduled_scan_obj.scan_data.host_port_obj_map
+        http_endpoint_port_id_map = scheduled_scan_obj.scan_data.http_endpoint_port_id_map
+        web_path_map = scheduled_scan_obj.scan_data.path_map
+        domain_map = scheduled_scan_obj.scan_data.domain_map
+        endpoint_data_endpoint_id_map = scheduled_scan_obj.scan_data.endpoint_data_endpoint_id_map
 
-        pool = ThreadPool(processes=10)
-        thread_list = []
-        # for scan_inst in scan_arr:
+        futures = []
         for target_key in target_map:
 
+            query_arg = ""
             target_obj_dict = target_map[target_key]
             port_obj = target_obj_dict['port_obj']
 
@@ -108,21 +160,47 @@ class PyshotScan(luigi.Task):
             if target_arr[0] != ip_addr:
                 domain_str = target_arr[0]
 
-            # Add argument without domain first
-            thread_list.append(pool.apply_async(
-                pyshot_wrapper, (ip_addr, port_str, dir_path, secure, port_id, domain_str)))
+            if port_id in http_endpoint_port_id_map:
 
-        # Close the pool
-        pool.close()
+                http_endpoint_obj_list = http_endpoint_port_id_map[port_id]
+                for http_endpoint_obj in http_endpoint_obj_list:
 
-        # Loop through thread function calls and update progress
-        for thread_obj in tqdm(thread_list):
-            output = thread_obj.get()
-            if len(output) > 0:
-                print(output)
+                    http_endpoint_data_id = None
+                    host = ip_addr
+                    web_path_id = http_endpoint_obj.web_path_id
+                    if web_path_id and web_path_id in web_path_map:
+                        web_path_obj = web_path_map[web_path_id]
+                        query_arg = web_path_obj.web_path
+
+                    if http_endpoint_obj.id in endpoint_data_endpoint_id_map:
+                        http_endpoint_data_obj_list = endpoint_data_endpoint_id_map[
+                            http_endpoint_obj.id]
+
+                        for http_endpoint_data_obj in http_endpoint_data_obj_list:
+
+                            http_endpoint_data_id = http_endpoint_data_obj.id
+                            domain_id = http_endpoint_data_obj.domain_id
+                            if domain_id and domain_id in domain_map:
+                                domain_obj = domain_map[domain_id]
+                                domain_str = domain_obj.name
+                                host = domain_str
+
+                            queue_scan(futures, host, port_str, dir_path,
+                                       secure, port_id, query_arg, domain_str, http_endpoint_data_id)
+
+                    queue_scan(futures, host, port_str, dir_path,
+                               secure, port_id, query_arg, domain_str)
+            else:
+
+                queue_scan(futures, ip_addr, port_str, dir_path,
+                           secure, port_id, query_arg, domain_str)
+
+        # Wait for the tasks to complete and retrieve results
+        for future in futures:
+            future.result()
 
 
-@inherits(PyshotScan)
+@ inherits(PyshotScan)
 class ImportPyshotOutput(data_model.ImportToolXOutput):
 
     def requires(self):
@@ -159,6 +237,7 @@ class ImportPyshotOutput(data_model.ImportToolXOutput):
                     web_path = screenshot_meta['path']
                     port_id = screenshot_meta['port_id']
                     status_code = screenshot_meta['status_code']
+                    http_endpoint_data_id = screenshot_meta['endpoint_id']
 
                     # Hash the image
                     screenshot_id = None
@@ -227,13 +306,24 @@ class ImportPyshotOutput(data_model.ImportToolXOutput):
                     # Add http endpoint
                     http_endpoint_obj = data_model.HttpEndpoint(
                         parent_id=port_id)
-                    http_endpoint_obj.domain_id = endpoint_domain_id
-                    http_endpoint_obj.status_code = status_code
                     http_endpoint_obj.web_path_id = web_path_id
-                    http_endpoint_obj.screenshot_id = screenshot_id
 
                     # Add the endpoint
                     ret_arr.append(http_endpoint_obj)
+
+                    # Add http endpoint data
+                    http_endpoint_data_obj = data_model.HttpEndpointData(
+                        parent_id=http_endpoint_obj.id)
+                    http_endpoint_data_obj.domain_id = endpoint_domain_id
+                    http_endpoint_data_obj.status = status_code
+                    http_endpoint_data_obj.screenshot_id = screenshot_id
+
+                    # Set the object id if the object already exists
+                    if http_endpoint_data_id:
+                        http_endpoint_data_obj.id = http_endpoint_data_id
+
+                    # Add the endpoint
+                    ret_arr.append(http_endpoint_data_obj)
 
                     if len(ret_arr) > 0:
 
@@ -264,8 +354,8 @@ class ImportPyshotOutput(data_model.ImportToolXOutput):
             with open(tool_import_file, 'w') as import_fd:
                 import_fd.write(json.dumps(import_data_arr))
 
-            print("[+] Imported %d screenshots to manager." % (count))
+            logger.debug("Imported %d screenshots to manager." % (count))
 
         else:
 
-            print("[-] Pyshot meta file does not exist.")
+            logger.error("[-] Pyshot meta file does not exist.")

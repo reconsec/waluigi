@@ -6,8 +6,11 @@ import luigi
 import os
 import json
 import importlib
+import logging
 
 from waluigi import scan_utils
+
+logger = logging.getLogger(__name__)
 
 waluigi_tools = [
     ('waluigi.masscan', 'Masscan'),
@@ -115,18 +118,19 @@ class ImportToolXOutput(luigi.Task):
                 flat_obj = obj.to_jsonable()
                 import_arr.append(flat_obj)
 
+            # logger.debug("Imported:\n %s" % str(import_arr))
+
             # Import the results to the server
             updated_record_map = recon_manager.import_data(
                 scan_id, tool_id, import_arr)
 
-            # Update the records
-            print("Importing:")
-            print(import_arr)
+            # logger.debug("Returned:\n %s" % str(updated_record_map))
+
             updated_import_arr = update_scope_array(
                 record_map, updated_record_map)
 
-            print("DB return:")
-            print(updated_import_arr)
+            # logger.debug("DB return:\n %s" % str(updated_import_arr))
+
             # Write imported data to file
             tool_import_file = self.output().path
             with open(tool_import_file, 'w') as import_fd:
@@ -143,9 +147,10 @@ def update_scope_array(record_map, updated_record_map=None):
         for record_entry in updated_record_map:
             orig_id = record_entry['orig_id']
             db_id = record_entry['db_id']
-            if orig_id in record_map:
+
+            # Only update and remove if the ID is different
+            if orig_id in record_map and db_id != orig_id:
                 record_obj = record_map[orig_id]
-                # print(obj.to_jsonable())
                 record_obj.id = db_id
 
                 # Set object for db ID and remove old one
@@ -160,11 +165,12 @@ def update_scope_array(record_map, updated_record_map=None):
                     record_obj.parent.id = db_id
 
                 # Fix up http endpoints
-                if isinstance(record_obj, HttpEndpoint):
-                    if record_obj.web_path_id == orig_id:
-                        record_obj.web_path_id = db_id
-                    if record_obj.domain_id == orig_id:
-                        record_obj.domain_id = db_id
+                if isinstance(record_obj, HttpEndpoint) and record_obj.web_path_id == orig_id:
+                    record_obj.web_path_id = db_id
+
+                # Fix up http data endpoints
+                if isinstance(record_obj, HttpEndpointData) and record_obj.domain_id == orig_id:
+                    record_obj.domain_id = db_id
 
     import_arr = []
     for obj_id in record_map:
@@ -187,14 +193,11 @@ class ScanData():
         else:
             import_list = record_map
 
-        print("Updating records: *********************************************")
-        print(import_list)
         self._process_data(import_list)
 
         self._post_process()
 
-        print("Component Map")
-        print(self.component_map)
+        # logger.debug("Component Map: %s" % str(self.component_map))
 
     def _post_process(self):
 
@@ -376,17 +379,6 @@ class ScanData():
                 # Add path obj to list to be updated
                 temp_endpoint_list.append(record_obj)
 
-                # Get screenshot id
-                screenshot_id = record_obj.screenshot_id
-                if screenshot_id in self.http_endpoint_screenshot_id_map:
-                    temp_endpoint_list = self.http_endpoint_screenshot_id_map[screenshot_id]
-                else:
-                    temp_endpoint_list = []
-                    self.http_endpoint_screenshot_id_map[screenshot_id] = temp_endpoint_list
-
-                # Add screenshot obj to list to be updated
-                temp_endpoint_list.append(record_obj)
-
                 # Get port id
                 port_id = record_obj.parent.id
                 if port_id in self.http_endpoint_port_id_map:
@@ -400,6 +392,33 @@ class ScanData():
 
                 # Add http endpoint obj to list for being imported
                 self.http_endpoint_map[record_obj.id] = record_obj
+
+            elif isinstance(record_obj, HttpEndpointData):
+
+                # Get http endpoint
+                http_endpoint_id = record_obj.parent.id
+                if http_endpoint_id in self.endpoint_data_endpoint_id_map:
+                    temp_endpoint_list = self.endpoint_data_endpoint_id_map[http_endpoint_id]
+                else:
+                    temp_endpoint_list = []
+                    self.endpoint_data_endpoint_id_map[http_endpoint_id] = temp_endpoint_list
+
+                # Add path obj to list to be updated
+                temp_endpoint_list.append(record_obj)
+
+                # Get screenshot id
+                screenshot_id = record_obj.screenshot_id
+                if screenshot_id in self.http_endpoint_data_screenshot_id_map:
+                    temp_endpoint_list = self.http_endpoint_data_screenshot_id_map[screenshot_id]
+                else:
+                    temp_endpoint_list = []
+                    self.http_endpoint_data_screenshot_id_map[screenshot_id] = temp_endpoint_list
+
+                # Add screenshot obj to list to be updated
+                temp_endpoint_list.append(record_obj)
+
+                # Add http endpoint obj to list for being imported
+                self.http_endpoint_data_map[record_obj.id] = record_obj
 
             elif isinstance(record_obj, Vuln):
 
@@ -526,7 +545,10 @@ class ScanData():
         self.http_endpoint_map = {}
         self.http_endpoint_port_id_map = {}
         self.http_endpoint_path_id_map = {}
-        self.http_endpoint_screenshot_id_map = {}
+        self.http_endpoint_data_screenshot_id_map = {}
+
+        self.http_endpoint_data_map = {}
+        self.endpoint_data_endpoint_id_map = {}
 
         self.collection_module_map = {}
         self.module_name_id_map = {}
@@ -548,6 +570,7 @@ class ScanData():
         self.module_map = {}
         self.component_name_module_map = {}
 
+        # logger.debug("Processing scan data\n %s" % scan_data)
         # Decode the port map
         if 'b64_port_bitmap' in scan_data and scan_data['b64_port_bitmap']:
             b64_port_bitmap = scan_data['b64_port_bitmap']
@@ -616,6 +639,8 @@ class Record():
                 obj = ListItem(id=obj_id)
             elif record_type == 'httpendpoint':
                 obj = HttpEndpoint(id=obj_id, parent_id=parent_id)
+            elif record_type == 'httpendpointdata':
+                obj = HttpEndpointData(id=obj_id, parent_id=parent_id)
             # elif record_type == 'screenshot':
             #    obj = Screenshot(id=obj_id)
             elif record_type == 'webcomponent':
@@ -822,18 +847,38 @@ class HttpEndpoint(Record):
 
     def __init__(self, parent_id=None, id=None):
         super().__init__(id=id, parent=Port(id=parent_id))
+        self.web_path_id = None
+
+    def _data_to_jsonable(self):
+
+        ret = {'web_path_id': self.web_path_id}
+
+        return ret
+
+    def from_jsonsable(self, input_data_dict):
+        try:
+
+            if 'web_path_id' in input_data_dict:
+                self.web_path_id = input_data_dict['web_path_id']
+
+        except Exception as e:
+            raise Exception('Invalid http endpoint object: %s' % str(e))
+
+
+class HttpEndpointData(Record):
+
+    def __init__(self, parent_id=None, id=None):
+        super().__init__(id=id, parent=HttpEndpoint(id=parent_id))
 
         self.title = None
-        self.status_code = None
+        self.status = None
         self.domain_id = None
         self.screenshot_id = None
-        self.web_path_id = None
         self.last_modified = None
         self.fav_icon_hash = None
 
     def _data_to_jsonable(self):
-        ret = {'title': self.title, 'status': self.status_code,
-               'path_id': self.web_path_id}
+        ret = {'title': self.title, 'status': self.status}
 
         if self.last_modified is not None:
             ret['last_modified'] = self.last_modified
@@ -851,16 +896,22 @@ class HttpEndpoint(Record):
 
     def from_jsonsable(self, input_data_dict):
         try:
-            self.title = input_data_dict['title']
-            self.status_code = input_data_dict['status']
-            self.web_path_id = input_data_dict['path_id']
+
             self.screenshot_id = None
             self.last_modified = None
             self.domain_id = None
             self.fav_icon_hash = None
 
+            logger.debug("Input data dict: %s" % input_data_dict)
+
+            if 'title' in input_data_dict:
+                self.title = input_data_dict['title']
+
+            if 'status' in input_data_dict:
+                self.status = input_data_dict['status']
+
             if 'last_modified' in input_data_dict:
-                self.last_modified = int(input_data_dict['last_modified'])
+                self.last_modified = input_data_dict['last_modified']
 
             if 'screenshot_id' in input_data_dict:
                 self.screenshot_id = input_data_dict['screenshot_id']
@@ -868,11 +919,11 @@ class HttpEndpoint(Record):
             if 'domain_id' in input_data_dict:
                 self.domain_id = input_data_dict['domain_id']
 
-            if 'fav_icon_hash' in input_data_dict:
-                self.fav_icon_hash = int(input_data_dict['fav_icon_hash'])
+            if 'fav_icon_hash' in input_data_dict and input_data_dict['fav_icon_hash']:
+                self.fav_icon_hash = input_data_dict['fav_icon_hash']
 
         except Exception as e:
-            raise Exception('Invalid http endpoint object: %s' % str(e))
+            raise Exception('Invalid http endpoint data object: %s' % str(e))
 
 
 class CollectionModule(Record):
@@ -882,7 +933,6 @@ class CollectionModule(Record):
 
         self.name = None
         self.args = None
-        self.collection_tool_id = None
         self.bindings = None
         self.outputs = None
 
@@ -892,18 +942,17 @@ class CollectionModule(Record):
 
     def from_jsonsable(self, input_data_dict):
         try:
-            print(input_data_dict)
+
             self.name = str(input_data_dict['name'])
             self.args = str(input_data_dict['args'])
-            self.collection_tool_id = str(
-                input_data_dict['collection_tool_id'])
+
             if 'bindings' in input_data_dict:
                 self.bindings = input_data_dict['bindings']
             if 'outputs' in input_data_dict:
                 self.outputs = input_data_dict['outputs']
 
         except Exception as e:
-            raise Exception('Invalid port object: %s' % str(e))
+            raise Exception('Invalid collection module object: %s' % str(e))
 
 
 class CollectionModuleOutput(Record):

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
 
+
 class Nmap(data_model.WaluigiTool):
 
     def __init__(self):
@@ -259,7 +260,6 @@ class NmapScan(luigi.Task):
         # Loop through map and create nmap command array
         counter = 0
         futures = []
-        # print(nmap_scan_list)
         for scan_obj in nmap_scan_list:
 
             nmap_scan_inst = {}
@@ -338,13 +338,13 @@ class NmapScan(luigi.Task):
 
             nmap_scan_cmd_list.append(nmap_scan_inst)
 
-            futures.append(scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=command))
+            futures.append(scan_utils.executor.submit(
+                scan_utils.process_wrapper, cmd_args=command))
             counter += 1
-
 
         # Wait for the tasks to complete and retrieve results
         for future in futures:
-            future.result()  # This blocks until the individual task is complete
+            future.result()
 
         # Add the command list to the output file
         nmap_scan_data['nmap_scan_list'] = nmap_scan_cmd_list

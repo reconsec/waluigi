@@ -68,7 +68,7 @@ class Module(data_model.WaluigiTool):
 
             # Get the module id
             module_id = module_scan_inst.id
-            tool_id = module_scan_inst.collection_tool_id
+            tool_id = module_scan_inst.parent.id
 
             tool_map = scan_input_obj.collection_tool_map
             if tool_id in tool_map:

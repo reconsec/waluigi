@@ -3,14 +3,16 @@ import os
 import luigi
 import traceback
 import errno
+import logging
 
 from luigi.util import inherits
-from multiprocessing.pool import ThreadPool
-from tqdm import tqdm
 from waluigi import scan_utils
 from waluigi import data_model
 
 custom_user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko"
+
+
+logger = logging.getLogger(__name__)
 
 
 class Nuclei(data_model.WaluigiTool):
@@ -81,18 +83,9 @@ class NucleiScan(luigi.Task):
         output_file_path = self.output().path
         output_dir = os.path.dirname(output_file_path)
 
-        # scan_target_dict = scheduled_scan_obj.scan_target_dict
-
-        # nuclei_scan_obj = None
         total_endpoint_set = set()
         endpoint_port_obj_map = {}
         nuclei_output_file = None
-
-       # if scan_target_dict:
-
-        # print(nuclei_scan_obj)
-        pool = ThreadPool(processes=10)
-        thread_list = []
 
         # scan_input_data = scan_target_dict['scan_input']
         # template_path_list = []
@@ -137,7 +130,7 @@ class NucleiScan(luigi.Task):
             if target_arr[0] != ip_addr:
                 domain_str = target_arr[0]
                 endpoint = prefix + domain_str + ":" + port_str
-                # print("[*] Endpoint: %s" % endpoint)
+
                 if endpoint not in total_endpoint_set:
                     endpoint_port_obj_map[endpoint] = port_obj_instance
                     total_endpoint_set.add(endpoint)
@@ -151,8 +144,8 @@ class NucleiScan(luigi.Task):
                 nuclei_template_path = nuclei_template_root + os.path.sep + "nuclei-templates"
                 full_template_path = nuclei_template_path + os.path.sep + template_path
                 if os.path.exists(full_template_path) == False:
-                    print("[-] Nuclei template path '%s' does not exist" %
-                          full_template_path)
+                    logger.error(
+                        "Nuclei template path '%s' does not exist" % full_template_path)
                     raise FileNotFoundError(errno.ENOENT, os.strerror(
                         errno.ENOENT), full_template_path)
 
@@ -201,18 +194,13 @@ class NucleiScan(luigi.Task):
 
             # Add templates
             command_inner.extend(template_arr)
-            # print(command)
-
             command.extend(command_inner)
-            thread_list.append(pool.apply_async(
-                scan_utils.process_wrapper, (command, use_shell, my_env)))
 
-        # Close the pool
-        pool.close()
+            future_inst = scan_utils.executor.submit(
+                scan_utils.process_wrapper, cmd_args=command, use_shell=use_shell, my_env=my_env)
 
-        # Loop through thread function calls and update progress
-        for thread_obj in tqdm(thread_list):
-            output = thread_obj.get()
+            # Wait for it to finish
+            future_inst.result()
 
         results_dict = {'endpoint_port_obj_map': endpoint_port_obj_map,
                         'output_file_path': nuclei_output_file}
@@ -307,8 +295,8 @@ class ImportNucleiOutput(data_model.ImportToolXOutput):
                                 ret_arr.append(module_output_obj)
 
                         else:
-                            print("[-] Endpoint not in map: %s %s" %
-                                  (endpoint, str(endpoint_port_obj_map)))
+                            logger.debug("Endpoint not in map: %s %s" %
+                                         (endpoint, str(endpoint_port_obj_map)))
 
         # Import, Update, & Save
         self.import_results(scheduled_scan_obj, ret_arr)

@@ -4,31 +4,18 @@ import shodan
 import netaddr
 import luigi
 import time
-import multiprocessing
-import traceback
 import ipaddress
 import hashlib
 import binascii
 import logging
 
 from luigi.util import inherits
-from tqdm import tqdm
-from multiprocessing.pool import ThreadPool
 from waluigi import scan_utils
 from waluigi import data_model
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
-
-# List to store exceptions from failed tasks
-# failed_tasks_exception = None
-
-# # Event handler to catch task failures
-# @luigi.Task.event_handler(luigi.Event.FAILURE)
-# def catch_failure(task, exception):
-#     global failed_tasks_exception
-#     failed_tasks_exception = (task, exception)
 
 
 class Shodan(data_model.WaluigiTool):
@@ -45,21 +32,6 @@ class Shodan(data_model.WaluigiTool):
         luigi_run_result = luigi.build([ImportShodanOutput(
             scan_input=scan_input)], local_scheduler=True, detailed_summary=True)
         if luigi_run_result and luigi_run_result.status != luigi.execution_summary.LuigiStatusCode.SUCCESS:
-            # logger.error("Some tasks failed.")
-
-            # Access collected exceptions from the event handler
-            # if failed_tasks_exception:
-            #    logger.debug(f"{failed_tasks_exception[0]} {failed_tasks_exception[1]}")
-
-            # Access failure events to retrieve exceptions
-            # failure_events = luigi_run_result.worker._status_reporter.get_task_failure_events()
-            # logger.error("Failure events: %d" % len(failure_events))
-            # for event in failure_events:
-            #     task_name = event.task_id
-            #     exception = event.exception
-            #     traceback = event.traceback
-            #     logger.debug(f"Task {task_name} failed with exception: {exception}")
-            #     logger.debug(f"Traceback:\n{traceback}")
             return False
         return True
 
@@ -84,6 +56,7 @@ class ShodanScope(luigi.ExternalTask):
 
         scope_obj = scheduled_scan_obj.scan_data
         target_list = []
+        domain_set = set()
         subnet_map = scope_obj.subnet_map
         for subnet_id in subnet_map:
             subnet_obj = subnet_map[subnet_id]
@@ -96,10 +69,22 @@ class ShodanScope(luigi.ExternalTask):
             host_str = "%s/32" % (host_obj.ipv4_addr)
             target_list.append(host_str)
 
-        # print("[+] Retrieved %d subnets from database" % len(target_map))
+        domain_map = scope_obj.domain_map
+        for domain_id in domain_map:
+            domain_obj = domain_map[domain_id]
+            domain_str = domain_obj.name
+            domain_set.add(domain_str)
+
+        logger.debug("[+] Retrieved %d subnets from database" %
+                     len(target_list))
+        logger.debug("[+] Retrieved %d domain from database" %
+                     len(domain_set))
+        imput_data = {'host_list': target_list,
+                      'domain_list': list(domain_set)}
+        json_data = json.dumps(imput_data)
+
         with open(shodan_ip_file, 'w') as shodan_fd:
-            for target_str in target_list:
-                shodan_fd.write(target_str + '\n')
+            shodan_fd.write(json_data)
 
         return luigi.LocalTarget(shodan_ip_file)
 
@@ -109,7 +94,7 @@ def shodan_dns_query(api, domain):
     info = None
     while True:
         try:
-            info = api.dns.domain_info(domain, history=False, type=type)
+            info = api.dns.domain_info(domain, history=False, type="A")
             break
         except shodan.exception.APIError as e:
             err_msg = str(e).lower()
@@ -188,30 +173,20 @@ def shodan_subnet_query(api, subnet, cidr):
     return service_list
 
 
-def shodan_wrapper(shodan_key, ip, cidr):
+def shodan_wrapper(shodan_key, ip=None, cidr=None, domain=None):
 
     results = []
-    try:
-        if shodan_key:
-
-            results = []
-            # Setup the api
-            api = shodan.Shodan(shodan_key)
-            if cidr > 28:
-                subnet = netaddr.IPNetwork(str(ip)+"/"+str(cidr))
-                for ip in subnet.iter_hosts():
-                    results.extend(shodan_host_query(api, ip))
-            else:
-                results = shodan_subnet_query(api, ip, cidr)
-
-    except Exception as e:
-        # Here we add some debugging help. If multiprocessing's
-        # debugging is on, it will arrange to log the traceback
-        logger.error("[-] Shodan scan thread exception.")
-        logger.error(traceback.format_exc())
-        # Re-raise the original exception so the Pool worker can
-        # clean up
-        return None
+    # Setup the api
+    api = shodan.Shodan(shodan_key)
+    if ip and cidr:
+        if cidr > 28:
+            subnet = netaddr.IPNetwork(str(ip)+"/"+str(cidr))
+            for ip in subnet.iter_hosts():
+                results.extend(shodan_host_query(api, ip))
+        else:
+            results = shodan_subnet_query(api, ip, cidr)
+    elif domain:
+        results = shodan_dns_query(api, domain)
 
     return results
 
@@ -271,9 +246,11 @@ class ShodanScan(luigi.Task):
 
         # Read shodan input files
         shodan_input_file = self.input()
+        input_data = None
         with shodan_input_file.open() as file_fd:
-            ip_subnets = file_fd.readlines()
+            input_data = json.loads(file_fd.read())
 
+        ip_subnets = input_data['host_list']
         # Attempt to consolidate subnets to reduce the number of shodan calls
         logger.debug("Consolidating subnets queried by Shodan")
 
@@ -293,8 +270,12 @@ class ShodanScan(luigi.Task):
             result = shodan_wrapper(shodan_key, "8.8.8.8", 32)
             if result is not None:
 
-                pool = ThreadPool(processes=10)
-                thread_list = []
+                futures = []
+                domains = input_data['domain_list']
+                for domain in domains:
+                    futures.append(scan_utils.executor.submit(
+                        shodan_wrapper, shodan_key=shodan_key, domain=domain))
+
                 for subnet in ip_subnets:
 
                     # Get the subnet
@@ -311,42 +292,30 @@ class ShodanScan(luigi.Task):
                     if ip_network.is_private:
                         continue
 
-                    thread_list.append(pool.apply_async(
-                        shodan_wrapper, (shodan_key, ip, cidr)))
+                    futures.append(scan_utils.executor.submit(
+                        shodan_wrapper, shodan_key=shodan_key, ip=ip, cidr=cidr))
 
-                # Close the pool
-                pool.close()
-
+                # Wait for the tasks to complete and retrieve results
                 output_arr = []
-                # Loop through thread function calls and update progress
-                for thread_obj in tqdm(thread_list):
-                    result = thread_obj.get()
-                    if result is None:
-                        # Stop all threads
-                        pool.terminate()
-                        break
+                for future in futures:
+                    result = future.result()
                     output_arr.extend(result)
 
                 # Open output file and write json of output
                 outfile = self.output().path
-                f_out = open(outfile, 'w')
-
-                if len(output_arr) > 0:
-                    f_out.write(json.dumps(output_arr))
-
-                # Close the file
-                f_out.close()
+                output_data = {"data": output_arr}
+                with open(outfile, 'w') as f:
+                    f.write(json.dumps(output_data))
 
         else:
             logger.error("No shodan API key provided.")
             raise Exception("No shodan API key provided")
 
 
-@inherits(ShodanScan)
+@ inherits(ShodanScan)
 class ImportShodanOutput(data_model.ImportToolXOutput):
 
     def requires(self):
-        # Requires MassScan Task to be run prior
         return ShodanScan(scan_input=self.scan_input)
 
     def run(self):
@@ -364,7 +333,8 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
             json_data = json.loads(data)
             if json_data and len(json_data) > 0:
 
-                for service in json_data:
+                scan_data = json_data['data']
+                for service in scan_data:
 
                     host_id = None
                     port_id = None

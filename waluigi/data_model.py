@@ -902,8 +902,6 @@ class HttpEndpointData(Record):
             self.domain_id = None
             self.fav_icon_hash = None
 
-            logger.debug("Input data dict: %s" % input_data_dict)
-
             if 'title' in input_data_dict:
                 self.title = input_data_dict['title']
 

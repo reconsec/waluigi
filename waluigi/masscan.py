@@ -48,8 +48,9 @@ def get_mac_address(ip_address):
     ret = None
     # Run the arp command to get the ARP table entries
     arp_cmd = ["arp", "-n", ip_address]
-    
-    future = scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=arp_cmd)
+
+    future = scan_utils.executor.submit(
+        scan_utils.process_wrapper, cmd_args=arp_cmd)
     output_json = future.result()
     output = output_json['stdout']
 
@@ -59,7 +60,7 @@ def get_mac_address(ip_address):
         match = re.search(mac_regex, output)
         if match:
             ret = match.group(0)
-        
+
     return ret
 
 
@@ -97,9 +98,9 @@ def get_masscan_input(scheduled_scan_obj):
         subnet_str = "%s/%s" % (subnet_obj.subnet, subnet_obj.mask)
         target_list.append(subnet_str)
 
-    host_map = scope_obj.host_map
-    for host_id in host_map:
-        host_obj = host_map[host_id]
+    host_list = scope_obj.get_hosts(
+        [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+    for host_obj in host_list:
         host_str = "%s/32" % (host_obj.ipv4_addr)
         target_list.append(host_str)
 
@@ -208,9 +209,10 @@ class MasscanScan(luigi.Task):
             command.extend(command_arr)
 
             # Execute process
-            future = scan_utils.executor.submit(scan_utils.process_wrapper, cmd_args=command)
+            future = scan_utils.executor.submit(
+                scan_utils.process_wrapper, cmd_args=command)
             # Wait for the process to finish
-            future.result() 
+            future.result()
 
         else:
             logger.error("No targets to scan with masscan")
@@ -282,7 +284,8 @@ class ImportMasscanOutput(data_model.ImportToolXOutput):
                 os.remove(masscan_output_file)
                 raise e
         else:
-            logger.error("Masscan output file is empty. Ensure inputs were provided.")
+            logger.error(
+                "Masscan output file is empty. Ensure inputs were provided.")
 
         # Import, Update, & Save
         scheduled_scan_obj = self.scan_input

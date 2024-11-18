@@ -102,7 +102,6 @@ echo "no_install_shutdown_handler=True" | sudo tee -a /opt/collector/luigi.cfg
 sudo mkdir /opt/waluigi
 sudo cp ./setup.py /opt/waluigi/
 sudo cp -r ./waluigi /opt/waluigi/
-#sudo git clone -c http.sslVerify=false https://github.com/securifera/waluigi.git
 cd /opt/waluigi && python3 setup.py install
 
 ###############

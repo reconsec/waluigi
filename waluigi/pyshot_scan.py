@@ -19,31 +19,31 @@ logger = logging.getLogger(__name__)
 url_set = set()
 
 
-def get_url(host, port_arg, secure, query_arg, domain=None):
-    port = ""
-    if port_arg:
-        port = ":" + port_arg
-        # Default port 443 to secure
-        if port_arg == '443':
-            secure = True
+# def get_url(host, port_arg, secure, query_arg, domain=None):
+#     port = ""
+#     if port_arg:
+#         port = ":" + port_arg
+#         # Default port 443 to secure
+#         if port_arg == '443':
+#             secure = True
 
-    # Add query if it exists
-    if domain:
-        host = domain
-    full_path = host + port
+#     # Add query if it exists
+#     if domain:
+#         host = domain
+#     full_path = host + port
 
-    path = ""
-    if query_arg:
-        path += query_arg
+#     path = ""
+#     if query_arg:
+#         path += query_arg
 
-    full_path += path
+#     full_path += path
 
-    url = "http"
-    if secure == True:
-        url += "s"
-    url += "://" + full_path
+#     url = "http"
+#     if secure == True:
+#         url += "s"
+#     url += "://" + full_path
 
-    return url
+#     return url
 
 
 class Pyshot(data_model.WaluigiTool):
@@ -98,7 +98,7 @@ def pyshot_wrapper(ip_addr, port, dir_path, ssl_val, port_id, query_arg="", doma
 def queue_scan(futures, host, port_str, dir_path, secure, port_id, query_arg="", domain_str=None, http_endpoint_data_id=None):
 
     global url_set
-    url = get_url(host, port_str, secure, query_arg)
+    url = scan_utils.construct_url(host, port_str, secure, query_arg)
 
     if url not in url_set:
         url_set.add(url)

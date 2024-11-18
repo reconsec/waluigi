@@ -23,7 +23,7 @@ class Httpx(data_model.WaluigiTool):
         self.name = 'httpx'
         self.collector_type = data_model.CollectorType.ACTIVE.value
         self.scan_order = 4
-        self.args = ""
+        self.args = "-favicon -td"
         self.scan_func = Httpx.httpx_scan_func
         self.import_func = Httpx.httpx_import
 
@@ -72,16 +72,18 @@ class HttpXScan(luigi.Task):
         output_file_list = []
 
         scope_obj = scheduled_scan_obj.scan_data
-        port_ip_dict = {}
+        port_target_list_map = {}
 
-        # script_args = None
         script_args = scheduled_scan_obj.current_tool.args
         if script_args:
             script_args = script_args.split(" ")
 
-        host_map = scope_obj.host_map
-        domain_map = scope_obj.domain_map
-        port_map = scope_obj.port_map
+        host_list = scope_obj.get_hosts(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+        domain_list = scope_obj.get_domains(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+        port_list = scope_obj.get_ports(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
 
         # Check if massscan was already run
         mass_scan_ran = False
@@ -103,68 +105,88 @@ class HttpXScan(luigi.Task):
                 ip_addr = host_obj.ipv4_addr
 
                 # Add to ip set
-                if port_str in port_ip_dict:
-                    ip_set = port_ip_dict[port_str]
+                if port_str in port_target_list_map:
+                    ip_set = port_target_list_map[port_str]
                 else:
                     ip_set = set()
-                    port_ip_dict[port_str] = ip_set
+                    port_target_list_map[port_str] = ip_set
 
                 # Add IP to list
                 ip_set.add(ip_addr)
 
         else:
+
+            url_list = scope_obj.get_scope_urls()
+            if len(url_list) > 0:
+
+                for url_inst in url_list:
+
+                    port_str = scan_utils.get_url_port(url_inst)
+                    if port_str is None:
+                        continue
+
+                    port_str = str(port_str)
+                    # Add to ip set
+                    if port_str in port_target_list_map:
+                        endpoint_url_set = port_target_list_map[port_str]
+                    else:
+                        endpoint_url_set = set()
+                        port_target_list_map[port_str] = endpoint_url_set
+
+                    # Add IP to list
+                    endpoint_url_set.add(url_inst)
+
             scan_port_list = scope_obj.port_number_list
             if len(scan_port_list) > 0:
-                port_id = None
+
+                url_list = scope_obj.get_scope_urls()
                 for port_str in scan_port_list:
 
                     # Add a port entry for each host
-                    for host_id in host_map:
-                        host_obj = host_map[host_id]
+                    for host_obj in host_list:
                         ip_addr = host_obj.ipv4_addr
 
                         # Add to ip set
-                        if port_str in port_ip_dict:
-                            ip_set = port_ip_dict[port_str]
+                        if port_str in port_target_list_map:
+                            ip_set = port_target_list_map[port_str]
                         else:
                             ip_set = set()
-                            port_ip_dict[port_str] = ip_set
+                            port_target_list_map[port_str] = ip_set
 
                         # Add IP to list
                         ip_set.add(ip_addr)
 
                     # Add a port entry for each domain
-                    for domain_id in domain_map:
-                        domain_obj = domain_map[domain_id]
+                    for domain_obj in domain_list:
+                        # domain_obj = domain_map[domain_id]
                         domain_name = domain_obj.name
 
-                        if port_str in port_ip_dict:
-                            ip_set = port_ip_dict[port_str]
+                        if port_str in port_target_list_map:
+                            ip_set = port_target_list_map[port_str]
                         else:
                             ip_set = set()
-                            port_ip_dict[port_str] = ip_set
+                            port_target_list_map[port_str] = ip_set
 
                         # Add domain to list
                         ip_set.add(domain_name)
 
-            elif len(port_map) > 0:
+            elif len(port_list) > 0:
 
-                for port_id in port_map:
-                    port_obj = port_map[port_id]
+                for port_obj in port_list:
                     port_str = str(port_obj.port)
 
                     if port_obj.parent:
                         host_id = port_obj.parent.id
-                        if host_id in host_map:
-                            host_obj = host_map[host_id]
+                        if host_id in scope_obj.host_map:
+                            host_obj = scope_obj.host_map[host_id]
                             ip_addr = host_obj.ipv4_addr
 
                             # Add to ip set
-                            if port_str in port_ip_dict:
-                                ip_set = port_ip_dict[port_str]
+                            if port_str in port_target_list_map:
+                                ip_set = port_target_list_map[port_str]
                             else:
                                 ip_set = set()
-                                port_ip_dict[port_str] = ip_set
+                                port_target_list_map[port_str] = ip_set
 
                             # Add IP to list
                             ip_set.add(ip_addr)
@@ -178,12 +200,12 @@ class HttpXScan(luigi.Task):
                                     ip_set.add(domain_name)
 
         futures = []
-        for port_str in port_ip_dict:
+        for port_str in port_target_list_map:
 
             scan_output_file_path = output_dir + os.path.sep + "httpx_out_" + port_str
             output_file_list.append(scan_output_file_path)
 
-            ip_list = port_ip_dict[port_str]
+            ip_list = port_target_list_map[port_str]
 
             # Write ips to file
             scan_input_file_path = output_dir + os.path.sep + "httpx_in_" + port_str
@@ -199,8 +221,6 @@ class HttpXScan(luigi.Task):
                 "httpx",
                 "-json",
                 "-tls-probe",
-                "-favicon",
-                "-td",
                 "-irr",  # Return response so Headers can be parsed
                 # "-ss", Removed from default because it is too memory/cpu intensive for small collectors
                 "-fhr",

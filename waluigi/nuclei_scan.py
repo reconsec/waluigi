@@ -87,17 +87,7 @@ class NucleiScan(luigi.Task):
         endpoint_port_obj_map = {}
         nuclei_output_file = None
 
-        # scan_input_data = scan_target_dict['scan_input']
-        # template_path_list = []
         template_path_list = [scheduled_scan_obj.current_tool.args]
-        # if 'tool_args' in scan_target_dict:
-        #     template_path_list = scan_target_dict['tool_args']
-        # print(scan_input_data)
-
-        # target_map = {}
-        # if 'target_map' in scan_input_data:
-        #     target_map = scan_input_data['target_map']
-
         target_map = scheduled_scan_obj.scan_data.host_port_obj_map
 
         for target_key in target_map:
@@ -110,30 +100,23 @@ class NucleiScan(luigi.Task):
 
             host_obj = target_obj_dict['host_obj']
             ip_addr = host_obj.ipv4_addr
-
-            # Add domain if it is different from the IP
-            domain_str = None
             target_arr = target_key.split(":")
 
-            # Setup inputs
-            prefix = 'http://'
-            if secure_flag:
-                prefix = 'https://'
-
-            endpoint = prefix + ip_addr + ":" + port_str
+            url_str = scan_utils.construct_url(ip_addr, port_str, secure_flag)
             port_obj_instance = {"port_id": port_id}
 
-            if endpoint not in total_endpoint_set:
-                endpoint_port_obj_map[endpoint] = port_obj_instance
-                total_endpoint_set.add(endpoint)
+            if url_str not in total_endpoint_set:
+                endpoint_port_obj_map[url_str] = port_obj_instance
+                total_endpoint_set.add(url_str)
 
+            # Add the domain url as well
             if target_arr[0] != ip_addr:
                 domain_str = target_arr[0]
-                endpoint = prefix + domain_str + ":" + port_str
-
-                if endpoint not in total_endpoint_set:
-                    endpoint_port_obj_map[endpoint] = port_obj_instance
-                    total_endpoint_set.add(endpoint)
+                url_str = scan_utils.construct_url(
+                    domain_str, port_str, secure_flag)
+                if url_str not in total_endpoint_set:
+                    endpoint_port_obj_map[url_str] = port_obj_instance
+                    total_endpoint_set.add(url_str)
 
         template_arr = []
         for template_path in template_path_list:

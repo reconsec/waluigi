@@ -7,6 +7,7 @@ import os
 import json
 import importlib
 import logging
+import traceback
 
 from waluigi import scan_utils
 
@@ -47,6 +48,22 @@ class CollectorType(enum.Enum):
             return "PASSIVE"
         elif (self == CollectorType.ACTIVE):
             return "ACTIVE"
+        else:
+            return None
+
+
+class RecordTag(enum.Enum):
+    LOCAL = 1
+    REMOTE = 2
+    SCOPE = 3
+
+    def __str__(self):
+        if (self == RecordTag.LOCAL):
+            return "LOCAL"
+        elif (self == RecordTag.REMOTE):
+            return "REMOTE"
+        elif (self == RecordTag.SCOPE):
+            return "SCOPE"
         else:
             return None
 
@@ -184,6 +201,62 @@ def update_scope_array(record_map, updated_record_map=None):
 
 class ScanData():
 
+    def get_hosts(self, tag_list=None):
+
+        host_list = []
+        host_map = self.host_map
+        for host_id in host_map:
+            host_obj = host_map[host_id]
+
+            if tag_list:
+                if host_obj.tags.intersection(set(tag_list)):
+                    host_list.append(host_obj)
+            else:
+                host_list.append(host_obj)
+
+        return host_list
+
+    def get_domains(self, tag_list=None):
+
+        domain_name_list = []
+        domain_map = self.domain_map
+        for domain_id in domain_map:
+            domain_obj = domain_map[domain_id]
+            if tag_list:
+                if domain_obj.tags.intersection(set(tag_list)) and domain_obj.name not in domain_name_list:
+                    domain_name_list.append(domain_obj)
+            elif domain_obj.name not in domain_name_list:
+                domain_name_list.add(domain_obj)
+
+        return domain_name_list
+
+    def get_ports(self, tag_list=None):
+
+        port_list = []
+        port_map = self.port_map
+        for port_id in port_map:
+            port_obj = port_map[port_id]
+            if tag_list:
+                if port_obj.tags.intersection(set(tag_list)):
+                    port_list.append(port_obj)
+            else:
+                port_list.append(port_obj)
+
+        return port_list
+
+    def get_scope_urls(self):
+
+        endpoint_urls = set()
+        http_endpoint_data_map = self.http_endpoint_data_map
+        for http_endpoint_data_id in http_endpoint_data_map:
+            http_endpoint_data_obj = http_endpoint_data_map[http_endpoint_data_id]
+            if RecordTag.SCOPE.value in http_endpoint_data_obj.tags:
+                url_str = http_endpoint_data_obj.get_url()
+                if url_str:
+                    endpoint_urls.add(url_str)
+
+        return list(endpoint_urls)
+
     def update(self, record_map):
 
         # Parse the data
@@ -193,7 +266,8 @@ class ScanData():
         else:
             import_list = record_map
 
-        self._process_data(import_list)
+        record_tags = set([RecordTag.LOCAL.value])
+        self._process_data(import_list, record_tags)
 
         self._post_process()
 
@@ -201,11 +275,21 @@ class ScanData():
 
     def _post_process(self):
 
+        tag_list = [RecordTag.SCOPE.value, RecordTag.LOCAL.value]
+
         for port_id in self.port_map:
             port_obj = self.port_map[port_id]
+            # Exclude ports that originated remotely that aren't part of the scope
+            if len(port_obj.tags.intersection(set(tag_list))) == 0:
+                continue
+
             host_id = port_obj.parent.id
             if host_id in self.host_map:
                 host_obj = self.host_map[host_id]
+                # Exclude ports that originated remotely that aren't part of the scope
+                if len(host_obj.tags.intersection(set(tag_list))) == 0:
+                    continue
+
                 host_port_str = "%s:%s" % (host_obj.ipv4_addr, port_obj.port)
 
                 host_port_entry = {'host_obj': host_obj, 'port_obj': port_obj}
@@ -214,6 +298,11 @@ class ScanData():
                 if host_id in self.domain_host_id_map:
                     domain_obj_list = self.domain_host_id_map[host_id]
                     for domain_obj in domain_obj_list:
+
+                        # Exclude domains that originated remotely that aren't part of the scope
+                        if len(domain_obj.tags.intersection(set(tag_list))) == 0:
+                            continue
+
                         domain_port_str = "%s:%s" % (
                             domain_obj.name, port_obj.port)
 
@@ -238,11 +327,13 @@ class ScanData():
         # for obj in self.subnet_map.values():
         #     print(obj.to_jsonable())
 
-    def _process_data(self, obj_list):
+    def _process_data(self, obj_list, record_tags=set()):
 
         for obj in obj_list:
             if not isinstance(obj, Record):
-                record_obj = Record.from_jsonsable(obj)
+                # logger.debug("Processing object: %s" % str(obj))
+                record_obj = Record.from_jsonsable(
+                    input_dict=obj, scan_data=self, record_tags=record_tags)
                 if record_obj is None:
                     continue
             else:
@@ -502,7 +593,7 @@ class ScanData():
             # Add to overall map
             self.scan_obj_map[record_obj.id] = record_obj
 
-    def __init__(self, scan_data):
+    def __init__(self, scan_data, record_tags=set()):
 
         self.scan_obj_list = []
 
@@ -570,7 +661,7 @@ class ScanData():
         self.module_map = {}
         self.component_name_module_map = {}
 
-        # logger.debug("Processing scan data\n %s" % scan_data)
+        logger.debug("Processing scan data\n %s" % scan_data)
         # Decode the port map
         if 'b64_port_bitmap' in scan_data and scan_data['b64_port_bitmap']:
             b64_port_bitmap = scan_data['b64_port_bitmap']
@@ -582,7 +673,7 @@ class ScanData():
             obj_list = scan_data['obj_list']
 
             # Parse the data
-            self._process_data(obj_list)
+            self._process_data(obj_list, record_tags=record_tags)
 
         # Post process
         self._post_process()
@@ -594,6 +685,8 @@ class Record():
         self.id = id if id is not None else format(
             uuid.uuid4().int, 'x')
         self.parent = parent
+        self.scan_data = None
+        self.tags = set()
 
     def _data_to_jsonable(self):
         return None
@@ -615,19 +708,24 @@ class Record():
         return ret
 
     @staticmethod
-    def from_jsonsable(input_dict):
+    def from_jsonsable(input_dict, scan_data=None, record_tags=set()):
         obj = None
+        record_tags_inst = set(record_tags)
+
+        obj_id = input_dict['id']
+        record_data = input_dict['data']
+        parent_id = None
+        if 'parent' in input_dict:
+            parent_record = input_dict['parent']
+            if parent_record:
+                parent_id = parent_record['id']
+
+        if 'tags' in input_dict:
+            record_tags_set = input_dict['tags']
+            record_tags_inst.update(record_tags_set)
+
+        # Create record
         try:
-
-            obj_id = input_dict['id']
-            record_data = input_dict['data']
-            parent_id = None
-            if 'parent' in input_dict:
-                parent_record = input_dict['parent']
-                if parent_record:
-                    parent_id = parent_record['id']
-
-            # Create record
             record_type = input_dict['type']
             if record_type == 'host':
                 obj = Host(id=obj_id)
@@ -640,7 +738,8 @@ class Record():
             elif record_type == 'httpendpoint':
                 obj = HttpEndpoint(id=obj_id, parent_id=parent_id)
             elif record_type == 'httpendpointdata':
-                obj = HttpEndpointData(id=obj_id, parent_id=parent_id)
+                obj = HttpEndpointData(
+                    id=obj_id, parent_id=parent_id)
             # elif record_type == 'screenshot':
             #    obj = Screenshot(id=obj_id)
             elif record_type == 'webcomponent':
@@ -648,25 +747,26 @@ class Record():
             elif record_type == 'vuln':
                 obj = Vuln(id=obj_id, parent_id=parent_id)
             elif record_type == 'collectionmodule':
-                obj = CollectionModule(id=obj_id, parent_id=parent_id)
-            # elif record_type == 'collectionmoduleoutput':
-            #    obj = CollectionModuleOutput(
-            #        id=obj_id, parent_id=parent_id)
+                obj = CollectionModule(
+                    id=obj_id, parent_id=parent_id)
+            elif record_type == 'collectionmoduleoutput':
+                obj = CollectionModuleOutput(id=obj_id, parent_id=parent_id)
             elif record_type == 'certificate':
                 obj = Certificate(id=obj_id, parent_id=parent_id)
             elif record_type == 'subnet':
                 obj = Subnet(id=obj_id)
             else:
-                print("Unknown record type: %s" % record_type)
-                # raise Exception('Invalid record type: %s' % record_type)
+                logger.debug("Unknown record type: %s" % record_type)
                 return
 
             # Populate data
             if obj:
+                obj.scan_data = scan_data
+                obj.tags.update(record_tags_inst)
                 obj.from_jsonsable(record_data)
 
         except Exception as e:
-            print(input_dict)
+            logger.debug(traceback.format_exc())
             raise Exception('Invalid scan object: %s' % str(e))
 
         return obj
@@ -680,7 +780,7 @@ class Tool(Record):
 
 class Subnet(Record):
 
-    def __init__(self, id=None):
+    def __init__(self,  id=None):
         super().__init__(id=id, parent=None)
 
         self.subnet = None
@@ -696,7 +796,7 @@ class Subnet(Record):
 
 class Host(Record):
 
-    def __init__(self, id=None):
+    def __init__(self,  id=None):
         super().__init__(id=id, parent=None)
 
         self.ipv4_addr = None
@@ -724,7 +824,7 @@ class Host(Record):
 
 class Port(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=Host(id=parent_id))
 
         self.proto = None
@@ -754,7 +854,7 @@ class Port(Record):
 
 class Domain(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=Host(id=parent_id))
 
         self.name = None
@@ -771,7 +871,7 @@ class Domain(Record):
 
 class WebComponent(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=Port(id=parent_id))
 
         self.name = None
@@ -794,7 +894,7 @@ class WebComponent(Record):
 
 class Vuln(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=Port(id=parent_id))
 
         self.name = None
@@ -809,10 +909,18 @@ class Vuln(Record):
             ret['endpoint_id'] = self.endpoint_id
         return ret
 
+    def from_jsonsable(self, input_data_dict):
+        try:
+            self.name = input_data_dict['name']
+            self.vuln_details = input_data_dict['vuln_details']
+            self.endpoint_id = input_data_dict['endpoint_id']
+        except Exception as e:
+            raise Exception('Invalid vuln object: %s' % str(e))
+
 
 class ListItem(Record):
 
-    def __init__(self, id=None):
+    def __init__(self,  id=None):
         super().__init__(id=id)
 
         self.web_path = None
@@ -832,7 +940,7 @@ class ListItem(Record):
 
 class Screenshot(Record):
 
-    def __init__(self, id=None):
+    def __init__(self,  id=None):
         super().__init__(id=id)
 
         self.screenshot = None
@@ -845,9 +953,53 @@ class Screenshot(Record):
 
 class HttpEndpoint(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=Port(id=parent_id))
         self.web_path_id = None
+
+    def get_port(self):
+        port_str = ''
+        port_id = self.parent.id
+        if port_id in self.scan_data.port_map:
+            port_obj = self.scan_data.port_map[port_id]
+            return port_obj.port
+        return port_str
+
+    def get_url(self):
+        port_id = self.parent.id
+        host_ip = None
+        port_str = None
+        secure = None
+        query_str = None
+
+        if port_id in self.scan_data.port_map:
+            port_obj = self.scan_data.port_map[port_id]
+            port_str = port_obj.port
+            secure = port_obj.secure
+
+            if port_obj.parent.id in self.scan_data.host_map:
+                host_obj = self.scan_data.host_map[port_obj.parent.id]
+                if host_obj:
+                    host_ip = host_obj.ipv4_addr
+
+        if self.id in self.scan_data.http_endpoint_map:
+            http_endpoint_data_obj_list = self.scan_data.endpoint_data_endpoint_id_map[
+                self.id]
+            for http_endpoint_data_obj in http_endpoint_data_obj_list:
+                if http_endpoint_data_obj.domain_id and http_endpoint_data_obj.domain_id in self.scan_data.domain_map:
+                    domain_obj = self.scan_data.domain_map[http_endpoint_data_obj.domain_id]
+                    if domain_obj:
+                        host_ip = domain_obj.name
+                        break
+
+        if self.web_path_id in self.scan_data.path_map:
+            path_obj = self.scan_data.path_map[self.web_path_id]
+            query_str = path_obj.web_path
+
+        url_str = scan_utils.construct_url(
+            host_ip, port_str, secure, query_str)
+
+        return url_str
 
     def _data_to_jsonable(self):
 
@@ -867,7 +1019,7 @@ class HttpEndpoint(Record):
 
 class HttpEndpointData(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=HttpEndpoint(id=parent_id))
 
         self.title = None
@@ -894,6 +1046,43 @@ class HttpEndpointData(Record):
 
         return ret
 
+    def get_url(self):
+
+        port_id = None
+        host_ip = None
+        port_str = None
+        secure = None
+        query_str = None
+
+        if self.parent.id in self.scan_data.http_endpoint_map:
+            http_endpoint_obj = self.scan_data.http_endpoint_map[self.parent.id]
+            port_id = http_endpoint_obj.parent.id
+            web_path_id = http_endpoint_obj.web_path_id
+
+            if web_path_id in self.scan_data.path_map:
+                path_obj = self.scan_data.path_map[web_path_id]
+                query_str = path_obj.web_path
+
+        if port_id and port_id in self.scan_data.port_map:
+            port_obj = self.scan_data.port_map[port_id]
+            port_str = port_obj.port
+            secure = port_obj.secure
+
+            if port_obj.parent.id in self.scan_data.host_map:
+                host_obj = self.scan_data.host_map[port_obj.parent.id]
+                if host_obj:
+                    host_ip = host_obj.ipv4_addr
+
+        if self.domain_id and self.domain_id in self.scan_data.domain_map:
+            domain_obj = self.scan_data.domain_map[self.domain_id]
+            if domain_obj:
+                host_ip = domain_obj.name
+
+        url_str = scan_utils.construct_url(
+            host_ip, port_str, secure, query_str)
+
+        return url_str
+
     def from_jsonsable(self, input_data_dict):
         try:
 
@@ -901,8 +1090,6 @@ class HttpEndpointData(Record):
             self.last_modified = None
             self.domain_id = None
             self.fav_icon_hash = None
-
-            logger.debug("Input data dict: %s" % input_data_dict)
 
             if 'title' in input_data_dict:
                 self.title = input_data_dict['title']
@@ -928,7 +1115,7 @@ class HttpEndpointData(Record):
 
 class CollectionModule(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=Tool(parent_id))
 
         self.name = None
@@ -957,7 +1144,7 @@ class CollectionModule(Record):
 
 class CollectionModuleOutput(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=CollectionModule(id=parent_id))
 
         self.data = None
@@ -967,10 +1154,20 @@ class CollectionModuleOutput(Record):
         ret = {'output': self.data, 'port_id': self.port_id}
         return ret
 
+    def from_jsonsable(self, input_data_dict):
+        try:
+
+            self.data = str(input_data_dict['output'])
+            self.port_id = str(input_data_dict['port_id'])
+
+        except Exception as e:
+            raise Exception(
+                'Invalid collection module output object: %s' % str(e))
+
 
 class Certificate(Record):
 
-    def __init__(self, parent_id=None, id=None):
+    def __init__(self,  parent_id=None, id=None):
         super().__init__(id=id, parent=Port(id=parent_id))
 
         self.issuer = None

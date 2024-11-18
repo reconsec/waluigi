@@ -121,7 +121,10 @@ class ProcessStreamReader(Thread):
         return output_str
 
 
-def construct_url(target_str, port, secure):
+def construct_url(target_str, port, secure, query_str=None):
+
+    if target_str is None or port is None or secure is None:
+        return None
 
     port_str = str(port).strip()
     add_port_flag = True
@@ -136,6 +139,9 @@ def construct_url(target_str, port, secure):
     url += "://" + target_str
     if add_port_flag:
         url += ":" + port_str
+
+    if query_str:
+        url += query_str
 
     return url
 

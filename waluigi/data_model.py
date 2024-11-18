@@ -242,7 +242,7 @@ class ScanData():
 
         for obj in obj_list:
             if not isinstance(obj, Record):
-                record_obj = Record.from_jsonsable(obj)
+                record_obj = Record.from_jsonsable(self, obj)
                 if record_obj is None:
                     continue
             else:
@@ -570,7 +570,7 @@ class ScanData():
         self.module_map = {}
         self.component_name_module_map = {}
 
-        # logger.debug("Processing scan data\n %s" % scan_data)
+        logger.debug("Processing scan data\n %s" % scan_data)
         # Decode the port map
         if 'b64_port_bitmap' in scan_data and scan_data['b64_port_bitmap']:
             b64_port_bitmap = scan_data['b64_port_bitmap']
@@ -590,10 +590,11 @@ class ScanData():
 
 class Record():
 
-    def __init__(self, id=None, parent=None):
+    def __init__(self, scan_data, id=None, parent=None):
         self.id = id if id is not None else format(
             uuid.uuid4().int, 'x')
         self.parent = parent
+        self.scan_data = scan_data
 
     def _data_to_jsonable(self):
         return None
@@ -615,7 +616,7 @@ class Record():
         return ret
 
     @staticmethod
-    def from_jsonsable(input_dict):
+    def from_jsonsable(scan_data, input_dict):
         obj = None
         try:
 
@@ -630,35 +631,36 @@ class Record():
             # Create record
             record_type = input_dict['type']
             if record_type == 'host':
-                obj = Host(id=obj_id)
+                obj = Host(scan_data, id=obj_id)
             elif record_type == 'port':
-                obj = Port(id=obj_id, parent_id=parent_id)
+                obj = Port(scan_data, id=obj_id, parent_id=parent_id)
             elif record_type == 'domain':
-                obj = Domain(id=obj_id, parent_id=parent_id)
+                obj = Domain(scan_data, id=obj_id, parent_id=parent_id)
             elif record_type == 'listitem':
-                obj = ListItem(id=obj_id)
+                obj = ListItem(scan_data, id=obj_id)
             elif record_type == 'httpendpoint':
-                obj = HttpEndpoint(id=obj_id, parent_id=parent_id)
+                obj = HttpEndpoint(scan_data, id=obj_id, parent_id=parent_id)
             elif record_type == 'httpendpointdata':
-                obj = HttpEndpointData(id=obj_id, parent_id=parent_id)
-            # elif record_type == 'screenshot':
-            #    obj = Screenshot(id=obj_id)
+                obj = HttpEndpointData(
+                    scan_data=scan_data, id=obj_id, parent_id=parent_id)
+            elif record_type == 'screenshot':
+                obj = Screenshot(scan_data, id=obj_id)
             elif record_type == 'webcomponent':
-                obj = WebComponent(id=obj_id, parent_id=parent_id)
+                obj = WebComponent(scan_data, id=obj_id, parent_id=parent_id)
             elif record_type == 'vuln':
-                obj = Vuln(id=obj_id, parent_id=parent_id)
+                obj = Vuln(scan_data, id=obj_id, parent_id=parent_id)
             elif record_type == 'collectionmodule':
-                obj = CollectionModule(id=obj_id, parent_id=parent_id)
-            # elif record_type == 'collectionmoduleoutput':
-            #    obj = CollectionModuleOutput(
-            #        id=obj_id, parent_id=parent_id)
+                obj = CollectionModule(
+                    scan_data, id=obj_id, parent_id=parent_id)
+            elif record_type == 'collectionmoduleoutput':
+                obj = CollectionModuleOutput(
+                    scan_data, id=obj_id, parent_id=parent_id)
             elif record_type == 'certificate':
-                obj = Certificate(id=obj_id, parent_id=parent_id)
+                obj = Certificate(scan_data, id=obj_id, parent_id=parent_id)
             elif record_type == 'subnet':
-                obj = Subnet(id=obj_id)
+                obj = Subnet(scan_data, id=obj_id)
             else:
                 print("Unknown record type: %s" % record_type)
-                # raise Exception('Invalid record type: %s' % record_type)
                 return
 
             # Populate data
@@ -680,8 +682,8 @@ class Tool(Record):
 
 class Subnet(Record):
 
-    def __init__(self, id=None):
-        super().__init__(id=id, parent=None)
+    def __init__(self, scan_data=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=None)
 
         self.subnet = None
         self.mask = None
@@ -696,8 +698,8 @@ class Subnet(Record):
 
 class Host(Record):
 
-    def __init__(self, id=None):
-        super().__init__(id=id, parent=None)
+    def __init__(self, scan_data=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=None)
 
         self.ipv4_addr = None
         self.ipv6_addr = None
@@ -724,8 +726,8 @@ class Host(Record):
 
 class Port(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=Host(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=Host(id=parent_id))
 
         self.proto = None
         self.port = None
@@ -754,8 +756,8 @@ class Port(Record):
 
 class Domain(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=Host(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=Host(id=parent_id))
 
         self.name = None
 
@@ -771,8 +773,8 @@ class Domain(Record):
 
 class WebComponent(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=Port(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=Port(id=parent_id))
 
         self.name = None
         self.version = None
@@ -794,8 +796,8 @@ class WebComponent(Record):
 
 class Vuln(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=Port(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=Port(id=parent_id))
 
         self.name = None
         self.vuln_details = None
@@ -812,8 +814,8 @@ class Vuln(Record):
 
 class ListItem(Record):
 
-    def __init__(self, id=None):
-        super().__init__(id=id)
+    def __init__(self, scan_data=None, id=None):
+        super().__init__(scan_data=scan_data, id=id)
 
         self.web_path = None
         self.web_path_hash = None
@@ -832,8 +834,8 @@ class ListItem(Record):
 
 class Screenshot(Record):
 
-    def __init__(self, id=None):
-        super().__init__(id=id)
+    def __init__(self, scan_data=None, id=None):
+        super().__init__(scan_data=scan_data, id=id)
 
         self.screenshot = None
         self.image_hash = None
@@ -845,9 +847,53 @@ class Screenshot(Record):
 
 class HttpEndpoint(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=Port(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=Port(id=parent_id))
         self.web_path_id = None
+
+    def get_port(self):
+        port_str = ''
+        port_id = self.parent.id
+        if port_id in self.scan_data.port_map:
+            port_obj = self.scan_data.port_map[port_id]
+            return port_obj.port
+        return port_str
+
+    def get_url(self):
+        port_id = self.parent.id
+        host_ip = None
+        port_str = None
+        secure = None
+        query_str = None
+
+        if port_id in self.scan_data.port_map:
+            port_obj = self.scan_data.port_map[port_id]
+            port_str = port_obj.port
+            secure = port_obj.secure
+
+            if port_obj.parent.id in self.scan_data.host_map:
+                host_obj = self.scan_data.host_map[port_obj.parent.id]
+                if host_obj:
+                    host_ip = host_obj.ipv4_addr
+
+        if self.id in self.scan_data.http_endpoint_map:
+            http_endpoint_data_obj_list = self.scan_data.endpoint_data_endpoint_id_map[
+                self.id]
+            for http_endpoint_data_obj in http_endpoint_data_obj_list:
+                if http_endpoint_data_obj.domain_id and http_endpoint_data_obj.domain_id in self.scan_data.domain_map:
+                    domain_obj = self.scan_data.domain_map[http_endpoint_data_obj.domain_id]
+                    if domain_obj:
+                        host_ip = domain_obj.name
+                        break
+
+        if self.web_path_id in self.scan_data.path_map:
+            path_obj = self.scan_data.path_map[self.web_path_id]
+            query_str = path_obj.web_path
+
+        url_str = scan_utils.construct_url(
+            host_ip, port_str, secure, query_str)
+
+        return url_str
 
     def _data_to_jsonable(self):
 
@@ -867,8 +913,8 @@ class HttpEndpoint(Record):
 
 class HttpEndpointData(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=HttpEndpoint(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=HttpEndpoint(id=parent_id))
 
         self.title = None
         self.status = None
@@ -926,8 +972,8 @@ class HttpEndpointData(Record):
 
 class CollectionModule(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=Tool(parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=Tool(parent_id))
 
         self.name = None
         self.args = None
@@ -955,8 +1001,8 @@ class CollectionModule(Record):
 
 class CollectionModuleOutput(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=CollectionModule(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=CollectionModule(id=parent_id))
 
         self.data = None
         self.port_id = None
@@ -968,8 +1014,8 @@ class CollectionModuleOutput(Record):
 
 class Certificate(Record):
 
-    def __init__(self, parent_id=None, id=None):
-        super().__init__(id=id, parent=Port(id=parent_id))
+    def __init__(self, scan_data=None, parent_id=None, id=None):
+        super().__init__(scan_data=scan_data, id=id, parent=Port(id=parent_id))
 
         self.issuer = None
         self.issued = None

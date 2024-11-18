@@ -210,14 +210,15 @@ class NmapScan(luigi.Task):
                     target_set = set()
                     resolve_dns = False
 
-                    host_map = scope_obj.host_map
-                    for host_id in host_map:
-                        host_obj = host_map[host_id]
+                    host_list = scope_obj.get_hosts(
+                        [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+
+                    for host_obj in host_list:
                         ip_addr = host_obj.ipv4_addr
                         target_set.add(ip_addr)
 
-                        if host_id in scope_obj.domain_host_id_map:
-                            temp_domain_list = scope_obj.domain_host_id_map[host_id]
+                        if host_obj.id in scope_obj.domain_host_id_map:
+                            temp_domain_list = scope_obj.domain_host_id_map[host_obj.id]
                             if len(temp_domain_list) > 0:
                                 resolve_dns = True
                                 for domain_obj in temp_domain_list:
@@ -226,9 +227,9 @@ class NmapScan(luigi.Task):
                                     target_set.add(domain_name)
 
                     # Add a port entry for each domain
-                    domain_map = scope_obj.domain_map
-                    for domain_id in domain_map:
-                        domain_obj = domain_map[domain_id]
+                    domain_list = scope_obj.get_domains(
+                        [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+                    for domain_obj in domain_list:
                         domain_name = domain_obj.name
 
                         # Add Domain to list

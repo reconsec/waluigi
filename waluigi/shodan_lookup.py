@@ -63,15 +63,17 @@ class ShodanScope(luigi.ExternalTask):
             subnet_str = "%s/%s" % (subnet_obj.subnet, subnet_obj.mask)
             target_list.append(subnet_str)
 
-        host_map = scope_obj.host_map
-        for host_id in host_map:
-            host_obj = host_map[host_id]
+        host_list = scope_obj.get_hosts(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+
+        for host_obj in host_list:
             host_str = "%s/32" % (host_obj.ipv4_addr)
             target_list.append(host_str)
 
-        domain_map = scope_obj.domain_map
-        for domain_id in domain_map:
-            domain_obj = domain_map[domain_id]
+        domain_list = scope_obj.get_domains(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+
+        for domain_obj in domain_list:
             domain_str = domain_obj.name
             domain_set.add(domain_str)
 

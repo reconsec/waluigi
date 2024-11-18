@@ -105,7 +105,7 @@ class NucleiScan(luigi.Task):
             url_str = scan_utils.construct_url(ip_addr, port_str, secure_flag)
             port_obj_instance = {"port_id": port_id}
 
-            if endpoint not in total_endpoint_set:
+            if url_str not in total_endpoint_set:
                 endpoint_port_obj_map[url_str] = port_obj_instance
                 total_endpoint_set.add(url_str)
 

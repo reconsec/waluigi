@@ -23,7 +23,7 @@ class Httpx(data_model.WaluigiTool):
         self.name = 'httpx'
         self.collector_type = data_model.CollectorType.ACTIVE.value
         self.scan_order = 4
-        self.args = ""
+        self.args = "-favicon -td"
         self.scan_func = Httpx.httpx_scan_func
         self.import_func = Httpx.httpx_import
 
@@ -74,15 +74,16 @@ class HttpXScan(luigi.Task):
         scope_obj = scheduled_scan_obj.scan_data
         port_target_list_map = {}
 
-        # script_args = None
         script_args = scheduled_scan_obj.current_tool.args
         if script_args:
             script_args = script_args.split(" ")
 
-        host_map = scope_obj.host_map
-        domain_map = scope_obj.domain_map
-        port_map = scope_obj.port_map
-        http_endpoint_map = scope_obj.http_endpoint_map
+        host_list = scope_obj.get_hosts(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+        domain_list = scope_obj.get_domains(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+        port_list = scope_obj.get_ports(
+            [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
 
         # Check if massscan was already run
         mass_scan_ran = False
@@ -115,37 +116,34 @@ class HttpXScan(luigi.Task):
 
         else:
 
+            url_list = scope_obj.get_scope_urls()
+            if len(url_list) > 0:
+
+                for url_inst in url_list:
+
+                    port_str = scan_utils.get_url_port(url_inst)
+                    if port_str is None:
+                        continue
+
+                    port_str = str(port_str)
+                    # Add to ip set
+                    if port_str in port_target_list_map:
+                        endpoint_url_set = port_target_list_map[port_str]
+                    else:
+                        endpoint_url_set = set()
+                        port_target_list_map[port_str] = endpoint_url_set
+
+                    # Add IP to list
+                    endpoint_url_set.add(url_inst)
+
             scan_port_list = scope_obj.port_number_list
-            if len(http_endpoint_map) > 0:
+            if len(scan_port_list) > 0:
 
-                logger.debug("Scanning http endpoint map")
-                for http_endpoint_id in http_endpoint_map:
-
-                    http_endpoint_obj = http_endpoint_map[http_endpoint_id]
-                    endpoint_url = http_endpoint_obj.get_url()
-                    port_str = str(http_endpoint_obj.get_port())
-                    logger.debug("Endpoint URL: %s" % endpoint_url)
-
-                    if endpoint_url is not None:
-                        # Add to ip set
-                        if port_str in port_target_list_map:
-                            endpoint_url_set = port_target_list_map[port_str]
-                        else:
-                            endpoint_url_set = set()
-                            port_target_list_map[port_str] = endpoint_url_set
-
-                        # Add IP to list
-                        endpoint_url_set.add(endpoint_url)
-
-            elif len(scan_port_list) > 0:
-
-                logger.debug("Scanning on port number list")
-                port_id = None
+                url_list = scope_obj.get_scope_urls()
                 for port_str in scan_port_list:
 
                     # Add a port entry for each host
-                    for host_id in host_map:
-                        host_obj = host_map[host_id]
+                    for host_obj in host_list:
                         ip_addr = host_obj.ipv4_addr
 
                         # Add to ip set
@@ -159,8 +157,8 @@ class HttpXScan(luigi.Task):
                         ip_set.add(ip_addr)
 
                     # Add a port entry for each domain
-                    for domain_id in domain_map:
-                        domain_obj = domain_map[domain_id]
+                    for domain_obj in domain_list:
+                        # domain_obj = domain_map[domain_id]
                         domain_name = domain_obj.name
 
                         if port_str in port_target_list_map:
@@ -172,17 +170,15 @@ class HttpXScan(luigi.Task):
                         # Add domain to list
                         ip_set.add(domain_name)
 
-            elif len(port_map) > 0:
+            elif len(port_list) > 0:
 
-                logger.debug("Scanning on port map")
-                for port_id in port_map:
-                    port_obj = port_map[port_id]
+                for port_obj in port_list:
                     port_str = str(port_obj.port)
 
                     if port_obj.parent:
                         host_id = port_obj.parent.id
-                        if host_id in host_map:
-                            host_obj = host_map[host_id]
+                        if host_id in scope_obj.host_map:
+                            host_obj = scope_obj.host_map[host_id]
                             ip_addr = host_obj.ipv4_addr
 
                             # Add to ip set
@@ -202,25 +198,6 @@ class HttpXScan(luigi.Task):
 
                                     domain_name = domain_obj.name
                                     ip_set.add(domain_name)
-
-            elif len(http_endpoint_map) > 0:
-
-                logger.debug("Scanning http endpoint map")
-                for http_endpoint_id in http_endpoint_map:
-
-                    http_endpoint_obj = http_endpoint_map[http_endpoint_id]
-                    endpoint_url = http_endpoint_obj.get_url()
-                    logger.debug("Endpoint URL: %s" % endpoint_url)
-
-                    # Add to ip set
-                    if port_str in port_target_list_map:
-                        endpoint_url_set = port_target_list_map[port_str]
-                    else:
-                        endpoint_url_set = set()
-                        port_target_list_map[port_str] = endpoint_url_set
-
-                    # Add IP to list
-                    endpoint_url_set.add(endpoint_url)
 
         futures = []
         for port_str in port_target_list_map:
@@ -244,8 +221,6 @@ class HttpXScan(luigi.Task):
                 "httpx",
                 "-json",
                 "-tls-probe",
-                "-favicon",
-                "-td",
                 "-irr",  # Return response so Headers can be parsed
                 # "-ss", Removed from default because it is too memory/cpu intensive for small collectors
                 "-fhr",

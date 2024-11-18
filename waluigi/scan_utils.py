@@ -11,6 +11,7 @@ from threading import Thread
 from queue import Queue
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, Future
+from urllib.parse import urlparse
 
 NOT_WHITESPACE = re.compile(r'\S')
 logger = logging.getLogger(__name__)
@@ -119,6 +120,24 @@ class ProcessStreamReader(Thread):
             logger.error("Error getting process output: %s" % str(e))
 
         return output_str
+
+
+def get_url_port(url):
+
+    port_int = None
+    try:
+        u = urlparse(url)
+        port_int = 80
+        if u.port is not None:
+            port_int = u.port
+        else:
+            if u.scheme == 'https':
+                port_int = 443
+
+        return port_int
+    except Exception as e:
+        logger.error("Invalid URL")
+        return port_int
 
 
 def construct_url(target_str, port, secure, query_str=None):

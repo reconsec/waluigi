@@ -46,7 +46,7 @@ def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
 
     ret_list = []
     # Call subfinder process
-    error_flag = scan_utils.process_wrapper(command, use_shell, my_env)
+    scan_utils.process_wrapper(command, use_shell, my_env)
 
     # Parse the output
     obj_arr = scan_utils.parse_json_blob_file(scan_output_file_path)
@@ -61,24 +61,17 @@ def subfinder_wrapper(scan_output_file_path, command, use_shell, my_env):
 def get_subfinder_input(scheduled_scan_obj):
 
     scan_id = scheduled_scan_obj.scan_id
-
-    # Init directory
     tool_name = scheduled_scan_obj.current_tool.name
-
-    domain_name_set = set()
-    scope_obj = scheduled_scan_obj.scan_data
-    domain_map = scope_obj.domain_map
-    for host_id in domain_map:
-        domain_obj = domain_map[host_id]
-        domain_name = domain_obj.name
-        domain_name_set.add(domain_name)
-
     dir_path = scan_utils.init_tool_folder(tool_name, 'inputs', scan_id)
     dns_url_file = dir_path + os.path.sep + "dns_urls_" + scan_id
 
+    scope_obj = scheduled_scan_obj.scan_data
+    domain_list = scope_obj.get_domains(
+        [data_model.RecordTag.SCOPE.value, data_model.RecordTag.LOCAL.value])
+
     with open(dns_url_file, 'w') as file_fd:
-        for domain_name in domain_name_set:
-            file_fd.write(domain_name + '\n')
+        for domain in domain_list:
+            file_fd.write(domain.name + '\n')
 
     # Write the output
     scan_dict = {'input_path': dns_url_file}

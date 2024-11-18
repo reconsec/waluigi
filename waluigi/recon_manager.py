@@ -112,7 +112,8 @@ class ScheduledScan():
                 "[-] No scan scope returned for scheduled scan.")
 
         scope_dict = scan_obj['scope']
-        self.scan_data = data_model.ScanData(scope_dict)
+        self.scan_data = data_model.ScanData(
+            scope_dict, record_tags=set([data_model.RecordTag.REMOTE.value]))
 
         # Get the selected network interface
         if 'interface' in scan_obj and scan_obj['interface']:
@@ -268,7 +269,6 @@ class ScheduledScanThread(threading.Thread):
             err_msg = f"{ScheduledScanThread.failed_task_exception[0]}\n{ScheduledScanThread.failed_task_exception[1]}"
             ScheduledScanThread.failed_task_exception = None
 
-
         # Cleanup files
         if ret_status == CollectionToolStatus.COMPLETED.value:
             scan_cleanup.scan_cleanup_func(scheduled_scan_obj.scan_id)
@@ -330,10 +330,12 @@ class ScheduledScanThread(threading.Thread):
                                 if lock_val:
                                     ret_val = self.connection_manager.connect_to_extender()
                                     if ret_val == False:
-                                        logger.error("Failed connecting to extender")
+                                        logger.error(
+                                            "Failed connecting to extender")
                                         continue
                                 else:
-                                    logger.debug("Connection lock is currently held. Retrying later")
+                                    logger.debug(
+                                        "Connection lock is currently held. Retrying later")
                                     continue
 
                             sched_scan_obj_arr = recon_manager.get_scheduled_scans()
@@ -584,7 +586,7 @@ class ReconManager:
                 cipher_rsa = PKCS1_OAEP.new(private_key_obj)
                 session_key = cipher_rsa.decrypt(enc_session_key)
 
-                #logger.debug("Session Key: %s" %
+                # logger.debug("Session Key: %s" %
                 #      binascii.hexlify(session_key).decode())
 
                 with open(os.open('session', os.O_CREAT | os.O_WRONLY, 0o777), 'w') as fh:

@@ -51,7 +51,7 @@ class Pyshot(data_model.WaluigiTool):
     def __init__(self):
         self.name = 'pyshot'
         self.collector_type = data_model.CollectorType.ACTIVE.value
-        self.scan_order = 6
+        self.scan_order = 8
         self.args = ""
         self.scan_func = Pyshot.pyshot_scan_func
         self.import_func = Pyshot.pyshot_import

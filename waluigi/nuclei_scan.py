@@ -1,7 +1,6 @@
 import json
 import os
 import luigi
-import traceback
 import errno
 import logging
 
@@ -51,15 +50,14 @@ class NucleiScan(luigi.Task):
         scheduled_scan_obj = self.scan_input
         scan_id = scheduled_scan_obj.scan_id
 
-        # Init directory
+        #  Init directory
         tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 
-        # scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
-        # if 'module_id' in scan_target_dict:
-        #     module_id = str(scan_target_dict['module_id'])
-        #     mod_str = "_" + module_id
+        if scheduled_scan_obj.scan_data.module_id:
+            module_id = str(scheduled_scan_obj.scan_data.module_id)
+            mod_str = "_" + module_id
 
         nuclei_outputs_file = dir_path + os.path.sep + \
             "nuclei_outputs_" + scan_id + mod_str
@@ -139,11 +137,10 @@ class NucleiScan(luigi.Task):
         counter = 0
         if len(total_endpoint_set) > 0:
 
-            # scan_target_dict = scheduled_scan_obj.scan_target_dict
             mod_str = ''
-            # if 'module_id' in scan_target_dict:
-            #     module_id = str(scan_target_dict['module_id'])
-            #     mod_str = "_" + module_id
+            if scheduled_scan_obj.scan_data.module_id:
+                module_id = str(scheduled_scan_obj.scan_data.module_id)
+                mod_str = "_" + module_id
 
             nuclei_scan_input_file_path = (
                 output_dir + os.path.sep + "nuclei_scan_in" + mod_str).strip()

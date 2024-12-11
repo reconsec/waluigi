@@ -5,6 +5,7 @@ from waluigi import nuclei_scan
 from waluigi.recon_manager import ScheduledScan
 
 import logging
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +21,12 @@ class Module(data_model.WaluigiTool):
         self.import_func = Module.module_import
 
     @staticmethod
-    def module_scan_func(scan_input_obj: ScheduledScan):
+    def module_scan_func(scheduled_scan_obj: ScheduledScan):
 
         ret_val = True
+
         # Get scope
-        module_tool = scan_input_obj.current_tool
-        # scan_input = scan_input_obj.scan_target_dict
-
-        # Iterate over tool list
-        # if scan_input:
-
-        # scan_obj = scan_input['scan_input']
-        # module_arr = scan_obj['target_map']
-
-        scheduled_scan_obj = scan_input_obj
+        module_tool = scheduled_scan_obj.current_tool
         scope_obj = scheduled_scan_obj.scan_data
 
         collection_module_map = scope_obj.collection_module_map
@@ -41,114 +34,110 @@ class Module(data_model.WaluigiTool):
 
         for module_scan_inst in module_arr:
 
-            component_arr = module_scan_inst.bindings
-            if component_arr is None:
+            tool_args = module_scan_inst.args
+            host_port_obj_map = module_scan_inst.get_host_port_obj_map()
+            if len(host_port_obj_map) == 0:
                 continue
-            print("Bindings")
-            print(component_arr)
-            print("Component map")
-            print(scope_obj.component_map)
-            for component_key in scope_obj.component_map:
-                component_obj = scope_obj.component_map[component_key]
-                print("Component obj")
-                print(component_obj)
 
-            # Component map
-            print("Component port id map")
-            component_name_port_id_map = scope_obj.component_name_port_id_map
-            for component_key in component_name_port_id_map:
-                port_id_list = component_name_port_id_map[component_key]
-                for port_id in port_id_list:
-                    if port_id in scope_obj.port_map:
-                        port_obj = scope_obj.port_map[port_id]
-                        print("Port obj")
-                        print(port_obj)
-                    else:
-                        print("Port id not found %s" % port_id)
+            scope_copy = copy.deepcopy(scope_obj)
+            scope_copy.host_port_obj_map = host_port_obj_map
+            scheduled_scan_obj.scan_data = scope_copy
 
-            # Get the module id
+            # Get/Set the module id
             module_id = module_scan_inst.id
+            scope_copy.module_id = module_id
+
             tool_id = module_scan_inst.parent.id
-
-            tool_map = scan_input_obj.collection_tool_map
+            tool_map = scheduled_scan_obj.scan_thread.recon_manager.get_tool_map()
             if tool_id in tool_map:
-                tool_obj = tool_map[tool_id].collection_tool
-                scan_input_obj.current_tool = tool_obj
+                tool_inst = tool_map[tool_id]
 
-                tool_name = tool_obj.name
-                logger.debug("Tool name: %s" % tool_name)
+                tool_name = tool_inst.name
+                tool_obj = SimpleNamespace(
+                    id=tool_id, name=tool_name, args=tool_args)
+                scheduled_scan_obj.current_tool = tool_obj
 
                 # Set scan input
-                wtf
                 if tool_name == 'nmap':
 
                     # Execute nmap
-                    ret = nmap_scan.Nmap.nmap_scan_func(scan_input_obj)
+                    ret = nmap_scan.Nmap.nmap_scan_func(scheduled_scan_obj)
 
                 elif tool_name == 'nuclei':
 
                     # Execute nuclei
-                    ret = nuclei_scan.Nuclei.nuclei_scan_func(scan_input_obj)
+                    ret = nuclei_scan.Nuclei.nuclei_scan_func(
+                        scheduled_scan_obj)
 
                 if not ret:
                     print("[-] Module Scan Failed")
                     ret_val = False
 
                 # Reset values
-                scan_input_obj.current_tool = module_tool
+                scheduled_scan_obj.current_tool = module_tool
 
             else:
                 logger.error("Tool id not found %s" % tool_id)
 
+        # Restore scope object
+        scheduled_scan_obj.scan_data = scope_obj
         return ret_val
 
     @staticmethod
-    def module_import(scan_input_obj: ScheduledScan):
+    def module_import(scheduled_scan_obj: ScheduledScan):
 
         ret_val = True
+
+        scope_obj = scheduled_scan_obj.scan_data
+
+        collection_module_map = scope_obj.collection_module_map
+        module_arr = list(collection_module_map.values())
+
         # Get scope
-        module_tool = scan_input_obj.current_tool
-        scan_input = scan_input_obj.scan_target_dict
+        module_tool = scheduled_scan_obj.current_tool
+        for module_scan_inst in module_arr:
 
-        # Iterate over tool list
-        if scan_input:
+            scope_copy = copy.deepcopy(scope_obj)
+            scheduled_scan_obj.scan_data = scope_copy
 
-            scan_obj = scan_input['scan_input']
-            module_arr = scan_obj['target_map']
+            # Get/Set the module id
+            module_id = module_scan_inst.id
+            scope_copy.module_id = module_id
 
-            for module_scan_inst in module_arr:
+            tool_id = module_scan_inst.parent.id
+            tool_map = scheduled_scan_obj.scan_thread.recon_manager.get_tool_map()
 
-                # Set the input
-                scan_input_obj.scan_target_dict = module_scan_inst['scan_input']
-                if 'module_id' in module_scan_inst:
-                    scan_input_obj.scan_target_dict['module_id'] = module_scan_inst['module_id']
+            if tool_id in tool_map:
+                tool_inst = tool_map[tool_id]
 
-                tool_inst = module_scan_inst['tool']
+                tool_name = tool_inst.name
                 tool_obj = SimpleNamespace(
-                    id=tool_inst['id'], name=tool_inst['name'])
+                    id=tool_id, name=tool_name)
+                scheduled_scan_obj.current_tool = tool_obj
 
-                tool_name = tool_inst['name']
-                # tool_id = tool_inst['id']
+                # tool_name = tool_obj.name
+                logger.debug("Tool name: %s" % tool_name)
 
                 ret = None
-                scan_input_obj.current_tool = tool_obj
+                scheduled_scan_obj.current_tool = tool_obj
                 if tool_name == 'nmap':
 
                     # Execute nmap
-                    ret = nmap_scan.Nmap.nmap_import(scan_input_obj)
+                    ret = nmap_scan.Nmap.nmap_import(scheduled_scan_obj)
 
                 elif tool_name == 'nuclei':
 
                     # Execute nuclei
-                    ret = nuclei_scan.Nuclei.nuclei_import(scan_input_obj)
+                    ret = nuclei_scan.Nuclei.nuclei_import(scheduled_scan_obj)
 
                 if not ret:
                     print("[-] Module Import Failed")
                     ret_val = False
 
                 # Reset values
-                scan_input_obj.current_tool = module_tool
+                scheduled_scan_obj.current_tool = module_tool
 
-            scan_input_obj.scan_target_dict = scan_input
+        # Restore scope object
+        scheduled_scan_obj.scan_data = scope_obj
 
         return ret_val

@@ -56,9 +56,9 @@ class NmapScan(luigi.Task):
 
         # scan_target_dict = scheduled_scan_obj.scan_target_dict
         mod_str = ''
-        # if 'module_id' in scan_target_dict:
-        #     module_id = str(scan_target_dict['module_id'])
-        #     mod_str = "_" + module_id
+        if scheduled_scan_obj.scan_data.module_id:
+            module_id = str(scheduled_scan_obj.scan_data.module_id)
+            mod_str = "_" + module_id
 
         # Init directory
         tool_name = scheduled_scan_obj.current_tool.name
@@ -97,7 +97,7 @@ class NmapScan(luigi.Task):
         if mass_scan_ran:
 
             # Create scan jobs for each port and only scan the IPs mapped to that port
-            target_map = scheduled_scan_obj.scan_data.host_port_obj_map
+            target_map = scope_obj.host_port_obj_map
             for target_key in target_map:
 
                 target_obj_dict = target_map[target_key]
@@ -138,7 +138,8 @@ class NmapScan(luigi.Task):
         else:
 
             # Use original scope for scan
-            target_map = scheduled_scan_obj.scan_data.host_port_obj_map
+            target_map = scope_obj.host_port_obj_map
+            port_num_list = scope_obj.get_port_number_list_from_scope()
 
             # Use original scope for scan
             # Create scan for each subnet, for all ports to scan
@@ -154,7 +155,7 @@ class NmapScan(luigi.Task):
                     scan_obj['resolve_dns'] = False
 
                     port_set = set()
-                    for port_str in scope_obj.port_number_list:
+                    for port_str in port_num_list:
                         port_set.add(port_str)
 
                     scan_obj['port_list'] = list(port_set)
@@ -202,7 +203,6 @@ class NmapScan(luigi.Task):
 
             else:
 
-                port_num_list = scope_obj.port_number_list
                 if len(port_num_list) > 0:
 
                     # Get host map and pair each host with all ports to scan
@@ -250,9 +250,9 @@ class NmapScan(luigi.Task):
 
         module_id = None
         mod_str = ''
-        # if 'module_id' in scan_target_dict:
-        #     module_id = str(scan_target_dict['module_id'])
-        #     mod_str = "_" + module_id
+        if scheduled_scan_obj.scan_data.module_id:
+            module_id = str(scheduled_scan_obj.scan_data.module_id)
+            mod_str = "_" + module_id
 
         # Output structure for scan jobs
         nmap_scan_cmd_list = []
@@ -380,6 +380,7 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
     def run(self):
 
         scheduled_scan_obj = self.scan_input
+        scope_obj = scheduled_scan_obj.scan_data
         tool_obj = scheduled_scan_obj.current_tool
         tool_id = tool_obj.id
 
@@ -434,15 +435,15 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
                             port_id = None
                             host_key = '%s:%s' % (host_ip, port_str)
 
-                            if host_key in scheduled_scan_obj.scan_data.host_port_obj_map:
-                                host_port_dict = scheduled_scan_obj.scan_data.host_port_obj_map[
+                            if host_key in scope_obj.host_port_obj_map:
+                                host_port_dict = scope_obj.host_port_obj_map[
                                     host_key]
                                 port_id = host_port_dict['port_obj'].id
                                 host_id = host_port_dict['host_obj'].id
 
                             # See if we have a host/port mapping already for this domain and port
-                            elif host_ip in scheduled_scan_obj.scan_data.host_ip_id_map:
-                                host_id = scheduled_scan_obj.scan_data.host_ip_id_map[host_ip]
+                            elif host_ip in scope_obj.host_ip_id_map:
+                                host_id = scope_obj.host_ip_id_map[host_ip]
 
                             # Create Host object if one doesn't exists already
                             ip_object = netaddr.IPAddress(host_ip)
@@ -597,6 +598,11 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
                                                                     if ":" in san_value:
                                                                         dns_name = san_value.split(":")[
                                                                             1]
+                                                                        if "," in dns_name:
+                                                                            dns_name = dns_name.split(",")[
+                                                                                0]
+                                                                        logger.debug(
+                                                                            "Adding SAN: %s" % dns_name)
                                                                         domain_obj = cert_obj.add_domain(
                                                                             host_id, dns_name)
                                                                         if domain_obj:

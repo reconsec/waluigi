@@ -384,22 +384,37 @@ class ReconManager:
         # Tool map
         self.waluigi_tool_map = {}
         tool_classes = data_model.get_tool_classes()
+
+        tool_name_inst_map = {}
         for tool_class in tool_classes:
-            self.register_tool(tool_class)
+            tool_inst = tool_class()
+            # self.register_tool(tool_class)
+            tool_name_inst_map[tool_inst.name] = tool_inst
 
         # Send collector data to server
         try:
 
             collector_tools = []
-            tool_map = self.waluigi_tool_map
-            for tool_obj in tool_map.values():
+            # tool_map = self.waluigi_tool_map
+            for tool_obj in tool_name_inst_map.values():
                 collector_tools.append(tool_obj.to_jsonable())
 
             collector_data = {
                 'interfaces': self.network_ifaces, 'tools': collector_tools}
 
             # Send interfaces & tools
-            self.update_collector(collector_data)
+            ret_obj = self.update_collector(collector_data)
+            if ret_obj:
+                # logger.debug("Collector data: %s" % ret_obj)
+                if 'tool_name_id_map' in ret_obj:
+                    tool_name_id_map = ret_obj['tool_name_id_map']
+                    for tool_name in tool_name_id_map:
+                        tool_id = tool_name_id_map[tool_name]
+                        tool_id_hex = format(int(tool_id), 'x')
+                        self.waluigi_tool_map[tool_id_hex] = tool_name_inst_map[tool_name]
+
+            else:
+                logger.error("Unable to get tool map from server")
 
         except requests.exceptions.ConnectionError as e:
             logger.error("Unable to connect to server")
@@ -408,24 +423,23 @@ class ReconManager:
             logger.debug(traceback.format_exc())
             pass
 
-    def register_tool(self, tool_class):
-        tool_inst = tool_class()
-        self.waluigi_tool_map[tool_inst.name] = tool_inst
+    def get_tool_map(self):
+        return self.waluigi_tool_map
 
     def scan_func(self, scan_input: ScheduledScan):
 
         # Get the tool
         ret_val = False
         tool_obj = scan_input.current_tool
-        tool_name = tool_obj.name
-        if tool_name in self.waluigi_tool_map:
-            tool_inst = self.waluigi_tool_map[tool_name]
+        tool_id = tool_obj.id
+        if tool_id in self.waluigi_tool_map:
+            tool_inst = self.waluigi_tool_map[tool_id]
 
             # Call the scan function
             ret_val = tool_inst.scan_func(scan_input)
 
         else:
-            logger.debug("%s tool does not exist in table." % tool_name)
+            logger.debug("%s tool does not exist in table." % tool_id)
 
         return ret_val
 
@@ -434,15 +448,15 @@ class ReconManager:
         ret_val = False
         # Get the tool
         tool_obj = scan_input.current_tool
-        tool_name = tool_obj.name
-        if tool_name in self.waluigi_tool_map:
-            tool_inst = self.waluigi_tool_map[tool_name]
+        tool_id = tool_obj.id
+        if tool_id in self.waluigi_tool_map:
+            tool_inst = self.waluigi_tool_map[tool_id]
 
             # Call the scan function
             ret_val = tool_inst.import_func(scan_input)
 
         else:
-            logger.debug(f"Error: {tool_name} tool does not exist in table.")
+            logger.debug(f"Error: {tool_id} tool does not exist in table.")
 
         return ret_val
 
@@ -579,15 +593,11 @@ class ReconManager:
             if "data" in ret_json:
                 b64_session_key = ret_json['data']
                 enc_session_key = base64.b64decode(b64_session_key)
-                # print("[*] Encrypted Key: (Length: %d)\n%s" % (len(enc_session_key),binascii.hexlify(enc_session_key).decode()))
 
                 # Decrypt the session key with the private RSA key
                 private_key_obj = RSA.import_key(private_key)
                 cipher_rsa = PKCS1_OAEP.new(private_key_obj)
                 session_key = cipher_rsa.decrypt(enc_session_key)
-
-                # logger.debug("Session Key: %s" %
-                #      binascii.hexlify(session_key).decode())
 
                 with open(os.open('session', os.O_CREAT | os.O_WRONLY, 0o777), 'w') as fh:
                     fh.write(binascii.hexlify(session_key).decode())
@@ -807,8 +817,6 @@ class ReconManager:
         cipher_aes = AES.new(self.session_key, AES.MODE_EAX)
         ciphertext, tag = cipher_aes.encrypt_and_digest(json_data)
         packet = cipher_aes.nonce + tag + ciphertext
-        # print("[*] Nonce: %s" % binascii.hexlify(cipher_aes.nonce).decode())
-        # print("[*] Sig: %s" % binascii.hexlify(tag).decode())
 
         b64_val = base64.b64encode(packet).decode()
         r = requests.post('%s/api/collector' % (self.manager_url),
@@ -816,7 +824,13 @@ class ReconManager:
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating collector interfaces.")
 
-        return True
+        ret_obj = None
+        if r.content:
+            content = r.json()
+            data = self._decrypt_json(content)
+            ret_obj = json.loads(data)
+
+        return ret_obj
 
     def update_scan_status(self, scan_id, status, err_msg=None):
 

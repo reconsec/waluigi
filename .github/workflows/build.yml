@@ -13,7 +13,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install
       run: |
-        ./install.sh
+        sh ./install.sh
     - name: Execute
       run: |
         cd /opt/collector

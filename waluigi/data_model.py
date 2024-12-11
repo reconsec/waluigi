@@ -39,6 +39,47 @@ def get_tool_classes():
     return tool_classes
 
 
+def update_host_port_obj_map(scan_data, port_id, host_port_obj_map):
+
+    tag_list = [RecordTag.SCOPE.value, RecordTag.LOCAL.value]
+
+    port_obj = scan_data.port_map[port_id]
+    # Exclude ports that originated remotely that aren't part of the scope
+    if len(port_obj.tags.intersection(set(tag_list))) == 0:
+        return
+
+    # logger.debug("Processing port: %s" % port_obj.to_jsonable())
+    host_id = port_obj.parent.id
+    if host_id in scan_data.host_map:
+        host_obj = scan_data.host_map[host_id]
+        # Exclude ports that originated remotely that aren't part of the scope
+        if len(host_obj.tags.intersection(set(tag_list))) == 0:
+            return
+
+        host_port_str = "%s:%s" % (host_obj.ipv4_addr, port_obj.port)
+
+        host_port_entry = {'host_obj': host_obj, 'port_obj': port_obj}
+        host_port_obj_map[host_port_str] = host_port_entry
+
+        if host_id in scan_data.domain_host_id_map:
+            domain_obj_list = scan_data.domain_host_id_map[host_id]
+            for domain_obj in domain_obj_list:
+
+                # Exclude domains that originated remotely that aren't part of the scope
+                if len(domain_obj.tags.intersection(set(tag_list))) == 0:
+                    continue
+
+                domain_port_str = "%s:%s" % (
+                    domain_obj.name, port_obj.port)
+
+                host_port_entry = {
+                    'host_obj': host_obj, 'port_obj': port_obj}
+                host_port_obj_map[domain_port_str] = host_port_entry
+
+    else:
+        logger.debug("Host not found in map: %s" % host_id)
+
+
 class CollectorType(enum.Enum):
     PASSIVE = 1
     ACTIVE = 2
@@ -275,40 +316,42 @@ class ScanData():
 
     def _post_process(self):
 
-        tag_list = [RecordTag.SCOPE.value, RecordTag.LOCAL.value]
+        # tag_list = [RecordTag.SCOPE.value, RecordTag.LOCAL.value]
 
         for port_id in self.port_map:
-            port_obj = self.port_map[port_id]
-            # Exclude ports that originated remotely that aren't part of the scope
-            if len(port_obj.tags.intersection(set(tag_list))) == 0:
-                continue
 
-            host_id = port_obj.parent.id
-            if host_id in self.host_map:
-                host_obj = self.host_map[host_id]
-                # Exclude ports that originated remotely that aren't part of the scope
-                if len(host_obj.tags.intersection(set(tag_list))) == 0:
-                    continue
+            update_host_port_obj_map(self, port_id, self.host_port_obj_map)
+            # port_obj = self.port_map[port_id]
+            # # Exclude ports that originated remotely that aren't part of the scope
+            # if len(port_obj.tags.intersection(set(tag_list))) == 0:
+            #     continue
 
-                host_port_str = "%s:%s" % (host_obj.ipv4_addr, port_obj.port)
+            # host_id = port_obj.parent.id
+            # if host_id in self.host_map:
+            #     host_obj = self.host_map[host_id]
+            #     # Exclude ports that originated remotely that aren't part of the scope
+            #     if len(host_obj.tags.intersection(set(tag_list))) == 0:
+            #         continue
 
-                host_port_entry = {'host_obj': host_obj, 'port_obj': port_obj}
-                self.host_port_obj_map[host_port_str] = host_port_entry
+            #     host_port_str = "%s:%s" % (host_obj.ipv4_addr, port_obj.port)
 
-                if host_id in self.domain_host_id_map:
-                    domain_obj_list = self.domain_host_id_map[host_id]
-                    for domain_obj in domain_obj_list:
+            #     host_port_entry = {'host_obj': host_obj, 'port_obj': port_obj}
+            #     self.host_port_obj_map[host_port_str] = host_port_entry
 
-                        # Exclude domains that originated remotely that aren't part of the scope
-                        if len(domain_obj.tags.intersection(set(tag_list))) == 0:
-                            continue
+            #     if host_id in self.domain_host_id_map:
+            #         domain_obj_list = self.domain_host_id_map[host_id]
+            #         for domain_obj in domain_obj_list:
 
-                        domain_port_str = "%s:%s" % (
-                            domain_obj.name, port_obj.port)
+            #             # Exclude domains that originated remotely that aren't part of the scope
+            #             if len(domain_obj.tags.intersection(set(tag_list))) == 0:
+            #                 continue
 
-                        host_port_entry = {
-                            'host_obj': host_obj, 'port_obj': port_obj}
-                        self.host_port_obj_map[domain_port_str] = host_port_entry
+            #             domain_port_str = "%s:%s" % (
+            #                 domain_obj.name, port_obj.port)
+
+            #             host_port_entry = {
+            #                 'host_obj': host_obj, 'port_obj': port_obj}
+            #             self.host_port_obj_map[domain_port_str] = host_port_entry
 
         # Debug
         # print("Ports")
@@ -607,6 +650,7 @@ class ScanData():
     def __init__(self, scan_data, record_tags=set()):
 
         self.scan_obj_list = []
+        self.module_id = None
 
         # Maps object IDs to the obj
         self.scan_obj_map = {}
@@ -1137,6 +1181,38 @@ class CollectionModule(Record):
     def _data_to_jsonable(self):
         ret = {'name': self.name, 'args': self.args}
         return ret
+
+    def get_host_port_obj_map(self):
+        host_port_obj_map = {}
+
+        component_arr = self.bindings
+        if component_arr is None:
+            return host_port_obj_map
+
+        component_map = self.scan_data.component_map
+        component_name_port_id_map = self.scan_data.component_name_port_id_map
+
+        # Get the module binding and see if there are any ports mapped to this component name
+        for component_id in component_arr:
+            if component_id in component_map:
+
+                component_obj = component_map[component_id]
+                component_key = component_obj.name
+
+                if component_key in component_name_port_id_map:
+                    port_id_list = component_name_port_id_map[component_key]
+                    for port_id in port_id_list:
+                        if port_id in self.scan_data.port_map:
+                            update_host_port_obj_map(
+                                self.scan_data, port_id, host_port_obj_map)
+                else:
+                    logger.debug(
+                        "Component key not found in component name port id map: %s" % component_key)
+            else:
+                logger.debug(
+                    "Component id not found in component map: %s" % component_id)
+
+        return host_port_obj_map
 
     def from_jsonsable(self, input_data_dict):
         try:

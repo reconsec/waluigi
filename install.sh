@@ -89,10 +89,8 @@ install_packages python3-pip
 pip3 config set global.trusted-host "pypi.org files.pythonhosted.org pypi.python.org" --trusted-host=pypi.python.org --trusted-host=pypi.org --trusted-host=files.pythonhosted.org
 
 # install luigi/waluigi
-python3 -m pip install luigi
-python3 -m pip install pycryptodomex
+python3 -m pip install luigi pycryptodomex netifaces setuptools
 python3 -m pip install --upgrade requests
-python3 -m pip install netifaces
 
 # Create luigi config file
 sudo mkdir /opt/collector

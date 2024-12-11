@@ -50,7 +50,7 @@ class NucleiScan(luigi.Task):
         scheduled_scan_obj = self.scan_input
         scan_id = scheduled_scan_obj.scan_id
 
-        # Init directory
+        #  Init directory
         tool_name = scheduled_scan_obj.current_tool.name
         dir_path = scan_utils.init_tool_folder(tool_name, 'outputs', scan_id)
 

@@ -200,6 +200,7 @@ class ImportNucleiOutput(data_model.ImportToolXOutput):
     def run(self):
 
         scheduled_scan_obj = self.scan_input
+        scope_obj = scheduled_scan_obj.scan_data
 
         # Import the ports to the manager
         tool_obj = scheduled_scan_obj.current_tool
@@ -258,17 +259,31 @@ class ImportNucleiOutput(data_model.ImportToolXOutput):
                                 if 'template' in nuclei_scan_result:
                                     module_args = nuclei_scan_result['template']
 
-                                # Add collection module
-                                module_obj = data_model.CollectionModule(
-                                    parent_id=tool_id)
-                                module_obj.name = template_id
-                                module_obj.args = module_args
+                                if scope_obj.module_id:
+                                    module_id = str(scope_obj.module_id)
 
-                                ret_arr.append(module_obj)
+                                    # Parse output and add components if present
+                                    output_components = scope_obj.module_outputs
+                                    for output_component in output_components:
+                                        if output_component.name in str(nuclei_scan_result).lower():
+                                            component_obj = data_model.WebComponent(
+                                                parent_id=port_id)
+                                            component_obj.name = output_component.name
+                                            ret_arr.append(
+                                                component_obj)
+                                else:
+                                    # Add collection module
+                                    module_obj = data_model.CollectionModule(
+                                        parent_id=tool_id)
+                                    module_obj.name = template_id
+                                    module_obj.args = module_args
+
+                                    ret_arr.append(module_obj)
+                                    module_id = module_obj.id
 
                                 # Add module output
                                 module_output_obj = data_model.CollectionModuleOutput(
-                                    parent_id=module_obj.id)
+                                    parent_id=module_id)
                                 module_output_obj.data = nuclei_scan_result
                                 module_output_obj.port_id = port_id
 

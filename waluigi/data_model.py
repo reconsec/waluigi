@@ -316,42 +316,8 @@ class ScanData():
 
     def _post_process(self):
 
-        # tag_list = [RecordTag.SCOPE.value, RecordTag.LOCAL.value]
-
         for port_id in self.port_map:
-
             update_host_port_obj_map(self, port_id, self.host_port_obj_map)
-            # port_obj = self.port_map[port_id]
-            # # Exclude ports that originated remotely that aren't part of the scope
-            # if len(port_obj.tags.intersection(set(tag_list))) == 0:
-            #     continue
-
-            # host_id = port_obj.parent.id
-            # if host_id in self.host_map:
-            #     host_obj = self.host_map[host_id]
-            #     # Exclude ports that originated remotely that aren't part of the scope
-            #     if len(host_obj.tags.intersection(set(tag_list))) == 0:
-            #         continue
-
-            #     host_port_str = "%s:%s" % (host_obj.ipv4_addr, port_obj.port)
-
-            #     host_port_entry = {'host_obj': host_obj, 'port_obj': port_obj}
-            #     self.host_port_obj_map[host_port_str] = host_port_entry
-
-            #     if host_id in self.domain_host_id_map:
-            #         domain_obj_list = self.domain_host_id_map[host_id]
-            #         for domain_obj in domain_obj_list:
-
-            #             # Exclude domains that originated remotely that aren't part of the scope
-            #             if len(domain_obj.tags.intersection(set(tag_list))) == 0:
-            #                 continue
-
-            #             domain_port_str = "%s:%s" % (
-            #                 domain_obj.name, port_obj.port)
-
-            #             host_port_entry = {
-            #                 'host_obj': host_obj, 'port_obj': port_obj}
-            #             self.host_port_obj_map[domain_port_str] = host_port_entry
 
         # Debug
         # print("Ports")
@@ -1181,6 +1147,21 @@ class CollectionModule(Record):
     def _data_to_jsonable(self):
         ret = {'name': self.name, 'args': self.args}
         return ret
+
+    def get_output_components(self):
+        output_components = []
+
+        component_arr = self.outputs
+        if component_arr is None:
+            return output_components
+
+        component_map = self.scan_data.component_map
+        for component_id in component_arr:
+            if component_id in component_map:
+                component_obj = component_map[component_id]
+                output_components.append(component_obj)
+
+        return output_components
 
     def get_host_port_obj_map(self):
         host_port_obj_map = {}

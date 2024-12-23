@@ -334,8 +334,8 @@ class NmapScan(luigi.Task):
             nmap_scan_inst['output_file'] = nmap_output_xml_file
 
             # Add module id if it exists
-            if module_id:
-                nmap_scan_inst['module_id'] = module_id
+            # if module_id:
+            #    nmap_scan_inst['module_id'] = module_id
 
             nmap_scan_cmd_list.append(nmap_scan_inst)
 
@@ -396,7 +396,6 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
             if len(json_input) > 0:
                 nmap_scan_obj = json.loads(json_input)
                 nmap_json_arr = nmap_scan_obj['nmap_scan_list']
-                # nmap_input_map = nmap_scan_obj['nmap_input_map']
                 # print(nmap_scan_obj)
 
                 for nmap_scan_entry in nmap_json_arr:
@@ -619,28 +618,31 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
                                             component_obj.name = 'http'
                                             ret_arr.append(component_obj)
 
-                                    # Add module id if it exists
-                                    if 'module_id' in nmap_scan_entry:
-                                        module_id = nmap_scan_entry['module_id']
+                                    # Iterate over script entries
+                                    for script_out in script_res:
+                                        # print(script_out)
+                                        if 'id' in script_out and 'output' in script_out:
 
-                                        module_output_obj = data_model.CollectionModuleOutput(
-                                            parent_id=module_id)
-                                        module_output_obj.data = script_res
-                                        module_output_obj.port_id = port_id
+                                            script_id = script_out['id']
+                                            output = script_out['output']
+                                            if len(output) > 0:
 
-                                        ret_arr.append(module_output_obj)
-                                    else:
+                                                # Add collection module
+                                                temp_module_id = None
+                                                if scope_obj.module_id:
+                                                    temp_module_id = scope_obj.module_id
 
-                                        # Iterate over script entries
-                                        for script_out in script_res:
-                                            # print(script_out)
-                                            if 'id' in script_out and 'output' in script_out:
+                                                    # Parse output and add components if present
+                                                    output_components = scope_obj.module_outputs
+                                                    for output_component in output_components:
+                                                        if output_component.name in output.lower():
+                                                            component_obj = data_model.WebComponent(
+                                                                parent_id=port_id)
+                                                            component_obj.name = output_component.name
+                                                            ret_arr.append(
+                                                                component_obj)
 
-                                                script_id = script_out['id']
-                                                output = script_out['output']
-                                                if len(output) > 0:
-
-                                                    # Add collection module
+                                                else:
                                                     args_str = "--script +%s" % script_id
                                                     module_obj = data_model.CollectionModule(
                                                         parent_id=tool_id)
@@ -648,15 +650,16 @@ class ImportNmapOutput(data_model.ImportToolXOutput):
                                                     module_obj.args = args_str
 
                                                     ret_arr.append(module_obj)
+                                                    temp_module_id = module_obj.id
 
-                                                    # Add module output
-                                                    module_output_obj = data_model.CollectionModuleOutput(
-                                                        parent_id=module_obj.id)
-                                                    module_output_obj.data = output
-                                                    module_output_obj.port_id = port_id
+                                                # Add module output
+                                                module_output_obj = data_model.CollectionModuleOutput(
+                                                    parent_id=temp_module_id)
+                                                module_output_obj.data = output
+                                                module_output_obj.port_id = port_id
 
-                                                    ret_arr.append(
-                                                        module_output_obj)
+                                                ret_arr.append(
+                                                    module_output_obj)
 
         # Import, Update, & Save
         self.import_results(scheduled_scan_obj, ret_arr)

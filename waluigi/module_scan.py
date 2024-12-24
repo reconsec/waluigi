@@ -103,6 +103,7 @@ class Module(data_model.WaluigiTool):
             # Get/Set the module id
             module_id = module_scan_inst.id
             scope_copy.module_id = module_id
+            scope_copy.module_outputs = module_scan_inst.get_output_components()
 
             tool_id = module_scan_inst.parent.id
             tool_map = scheduled_scan_obj.scan_thread.recon_manager.get_tool_map()

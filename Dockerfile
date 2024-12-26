@@ -1,5 +1,5 @@
 # BUILD INSTRUCTIONS & README
-#   1) docker build --build-arg sshkey=<local public key file> --build-arg apikey=<RECON API KEY> --build-arg gituser=<git username> --build-arg gitpwd=<git token> -t collector:test1 .
+#   1) docker build --build-arg sshkey=<local public key file> --build-arg apikey=<RECON API KEY> -t collector:test1 .
 #   2) docker run -d collector_test
 
 # Start from base ubuntu 20.04 image

@@ -37,8 +37,7 @@ ADD $sshkey /root/.ssh/authorized_keys
 # Setup scan service
 ARG apikey
 RUN echo $apikey > /root/.collector_api_key
-ADD scan-poller /etc/init.d/scan-poller
-RUN chmod 755 /etc/init.d/scan-poller
+ADD scan-poller.service /etc/systemd/system/scan-poller.service
 
 RUN echo "#!/bin/bash" > /root/start.sh
 RUN echo "service scan-poller start" >> /root/start.sh

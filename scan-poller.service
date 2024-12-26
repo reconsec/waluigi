@@ -1,12 +1,17 @@
-[Unit]
-Description=scan-poller
-After=network.target
-
-[Service]
-Type=simple
-Restart=on-failure
-RestartSec=3
-ExecStart=/usr/bin/screen -L -DmS poller /bin/bash -c "source /root/venv/bin/activate; cd /opt/collector; python3 /opt/reverge_collector/waluigi/scan_poller.py -x $(cat /root/.collector_api_key)"
-
-[Install]
-WantedBy=multi-user.target
+#!/bin/bash
+#
+# Script to start scan poller in a screen session
+#
+set -e
+test -f /usr/bin/screen || exit 0
+case "$1" in
+start)
+    /usr/bin/screen -L -dmS poller /bin/bash -c "source /root/venv/bin/activate; cd /opt/collector; python3 /opt/reverge_collector/waluigi/scan_poller.py -x $(cat /root/.collector_api_key)"
+    ;;
+stop)
+    /usr/bin/screen screen -S poller -X quit
+    ;;
+restart|reload|force-reload)
+    ;;
+esac
+exit 0

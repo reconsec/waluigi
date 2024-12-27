@@ -78,7 +78,7 @@ else
 fi 
 
 # install initial tools
-install_packages ca-certificates wget curl net-tools git screen jq unzip supervisor
+install_packages ca-certificates wget curl net-tools git screen jq unzip
 
 openssl s_client -showcerts -connect google.com:443 < /dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > ca.crt
 sudo cp ca.crt /usr/local/share/ca-certificates/

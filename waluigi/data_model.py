@@ -1,5 +1,7 @@
 import base64
+import binascii
 import enum
+import hashlib
 import uuid
 import netaddr
 import luigi
@@ -408,15 +410,16 @@ class ScanData():
             elif isinstance(record_obj, ListItem):
 
                 # Get path hash
-                screenshot_path_hash = record_obj.web_path_hash.upper()
-                if screenshot_path_hash in self.path_hash_id_map:
-                    temp_screenshot_list = self.path_hash_id_map[screenshot_path_hash]
-                else:
-                    temp_screenshot_list = []
-                    self.path_hash_id_map[screenshot_path_hash] = temp_screenshot_list
+                if record_obj.web_path_hash:
+                    screenshot_path_hash = record_obj.web_path_hash.upper()
+                    if screenshot_path_hash in self.path_hash_id_map:
+                        temp_screenshot_list = self.path_hash_id_map[screenshot_path_hash]
+                    else:
+                        temp_screenshot_list = []
+                        self.path_hash_id_map[screenshot_path_hash] = temp_screenshot_list
 
-                # Add port obj to list to be updated
-                temp_screenshot_list.append(record_obj.id)
+                    # Add port obj to list to be updated
+                    temp_screenshot_list.append(record_obj.id)
 
                 # Add path obj to list for being imported
                 self.path_map[record_obj.id] = record_obj
@@ -453,15 +456,16 @@ class ScanData():
             elif isinstance(record_obj, Screenshot):
 
                 # Get screenshot hash
-                screenshot_path_hash = record_obj.image_hash.upper()
-                if screenshot_path_hash in self.screenshot_hash_id_map:
-                    temp_screenshot_list = self.screenshot_hash_id_map[screenshot_path_hash]
-                else:
-                    temp_screenshot_list = []
-                    self.screenshot_hash_id_map[screenshot_path_hash] = temp_screenshot_list
+                if record_obj.image_hash:
+                    screenshot_path_hash = record_obj.image_hash.upper()
+                    if screenshot_path_hash in self.screenshot_hash_id_map:
+                        temp_screenshot_list = self.screenshot_hash_id_map[screenshot_path_hash]
+                    else:
+                        temp_screenshot_list = []
+                        self.screenshot_hash_id_map[screenshot_path_hash] = temp_screenshot_list
 
-                # Add screenshot obj to list to be updated
-                temp_screenshot_list.append(record_obj.id)
+                    # Add screenshot obj to list to be updated
+                    temp_screenshot_list.append(record_obj.id)
 
                 # Add screenshot obj to list for being imported
                 self.screenshot_map[record_obj.id] = record_obj
@@ -957,6 +961,14 @@ class ListItem(Record):
             self.web_path_hash = input_data_dict['path_hash']
         except Exception as e:
             raise Exception('Invalid path object: %s' % str(e))
+
+        if self.web_path is None:
+            self.web_path = '/'
+            hashobj = hashlib.sha1()
+            hashobj.update(self.web_path.encode())
+            path_hash = hashobj.digest()
+            hex_str = binascii.hexlify(path_hash).decode()
+            self.web_path_hash = hex_str
 
 
 class Screenshot(Record):

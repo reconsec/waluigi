@@ -228,6 +228,8 @@ class ScheduledScanThread(threading.Thread):
                 try:
                     # Execute scan func
                     if self.recon_manager.scan_func(scheduled_scan_obj) == False:
+                        err_msg = "Scan function failed"
+                        logger.debug(err_msg)
                         ret_status = CollectionToolStatus.ERROR.value
                         break
 

@@ -34,6 +34,7 @@ if command -v python3 &>/dev/null; then
 elif command -v python &>/dev/null; then
     # Check if the 'python' command points to Python 3.x
     if [ `python -c "import sys; print(sys.version_info.major)"` = "3" ]; then
+        echo "Python 3.x found."
         PYTHON_CMD="python"
         PYTHON3="yes"
     else
@@ -73,7 +74,7 @@ if [ "$NEED_INSTALL" = "yes" ]; then
     echo "Python 3.12 installed successfully."
 else
     install_packages python3.12-venv
-    python3 -m venv ~/venv
+    python3.12 -m venv ~/venv
     . ~/venv/bin/activate
 fi 
 

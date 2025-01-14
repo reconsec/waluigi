@@ -1,7 +1,9 @@
+from functools import wraps
 import os
 import subprocess
 import re
 import threading
+import time
 import traceback
 import netaddr
 import logging
@@ -120,6 +122,19 @@ class ProcessStreamReader(Thread):
             logger.error("Error getting process output: %s" % str(e))
 
         return output_str
+
+
+def execution_time(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        start_time = int(time.time())
+        result = f(*args, **kwargs)
+        end_time = int(time.time())
+        logger.debug(
+            f"Execution time of '{f.__name__}': {end_time-start_time} seconds")
+        return result
+
+    return wrapper
 
 
 def get_url_port(url):

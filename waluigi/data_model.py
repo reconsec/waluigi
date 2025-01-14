@@ -2,6 +2,7 @@ import base64
 import binascii
 import enum
 import hashlib
+import time
 import uuid
 import netaddr
 import luigi
@@ -160,6 +161,7 @@ class ImportToolXOutput(luigi.Task):
 
         return False
 
+    @scan_utils.execution_time
     def import_results(self, scheduled_scan_obj, obj_arr):
 
         scan_id = scheduled_scan_obj.scan_id
@@ -184,53 +186,54 @@ class ImportToolXOutput(luigi.Task):
             updated_record_map = recon_manager.import_data(
                 scan_id, tool_id, import_arr)
 
-            # logger.debug("Returned:\n %s" % str(updated_record_map))
+            # logger.debug("Returned map: %d" % len(updated_record_map))
 
             updated_import_arr = update_scope_array(
                 record_map, updated_record_map)
 
-            # logger.debug("DB return:\n %s" % str(updated_import_arr))
+            # logger.debug("Updated scope")
 
             # Write imported data to file
             tool_import_file = self.output().path
             with open(tool_import_file, 'w') as import_fd:
                 import_fd.write(json.dumps(updated_import_arr))
 
+            # logger.debug("Updating server")
+
             # Update the scan scope
             scheduled_scan_obj.scan_data.update(updated_import_arr)
 
 
+@scan_utils.execution_time
 def update_scope_array(record_map, updated_record_map=None):
 
     # Update the record map with those from the database
     if updated_record_map and len(updated_record_map) > 0:
+        id_updates = {}
+
+        # Collect all updates
         for record_entry in updated_record_map:
             orig_id = record_entry['orig_id']
             db_id = record_entry['db_id']
 
-            # Only update and remove if the ID is different
             if orig_id in record_map and db_id != orig_id:
                 record_obj = record_map[orig_id]
                 record_obj.id = db_id
 
-                # Set object for db ID and remove old one
+                id_updates[orig_id] = db_id
                 record_map[db_id] = record_obj
                 del record_map[orig_id]
 
-            for record_id in record_map:
-                record_obj = record_map[record_id]
+        # Apply all updates in a single pass
+        for record_obj in record_map.values():
+            if record_obj.parent and record_obj.parent.id in id_updates:
+                record_obj.parent.id = id_updates[record_obj.parent.id]
 
-                # Update any parent ids
-                if record_obj.parent and record_obj.parent.id == orig_id:
-                    record_obj.parent.id = db_id
+            if isinstance(record_obj, HttpEndpoint) and record_obj.web_path_id in id_updates:
+                record_obj.web_path_id = id_updates[record_obj.web_path_id]
 
-                # Fix up http endpoints
-                if isinstance(record_obj, HttpEndpoint) and record_obj.web_path_id == orig_id:
-                    record_obj.web_path_id = db_id
-
-                # Fix up http data endpoints
-                if isinstance(record_obj, HttpEndpointData) and record_obj.domain_id == orig_id:
-                    record_obj.domain_id = db_id
+            if isinstance(record_obj, HttpEndpointData) and record_obj.domain_id in id_updates:
+                record_obj.domain_id = id_updates[record_obj.domain_id]
 
     import_arr = []
     for obj_id in record_map:
@@ -300,6 +303,7 @@ class ScanData():
 
         return list(endpoint_urls)
 
+    @scan_utils.execution_time
     def update(self, record_map):
 
         # Parse the data

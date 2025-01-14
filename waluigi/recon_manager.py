@@ -281,6 +281,7 @@ class ScheduledScanThread(threading.Thread):
     def process_scan_obj(self, sched_scan_obj):
 
         # Create scan object
+        err_msg = None
         scheduled_scan_obj = ScheduledScan(self, sched_scan_obj)
 
         # Execute scan jobs

@@ -423,7 +423,7 @@ class ImportShodanOutput(data_model.ImportToolXOutput):
                                         component_obj = data_model.WebComponent(
                                             parent_id=port_id)
 
-                                        component_obj.name = component_name
+                                        component_obj.name = server_tech
 
                                         # Add the version
                                         if server_version:

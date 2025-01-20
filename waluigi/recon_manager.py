@@ -126,7 +126,7 @@ class ScheduledScan():
     def update_status(self, scan_status, err_msg=None):
         # Send update to the server
         self.scan_thread.recon_manager.update_scan_status(
-            self.scan_id, scan_status, err_msg)
+            self.id, scan_status, err_msg)
 
     def update_tool_status(self, tool_id, tool_status):
         # Send update to the server
@@ -209,7 +209,7 @@ class ScheduledScanThread(threading.Thread):
 
             # Check if scan is cancelled
             scan = self.recon_manager.get_scan(scheduled_scan_obj.scan_id)
-            if scan is None or scan.status_int == ScanStatus.CANCELLED.value:
+            if scan is None or scan.status == ScanStatus.CANCELLED.value:
                 err_msg = "Scan cancelled or doesn't exist"
                 logger.debug(err_msg)
                 return err_msg
@@ -226,6 +226,11 @@ class ScheduledScanThread(threading.Thread):
                     return err_msg
 
                 try:
+
+                    # Update to running
+                    scheduled_scan_obj.update_tool_status(
+                        collection_tool_inst.id, CollectionToolStatus.RUNNING.value)
+
                     # Execute scan func
                     if self.recon_manager.scan_func(scheduled_scan_obj) == False:
                         err_msg = "Scan function failed"
@@ -296,7 +301,7 @@ class ScheduledScanThread(threading.Thread):
 
             if err_msg is None:
                 # Remove scheduled scan
-                self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
+                # self.recon_manager.remove_scheduled_scan(sched_scan_obj.id)
 
                 # Update scan status
                 scan_status = ScanStatus.COMPLETED.value
@@ -762,18 +767,18 @@ class ReconManager:
 
         return scan
 
-    def remove_scheduled_scan(self, sched_scan_id):
+    # def remove_scheduled_scan(self, sched_scan_id):
 
-        ret_val = True
-        r = requests.delete('%s/api/scheduler/%s/' % (self.manager_url, sched_scan_id), headers=self.headers,
-                            verify=False)
-        if r.status_code == 404:
-            return False
-        elif r.status_code != 200:
-            logger.error("Unknown Error removing scheduled scan")
-            return False
+    #     ret_val = True
+    #     r = requests.delete('%s/api/scheduler/%s/' % (self.manager_url, sched_scan_id), headers=self.headers,
+    #                         verify=False)
+    #     if r.status_code == 404:
+    #         return False
+    #     elif r.status_code != 200:
+    #         logger.error("Unknown Error removing scheduled scan")
+    #         return False
 
-        return ret_val
+    #     return ret_val
 
     def get_hosts(self, scan_id):
 
@@ -835,7 +840,7 @@ class ReconManager:
 
         return ret_obj
 
-    def update_scan_status(self, scan_id, status, err_msg=None):
+    def update_scan_status(self, schedule_scan_id, status, err_msg=None):
 
         # Import the data to the manager
         status_dict = {'status': status, 'error_message': err_msg}
@@ -845,7 +850,7 @@ class ReconManager:
         packet = cipher_aes.nonce + tag + ciphertext
 
         b64_val = base64.b64encode(packet).decode()
-        r = requests.post('%s/api/scan/%s/' % (self.manager_url, scan_id),
+        r = requests.post('%s/api/scheduler/%s/' % (self.manager_url, schedule_scan_id),
                           headers=self.headers, json={"data": b64_val}, verify=False)
         if r.status_code != 200:
             raise RuntimeError("[-] Error updating scan status.")

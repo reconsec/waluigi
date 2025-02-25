@@ -625,10 +625,16 @@ class ReconManager:
             return subnets
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            subnet_obj_arr = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
+            subnet_obj_arr = None
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                subnet_obj_arr = json.loads(
+                    data, object_hook=lambda d: SimpleNamespace(**d))
+            except Exception as e:
+                logger.error("Error retrieving subnets: %s" % str(e))
+                logger.debug(traceback.format_exc())
+                return subnets
 
             if subnet_obj_arr:
                 for subnet in subnet_obj_arr:
@@ -650,11 +656,15 @@ class ReconManager:
             return target_obj
 
         if r.content:
-            content = r.json()
-            if content:
-                data = self._decrypt_json(content)
-                target_obj = json.loads(
-                    data, object_hook=lambda d: SimpleNamespace(**d))
+            try:
+                content = r.json()
+                if content:
+                    data = self._decrypt_json(content)
+                    target_obj = json.loads(
+                        data, object_hook=lambda d: SimpleNamespace(**d))
+            except Exception as e:
+                logger.error("Error retrieving target: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return target_obj
 
@@ -673,15 +683,16 @@ class ReconManager:
             logger.error("Error retrieving tool scope.")
             return target_obj
 
-        try:
-            if r.content:
+        if r.content:
+            try:
                 content = r.json()
                 data = self._decrypt_json(content)
                 if len(data) > 0:
                     target_obj = json.loads(data)
-
-        except Exception as e:
-            logger.error(traceback.format_exc())
+            except Exception as e:
+                logger.error("Error retrieving tool scope: %s" % str(e))
+                logger.debug(traceback.format_exc())
+                return target_obj
 
         return target_obj
 
@@ -697,10 +708,16 @@ class ReconManager:
             return urls
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            url_obj_arr = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
+            url_obj_arr = None
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                url_obj_arr = json.loads(
+                    data, object_hook=lambda d: SimpleNamespace(**d))
+            except Exception as e:
+                logger.error("Error retrieving urls: %s" % str(e))
+                logger.debug(traceback.format_exc())
+                return urls
 
             if url_obj_arr:
                 for url_obj in url_obj_arr:
@@ -721,11 +738,15 @@ class ReconManager:
             return sched_scan_arr
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            if data:
-                sched_scan_arr = json.loads(
-                    data, object_hook=lambda d: SimpleNamespace(**d))
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                if data:
+                    sched_scan_arr = json.loads(
+                        data, object_hook=lambda d: SimpleNamespace(**d))
+            except Exception as e:
+                logger.error("Error retrieving scheduled scans: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return sched_scan_arr
 
@@ -741,9 +762,13 @@ class ReconManager:
             return sched_scan
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            sched_scan = json.loads(data)
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                sched_scan = json.loads(data)
+            except Exception as e:
+                logger.error("Error retrieving scan: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return sched_scan
 
@@ -759,11 +784,15 @@ class ReconManager:
             return scan_status
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            scan_status_dict = json.loads(data)
-            if 'status' in scan_status_dict > 0:
-                scan_status = scan_status_dict['status']
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                scan_status_dict = json.loads(data)
+                if 'status' in scan_status_dict:
+                    scan_status = scan_status_dict['status']
+            except Exception as e:
+                logger.error("Error retrieving scan status: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return scan_status
 
@@ -779,29 +808,37 @@ class ReconManager:
             return port_arr
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            port_obj_arr = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                port_arr = json.loads(
+                    data, object_hook=lambda d: SimpleNamespace(**d))
+            except Exception as e:
+                logger.error("Error retrieving hosts: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
-        return port_obj_arr
+        return port_arr
 
     def get_tools(self):
 
-        port_arr = []
+        tool_obj_arr = []
         r = requests.get('%s/api/tools' % (self.manager_url),
                          headers=self.headers, verify=False)
         if r.status_code == 404:
-            return port_arr
+            return tool_obj_arr
         elif r.status_code != 200:
             logger.error("Unknown Error retrieving tools")
-            return port_arr
+            return tool_obj_arr
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            tool_obj_arr = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                tool_obj_arr = json.loads(
+                    data, object_hook=lambda d: SimpleNamespace(**d))
+            except Exception as e:
+                logger.error("Error retrieving tools: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return tool_obj_arr
 
@@ -821,9 +858,13 @@ class ReconManager:
 
         ret_obj = None
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            ret_obj = json.loads(data)
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                ret_obj = json.loads(data)
+            except Exception as e:
+                logger.error("Error retrieving collector data: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return ret_obj
 
@@ -856,12 +897,16 @@ class ReconManager:
             return status
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            if data:
-                tool_inst = json.loads(
-                    data, object_hook=lambda d: SimpleNamespace(**d))
-                status = tool_inst.status
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                if data:
+                    tool_inst = json.loads(
+                        data, object_hook=lambda d: SimpleNamespace(**d))
+                    status = tool_inst.status
+            except Exception as e:
+                logger.error("Error retrieving tool status: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return status
 
@@ -932,11 +977,15 @@ class ReconManager:
             raise RuntimeError("[-] Error importing ports to manager server.")
 
         if r.content:
-            content = r.json()
-            data = self._decrypt_json(content)
-            record_arr = []
-            if data:
-                record_arr = json.loads(data)
+            try:
+                content = r.json()
+                data = self._decrypt_json(content)
+                record_arr = []
+                if data:
+                    record_arr = json.loads(data)
+            except Exception as e:
+                logger.error("Error retrieving import response: %s" % str(e))
+                logger.debug(traceback.format_exc())
 
         return record_arr
 

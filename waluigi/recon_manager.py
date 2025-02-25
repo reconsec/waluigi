@@ -208,8 +208,9 @@ class ScheduledScanThread(threading.Thread):
             scheduled_scan_obj.current_tool = tool_obj
 
             # Check if scan is cancelled
-            scan = self.recon_manager.get_scan(scheduled_scan_obj.scan_id)
-            if scan is None or scan.status == ScanStatus.CANCELLED.value:
+            scan_status = self.recon_manager.get_scan_status(
+                scheduled_scan_obj.scan_id)
+            if scan_status is None or scan_status == ScanStatus.CANCELLED.value:
                 err_msg = "Scan cancelled or doesn't exist"
                 logger.debug(err_msg)
                 return err_msg
@@ -746,39 +747,25 @@ class ReconManager:
 
         return sched_scan
 
-    def get_scan(self, scan_id):
+    def get_scan_status(self, scan_id):
 
-        scan = None
-        r = requests.get('%s/api/scan/%s' % (self.manager_url,
+        scan_status = None
+        r = requests.get('%s/api/scan/%s/status' % (self.manager_url,
                          scan_id), headers=self.headers, verify=False)
         if r.status_code == 404:
-            return scan
+            return scan_status
         elif r.status_code != 200:
             logger.error("Unknown Error retrieving scan")
-            return scan
+            return scan_status
 
         if r.content:
             content = r.json()
             data = self._decrypt_json(content)
-            scan_list = json.loads(
-                data, object_hook=lambda d: SimpleNamespace(**d))
-            if scan_list and len(scan_list) > 0:
-                scan = scan_list[0]
+            scan_status_dict = json.loads(data)
+            if 'status' in scan_status_dict > 0:
+                scan_status = scan_status_dict['status']
 
-        return scan
-
-    # def remove_scheduled_scan(self, sched_scan_id):
-
-    #     ret_val = True
-    #     r = requests.delete('%s/api/scheduler/%s/' % (self.manager_url, sched_scan_id), headers=self.headers,
-    #                         verify=False)
-    #     if r.status_code == 404:
-    #         return False
-    #     elif r.status_code != 200:
-    #         logger.error("Unknown Error removing scheduled scan")
-    #         return False
-
-    #     return ret_val
+        return scan_status
 
     def get_hosts(self, scan_id):
 
